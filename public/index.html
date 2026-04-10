@@ -1518,7 +1518,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
     }
 
     // ============ FOLLOW-UP CENTER ============
-    function FollowupCenter({ data, api, onLogActivity }) {
+    function FollowupCenter({ data, api, onLogActivity, onAddRecord }) {
       const { accounts, stakeholders, outreach } = data;
       const [accountSearch, setAccountSearch] = useState('');
       const [selectedInfluence, setSelectedInfluence] = useState('');
@@ -1657,13 +1657,11 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         return [...levels].sort();
       }, [stakeholders]);
 
-      const useMessage = async (stakeholder, channel, message, ccList = []) => {
-        console.log('[useMessage]', { channel, messageLength: message?.length, messagePreview: (message || '').substring(0, 80), cc: ccList });
+      const useMessage = (stakeholder, channel, message, ccList = []) => {
         const name = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
         const linkedin = F(stakeholder, 'LinkedIn') || '';
-
         let subject = '';
         let body = message;
         if (channel === 'Email' && message.startsWith('Subject:')) {
@@ -1671,64 +1669,53 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
           subject = lines[0].replace('Subject:', '').trim();
           body = lines.slice(1).join('\n').trim();
         }
-
-        if (channel === 'WhatsApp' && phone) {
-          window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
-        } else if (channel === 'Email' && email) {
-          const ccParam = ccList.length > 0 ? `&cc=${encodeURIComponent(ccList.join(','))}` : '';
-          window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${ccParam}`, '_blank');
-        } else if (channel === 'LinkedIn' && linkedin) {
-          navigator.clipboard.writeText(message).catch(() => {});
-          window.open(linkedin, '_blank');
-        } else if (channel === 'Call' && phone) {
-          window.open(`tel:${phone}`, '_self');
-        }
-
+        if (channel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+        else if (channel === 'Email' && email) { const ccParam = ccList.length > 0 ? `&cc=${encodeURIComponent(ccList.join(','))}` : ''; window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${ccParam}`, '_blank'); }
+        else if (channel === 'LinkedIn' && linkedin) { navigator.clipboard.writeText(message).catch(() => {}); window.open(linkedin, '_blank'); }
+        else if (channel === 'Call' && phone) window.open(`tel:${phone}`, '_self');
+        // Log outreach optimistically + fire API in background
         const companyIds = linkedIds(stakeholder, 'Account');
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          await a.createRecord(TABLE_IDS.outreach, {
-            'Activity Name': `${channel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
-            'Account': companyIds,
-            'Stakeholder': [stakeholder.id],
-            'Channel': channel,
-            'Date': new Date().toISOString(),
-            'Status': 'Sent',
-            'Message': message || '',
-            'Notes': `Auto-logged from Follow-up Center`,
-            'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
-          });
-          await activateAccountIfNeeded(a, companyIds, data.accounts);
-          if (onLogActivity) onLogActivity();
-        } catch (e) {
-          console.error('Auto-log failed:', e);
-        }
+        const outreachFields = {
+          'Activity Name': `${channel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
+          'Account': companyIds, 'Stakeholder': [stakeholder.id],
+          'Channel': channel, 'Date': new Date().toISOString(),
+          'Status': 'Sent', 'Message': message || '',
+          'Notes': 'Auto-logged from Follow-up Center',
+          'Logged By': CURRENT_USER?.name || '',
+          'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
+          'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+        };
+        if (onAddRecord) onAddRecord('outreach', outreachFields);
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.outreach, outreachFields)
+          .then(() => activateAccountIfNeeded(a, companyIds, data.accounts))
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => console.error('Auto-log failed:', e));
       };
 
       // Manual stakeholder creation in Follow-up Center
       const fuCreateStakeholder = async () => {
         if (!fuNewName.trim() || !fuNewAccountId) return;
-        setFuCreating(true);
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          const fields = { 'Name': fuNewName.trim(), 'Account': [fuNewAccountId] };
-          if (fuNewLast.trim()) fields['Lart name'] = fuNewLast.trim();
-          if (fuNewRole.trim()) fields['Role'] = fuNewRole.trim();
-          if (fuNewEmail.trim()) fields['Email'] = fuNewEmail.trim();
-          if (fuNewPhone.trim()) fields['Phone number'] = fuNewPhone.trim();
-          if (fuNewLinkedin.trim()) fields['LinkedIn'] = fuNewLinkedin.trim();
-          if (fuNewInfluence) fields['Level of Influence'] = fuNewInfluence;
-          fields['BDR Owner'] = CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '';
-          fields['CP Assigned'] = CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '';
-          await a.createRecord(TABLE_IDS.stakeholders, fields);
-          setFuNewName(''); setFuNewLast(''); setFuNewRole(''); setFuNewEmail('');
-          setFuNewPhone(''); setFuNewLinkedin(''); setFuNewInfluence(''); setFuNewAccountId('');
-          setShowFuNewStk(false);
-          if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to create stakeholder'); }
-        setFuCreating(false);
+        const fields = { 'Name': fuNewName.trim(), 'Account': [fuNewAccountId] };
+        if (fuNewLast.trim()) fields['Lart name'] = fuNewLast.trim();
+        if (fuNewRole.trim()) fields['Role'] = fuNewRole.trim();
+        if (fuNewEmail.trim()) fields['Email'] = fuNewEmail.trim();
+        if (fuNewPhone.trim()) fields['Phone number'] = fuNewPhone.trim();
+        if (fuNewLinkedin.trim()) fields['LinkedIn'] = fuNewLinkedin.trim();
+        if (fuNewInfluence) fields['Level of Influence'] = fuNewInfluence;
+        fields['BDR Owner'] = CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '';
+        fields['CP Assigned'] = CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '';
+        // Optimistic: show in UI instantly
+        if (onAddRecord) onAddRecord('stakeholders', fields);
+        // Close form immediately
+        setFuNewName(''); setFuNewLast(''); setFuNewRole(''); setFuNewEmail('');
+        setFuNewPhone(''); setFuNewLinkedin(''); setFuNewInfluence(''); setFuNewAccountId('');
+        setShowFuNewStk(false);
+        // API in background
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.stakeholders, fields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
       };
 
       // Stakeholder row renderer
@@ -2273,7 +2260,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
     }
 
     // ============ CONTACTS SECTION ============
-    function ContactsSection({ data, api, onLogActivity }) {
+    function ContactsSection({ data, api, onLogActivity, onAddRecord }) {
       const { accounts, stakeholders, outreach } = data;
       const [searchName, setSearchName] = useState('');
       const [searchAccount, setSearchAccount] = useState('');
@@ -2298,6 +2285,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
       const createInlineAccount = async () => {
         if (!ctxNewAccountName.trim()) return;
         setCtxCreatingAccount(true);
+        // Need real ID to link contact — must await, but skip full reload
         try {
           const a = api || new AirtableAPI(localStorage.getItem('at_key'));
           const fields = { 'Account Name': ctxNewAccountName.trim() };
@@ -2305,38 +2293,42 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
           if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
           if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
           const record = await a.createRecord(TABLE_IDS.accounts, fields);
-          if (record?.id) setCtxNewAccountId(record.id);
+          if (record?.id) {
+            setCtxNewAccountId(record.id);
+            // Add to local state with real ID — no full reload needed
+            if (onAddRecord) onAddRecord('accounts', fields);
+          }
           setCtxNewAccountName(''); setCtxNewAccountWebsite('');
           setShowNewAccount(false);
-          if (onLogActivity) onLogActivity();
         } catch (e) { console.error(e); alert('Failed to create account'); }
         setCtxCreatingAccount(false);
       };
 
       const createContact = async () => {
         if (!ctxNewName.trim() || !ctxNewAccountId) return;
-        setCtxCreating(true);
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          const fields = { 'Name': ctxNewName.trim(), 'Account': [ctxNewAccountId] };
-          if (ctxNewLast.trim()) fields['Lart name'] = ctxNewLast.trim();
-          if (ctxNewRole.trim()) fields['Role'] = ctxNewRole.trim();
-          if (ctxNewEmail.trim()) fields['Email'] = ctxNewEmail.trim();
-          if (ctxNewPhone.trim()) fields['Phone number'] = ctxNewPhone.trim();
-          if (ctxNewLinkedin.trim()) fields['LinkedIn'] = ctxNewLinkedin.trim();
-          if (ctxNewInfluence) fields['Level of Influence'] = ctxNewInfluence;
-          if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
-          if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
-          await a.createRecord(TABLE_IDS.stakeholders, fields);
-          setCtxNewName(''); setCtxNewLast(''); setCtxNewRole(''); setCtxNewEmail('');
-          setCtxNewPhone(''); setCtxNewLinkedin(''); setCtxNewInfluence(''); setCtxNewAccountId('');
-          setShowNewContact(false);
-          if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to create contact'); }
-        setCtxCreating(false);
+        const fields = { 'Name': ctxNewName.trim(), 'Account': [ctxNewAccountId] };
+        if (ctxNewLast.trim()) fields['Lart name'] = ctxNewLast.trim();
+        if (ctxNewRole.trim()) fields['Role'] = ctxNewRole.trim();
+        if (ctxNewEmail.trim()) fields['Email'] = ctxNewEmail.trim();
+        if (ctxNewPhone.trim()) fields['Phone number'] = ctxNewPhone.trim();
+        if (ctxNewLinkedin.trim()) fields['LinkedIn'] = ctxNewLinkedin.trim();
+        if (ctxNewInfluence) fields['Level of Influence'] = ctxNewInfluence;
+        if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
+        if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
+        // Optimistic: show instantly
+        if (onAddRecord) onAddRecord('stakeholders', fields);
+        // Close form immediately
+        setCtxNewName(''); setCtxNewLast(''); setCtxNewRole(''); setCtxNewEmail('');
+        setCtxNewPhone(''); setCtxNewLinkedin(''); setCtxNewInfluence(''); setCtxNewAccountId('');
+        setShowNewContact(false);
+        // API in background
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.stakeholders, fields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
       };
 
-      const useMessage = async (stakeholder, channel, message) => {
+      const useMessage = (stakeholder, channel, message) => {
         const name = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -2345,20 +2337,21 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         else if (channel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(message)}`, '_blank');
         else if (channel === 'LinkedIn' && linkedin) { navigator.clipboard.writeText(message).catch(() => {}); window.open(linkedin, '_blank'); }
         const companyIds = linkedIds(stakeholder, 'Account');
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          await a.createRecord(TABLE_IDS.outreach, {
-            'Activity Name': `${channel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
-            'Account': companyIds, 'Stakeholder': [stakeholder.id],
-            'Channel': channel, 'Date': new Date().toISOString(),
-            'Status': 'Sent', 'Message': message,
-            'Notes': 'Sent from Contacts',
-            'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
-          });
-          if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); }
+        const outreachFields = {
+          'Activity Name': `${channel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
+          'Account': companyIds, 'Stakeholder': [stakeholder.id],
+          'Channel': channel, 'Date': new Date().toISOString(),
+          'Status': 'Sent', 'Message': message,
+          'Notes': 'Sent from Contacts',
+          'Logged By': CURRENT_USER?.name || '',
+          'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
+          'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+        };
+        if (onAddRecord) onAddRecord('outreach', outreachFields);
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.outreach, outreachFields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => console.error(e));
       };
 
       const influenceLevels = useMemo(() => {
@@ -2718,7 +2711,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
     }
 
     // ============ CP BRIEFINGS ============
-    function CPBriefings({ data, api, onLogActivity, navigateToAccountId, clearNavigate }) {
+    function CPBriefings({ data, api, onLogActivity, onAddRecord, navigateToAccountId, clearNavigate }) {
       const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -3279,42 +3272,39 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         if (!newAccName.trim()) return;
         const exists = accounts.some(a => (F(a, 'Account Name') || '').toLowerCase() === newAccName.trim().toLowerCase());
         if (exists) { alert('Account already exists!'); return; }
-        setCreatingAcc(true);
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          const fields = { 'Account Name': newAccName.trim() };
-          if (newAccWebsite.trim()) fields['Website'] = newAccWebsite.trim();
-          await a.createRecord(TABLE_IDS.accounts, fields);
-          setNewAccName(''); setNewAccWebsite(''); setShowNewAccount(false);
-          if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to create account'); }
-        setCreatingAcc(false);
+        const fields = { 'Account Name': newAccName.trim() };
+        if (newAccWebsite.trim()) fields['Website'] = newAccWebsite.trim();
+        // Optimistic: show instantly
+        if (onAddRecord) onAddRecord('accounts', fields);
+        setNewAccName(''); setNewAccWebsite(''); setShowNewAccount(false);
+        // API in background
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.accounts, fields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => { console.error(e); alert('Failed to create account'); if (onLogActivity) onLogActivity(); });
       };
 
       // Manual Stakeholder Creation
       const createStakeholder = async () => {
         if (!newStkName.trim() || !account) return;
-        setCreatingStk(true);
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          const fields = {
-            'Name': newStkName.trim(),
-            'Account': [account.id],
-          };
-          if (newStkLastName.trim()) fields['Lart name'] = newStkLastName.trim();
-          if (newStkRole.trim()) fields['Role'] = newStkRole.trim();
-          if (newStkEmail.trim()) fields['Email'] = newStkEmail.trim();
-          if (newStkPhone.trim()) fields['Phone number'] = newStkPhone.trim();
-          if (newStkLinkedin.trim()) fields['LinkedIn'] = newStkLinkedin.trim();
-          if (newStkInfluence) fields['Level of Influence'] = newStkInfluence;
-          fields['BDR Owner'] = CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '';
-          fields['CP Assigned'] = CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '';
-          await a.createRecord(TABLE_IDS.stakeholders, fields);
-          setNewStkName(''); setNewStkLastName(''); setNewStkRole(''); setNewStkEmail('');
-          setNewStkPhone(''); setNewStkLinkedin(''); setNewStkInfluence(''); setShowNewStakeholder(false);
-          if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to create stakeholder'); }
-        setCreatingStk(false);
+        const fields = { 'Name': newStkName.trim(), 'Account': [account.id] };
+        if (newStkLastName.trim()) fields['Lart name'] = newStkLastName.trim();
+        if (newStkRole.trim()) fields['Role'] = newStkRole.trim();
+        if (newStkEmail.trim()) fields['Email'] = newStkEmail.trim();
+        if (newStkPhone.trim()) fields['Phone number'] = newStkPhone.trim();
+        if (newStkLinkedin.trim()) fields['LinkedIn'] = newStkLinkedin.trim();
+        if (newStkInfluence) fields['Level of Influence'] = newStkInfluence;
+        fields['BDR Owner'] = CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '';
+        fields['CP Assigned'] = CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '';
+        // Optimistic: show instantly
+        if (onAddRecord) onAddRecord('stakeholders', fields);
+        setNewStkName(''); setNewStkLastName(''); setNewStkRole(''); setNewStkEmail('');
+        setNewStkPhone(''); setNewStkLinkedin(''); setNewStkInfluence(''); setShowNewStakeholder(false);
+        // API in background
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.stakeholders, fields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => { console.error(e); alert('Failed to create stakeholder'); if (onLogActivity) onLogActivity(); });
       };
 
       // CSV Account Import
@@ -5025,7 +5015,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
     }
 
     // ============ EVENTS HUB ============
-    function EventsHub({ data, api, onLogActivity }) {
+    function EventsHub({ data, api, onLogActivity, onAddRecord }) {
       const { accounts, stakeholders, events, outreach } = data;
       const [selectedEventId, setSelectedEventId] = useState(null);
       const [aiSuggestions, setAiSuggestions] = useState([]);
@@ -5045,24 +5035,24 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
       const createEvent = async () => {
         if (!evNewName.trim() || !evNewStart) return;
-        setEvCreating(true);
-        try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
-          const fields = {
-            'Event Name': evNewName.trim(),
-            'Starting': new Date(evNewStart).toISOString(),
-          };
-          if (evNewEnd) fields['End date'] = new Date(evNewEnd).toISOString();
-          if (evNewContext.trim()) fields['Aditional context'] = evNewContext.trim();
-          if (evNewWebsite.trim()) fields['Website'] = evNewWebsite.trim();
-          if (evNewAttachUrl.trim()) fields['Attachments'] = [{ url: evNewAttachUrl.trim() }];
-          await a.createRecord(TABLE_IDS.events, fields);
-          setEvNewName(''); setEvNewStart(''); setEvNewEnd('');
-          setEvNewContext(''); setEvNewWebsite(''); setEvNewAttachUrl('');
-          setShowAddEvent(false);
-          if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to create event'); }
-        setEvCreating(false);
+        const fields = {
+          'Event Name': evNewName.trim(),
+          'Starting': new Date(evNewStart).toISOString(),
+        };
+        if (evNewEnd) fields['End date'] = new Date(evNewEnd).toISOString();
+        if (evNewContext.trim()) fields['Aditional context'] = evNewContext.trim();
+        if (evNewWebsite.trim()) fields['Website'] = evNewWebsite.trim();
+        if (evNewAttachUrl.trim()) fields['Attachments'] = [{ url: evNewAttachUrl.trim() }];
+        // Optimistic: show instantly
+        if (onAddRecord) onAddRecord('events', fields);
+        setEvNewName(''); setEvNewStart(''); setEvNewEnd('');
+        setEvNewContext(''); setEvNewWebsite(''); setEvNewAttachUrl('');
+        setShowAddEvent(false);
+        // API in background
+        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        a.createRecord(TABLE_IDS.events, fields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => { console.error(e); alert('Failed to create event'); if (onLogActivity) onLogActivity(); });
       };
 
       const upcoming = events.filter(ev => {
@@ -6521,6 +6511,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         setPage('accounts');
       }, []);
 
+      // Optimistic update: add a record to local state instantly (before API response)
+      const addToData = useCallback((tableKey, fields) => {
+        const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        setData(prev => ({
+          ...prev,
+          [tableKey]: [...(prev[tableKey] || []), { id: tempId, fields }]
+        }));
+      }, []);
+
       const [refreshing, setRefreshing] = useState(false);
 
       const loadData = useCallback(async (apiInstance, silent = false) => {
@@ -6666,15 +6665,16 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
       if (loading) return <div className="loading"><div className="spinner" /></div>;
 
+      const bgSync = () => api && loadData(api, true);
       const pages = {
         overview: <StrategyOverview data={data} />,
-        followup: <FollowupCenter data={data} api={api} onLogActivity={() => api && loadData(api, true)} />,
-        contacts: <ContactsSection data={data} api={api} onLogActivity={() => api && loadData(api, true)} />,
+        followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
+        contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
         activity: <ActivityTracker data={data} />,
-        events: <EventsHub data={data} api={api} onLogActivity={() => api && loadData(api, true)} />,
+        events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
         insights: <InsightsView data={data} />,
-        accounts: <CPBriefings data={data} api={api} onLogActivity={() => api && loadData(api, true)} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
-        solutionshub: <SolutionsHub data={data} api={api} onLogActivity={() => api && loadData(api, true)} goToAccount={goToAccount} />,
+        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
+        solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} goToAccount={goToAccount} />,
       };
 
       const navItems = [
