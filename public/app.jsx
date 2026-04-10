@@ -144,7 +144,11 @@
           body: JSON.stringify({ method: 'PATCH', baseId: AIRTABLE_BASE_ID, tableId, recordId, fields }),
         });
         if (res.status === 401) { logoutUser(); throw new Error('Session expired'); }
-        if (!res.ok) throw new Error(`Update error: ${res.status}`);
+        if (!res.ok) {
+          let errBody = '';
+          try { const d = await res.json(); errBody = JSON.stringify(d); } catch {}
+          throw new Error(`Update error: ${res.status} — ${errBody}`);
+        }
         return await res.json();
       }
 
@@ -2522,20 +2526,19 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
 
       const saveContactEdit = async (values) => {
         if (!editingContact) return;
-        const updatedFields = {
-          'Name': values['Name'] || '',
-          'Lart name': values['Lart name'] || '',
-          'Role': values['Role'] || '',
-          'Email': values['Email'] || '',
-          'Phone number': values['Phone number'] || '',
-          'LinkedIn': values['LinkedIn'] || '',
-          'Campaign': values['Campaign'] || '',
+        // Only send fields that have a value — Airtable rejects empty strings for Email, Phone, URL, and Single Select fields
+        const raw = {
+          'Name': values['Name'],
+          'Lart name': values['Lart name'],
+          'Role': values['Role'],
+          'Email': values['Email'],
+          'Phone number': values['Phone number'],
+          'LinkedIn': values['LinkedIn'],
+          'Campaign': values['Campaign'],
+          'Level of Influence': values['Level of Influence'] || null,
+          'Source': values['Source'] || null,
         };
-        // Single Select fields: send null if empty (Airtable rejects empty strings for these)
-        updatedFields['Level of Influence'] = values['Level of Influence'] || null;
-        updatedFields['Source'] = values['Source'] || null;
-        // Remove null fields to let Airtable clear them cleanly
-        Object.keys(updatedFields).forEach(k => { if (updatedFields[k] === null) updatedFields[k] = null; });
+        const updatedFields = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== '' && v !== undefined && v !== null));
         if (onUpdateRecord) onUpdateRecord('stakeholders', editingContact.id, updatedFields);
         setEditingContact(null);
         const a = api || new AirtableAPI();
