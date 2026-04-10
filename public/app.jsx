@@ -2072,12 +2072,22 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const [ctxNewLinkedin, setCtxNewLinkedin] = useState('');
       const [ctxNewInfluence, setCtxNewInfluence] = useState('');
       const [ctxNewAccountId, setCtxNewAccountId] = useState('');
+      const [ctxNewSource, setCtxNewSource] = useState('');
+      const [ctxNewCampaign, setCtxNewCampaign] = useState('');
       const [ctxCreating, setCtxCreating] = useState(false);
       const [showNewAccount, setShowNewAccount] = useState(false);
       const [ctxNewAccountName, setCtxNewAccountName] = useState('');
       const [ctxNewAccountWebsite, setCtxNewAccountWebsite] = useState('');
       const [ctxCreatingAccount, setCtxCreatingAccount] = useState(false);
-      const [editingContact, setEditingContact] = useState(null); // stakeholder record
+      const [editingContact, setEditingContact] = useState(null);
+      const [filterSource, setFilterSource] = useState('');
+      const [showContactImport, setShowContactImport] = useState(false);
+      const [contactCsvRows, setContactCsvRows] = useState([]);
+      const [contactImporting, setContactImporting] = useState(false);
+      const [contactImportResult, setContactImportResult] = useState(null);
+
+      const SOURCE_OPTIONS = ['Outbound', 'Inbound - Events', 'Inbound - Paid Media', 'Inbound - Referral', 'Inbound - Website', 'Inbound - Direct'];
+      const isInbound = (src) => src && src.startsWith('Inbound');
 
       const createInlineAccount = async () => {
         if (!ctxNewAccountName.trim()) return;
@@ -2110,6 +2120,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         if (ctxNewPhone.trim()) fields['Phone number'] = ctxNewPhone.trim();
         if (ctxNewLinkedin.trim()) fields['LinkedIn'] = ctxNewLinkedin.trim();
         if (ctxNewInfluence) fields['Level of Influence'] = ctxNewInfluence;
+        if (ctxNewSource) fields['Source'] = ctxNewSource;
+        if (ctxNewCampaign.trim()) fields['Campaign'] = ctxNewCampaign.trim();
         if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
         if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
         // Optimistic: show instantly
@@ -2117,12 +2129,77 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         // Close form immediately
         setCtxNewName(''); setCtxNewLast(''); setCtxNewRole(''); setCtxNewEmail('');
         setCtxNewPhone(''); setCtxNewLinkedin(''); setCtxNewInfluence(''); setCtxNewAccountId('');
+        setCtxNewSource(''); setCtxNewCampaign('');
         setShowNewContact(false);
         // API in background
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
+      };
+
+      // ─── CSV IMPORT ───
+      const handleContactCsv = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        Papa.parse(file, {
+          header: true, skipEmptyLines: true,
+          complete: (result) => {
+            const existingEmails = new Set(stakeholders.map(s => (F(s, 'Email') || '').toLowerCase()).filter(Boolean));
+            const existingNames = new Set(stakeholders.map(s => ((F(s, 'Name') || '') + ' ' + (F(s, 'Lart name') || '')).trim().toLowerCase()));
+            const rows = result.data.map(row => {
+              const norm = {};
+              Object.keys(row).forEach(k => {
+                const kl = k.toLowerCase().trim();
+                if (kl === 'first name' || kl === 'firstname' || kl === 'name' || kl === 'nombre') norm.firstName = row[k]?.trim();
+                if (kl === 'last name' || kl === 'lastname' || kl === 'apellido') norm.lastName = row[k]?.trim();
+                if (kl === 'email' || kl === 'correo') norm.email = row[k]?.trim();
+                if (kl === 'phone' || kl === 'telefono' || kl === 'phone number') norm.phone = row[k]?.trim();
+                if (kl === 'role' || kl === 'title' || kl === 'cargo' || kl === 'job title') norm.role = row[k]?.trim();
+                if (kl === 'linkedin' || kl === 'linkedin url') norm.linkedin = row[k]?.trim();
+                if (kl === 'account' || kl === 'company' || kl === 'empresa') norm.accountName = row[k]?.trim();
+                if (kl === 'source' || kl === 'fuente') norm.source = row[k]?.trim();
+                if (kl === 'campaign' || kl === 'campaña') norm.campaign = row[k]?.trim();
+              });
+              if (!norm.firstName) return null;
+              const fullName = (norm.firstName + ' ' + (norm.lastName || '')).trim().toLowerCase();
+              const isDuplicate = (norm.email && existingEmails.has(norm.email.toLowerCase())) || existingNames.has(fullName);
+              return { ...norm, isDuplicate, selected: !isDuplicate };
+            }).filter(Boolean);
+            setContactCsvRows(rows);
+            setContactImportResult(null);
+          }
+        });
+      };
+
+      const importContacts = async () => {
+        const toImport = contactCsvRows.filter(r => r.selected && !r.isDuplicate);
+        if (!toImport.length) return;
+        setContactImporting(true);
+        let created = 0, failed = 0;
+        const a = api || new AirtableAPI();
+        for (const row of toImport) {
+          try {
+            // Resolve account by name
+            const matchedAcc = row.accountName ? accounts.find(ac => (F(ac, 'Account Name') || '').toLowerCase() === row.accountName.toLowerCase()) : null;
+            const fields = { 'Name': row.firstName };
+            if (row.lastName) fields['Lart name'] = row.lastName;
+            if (row.email) fields['Email'] = row.email;
+            if (row.phone) fields['Phone number'] = row.phone;
+            if (row.role) fields['Role'] = row.role;
+            if (row.linkedin) fields['LinkedIn'] = row.linkedin;
+            if (row.source) fields['Source'] = row.source;
+            if (row.campaign) fields['Campaign'] = row.campaign;
+            if (matchedAcc) fields['Account'] = [matchedAcc.id];
+            if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
+            await a.createRecord(TABLE_IDS.stakeholders, fields);
+            created++;
+            await new Promise(r => setTimeout(r, 250));
+          } catch (e) { failed++; console.error(e); }
+        }
+        setContactImportResult({ created, failed });
+        setContactImporting(false);
+        if (onLogActivity) onLogActivity();
       };
 
       const useMessage = (stakeholder, channel, message) => {
@@ -2161,6 +2238,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           'Phone number': values['Phone number'] || '',
           'LinkedIn': values['LinkedIn'] || '',
           'Level of Influence': values['Level of Influence'] || '',
+          'Source': values['Source'] || '',
+          'Campaign': values['Campaign'] || '',
         };
         if (onUpdateRecord) onUpdateRecord('stakeholders', editingContact.id, updatedFields);
         setEditingContact(null);
@@ -2184,8 +2263,9 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           if (!accNames.some(n => n.toLowerCase().includes(term))) return false;
         }
         if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return false;
+        if (filterSource && F(s, 'Source') !== filterSource) return false;
         return true;
-      }), [stakeholders, searchName, searchAccount, selectedInfluence, accounts]);
+      }), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, accounts]);
 
       return (
         <div>
@@ -2201,9 +2281,18 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               <option value="">All Influence Levels</option>
               {influenceLevels.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
-            <button className="action-btn btn-primary" style={{ fontSize: 12, marginLeft: 'auto' }} onClick={() => setShowNewContact(!showNewContact)}>
-              {showNewContact ? '✕ Close' : '➕ New Contact'}
-            </button>
+            <select className="input-field" style={{ maxWidth: 200 }} value={filterSource} onChange={e => setFilterSource(e.target.value)}>
+              <option value="">All Sources</option>
+              {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowContactImport(!showContactImport); setContactImportResult(null); }}>
+                {showContactImport ? '✕ Close Import' : '📥 Import CSV'}
+              </button>
+              <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => setShowNewContact(!showNewContact)}>
+                {showNewContact ? '✕ Close' : '➕ New Contact'}
+              </button>
+            </div>
           </div>
 
           {/* New Contact Form */}
@@ -2268,6 +2357,19 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                     <option value="Low">Low</option>
                   </select>
                 </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>SOURCE</label>
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={ctxNewSource} onChange={e => setCtxNewSource(e.target.value)}>
+                    <option value="">Select source...</option>
+                    {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {isInbound(ctxNewSource) && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>CAMPAIGN</label>
+                    <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. GITEX 2025" value={ctxNewCampaign} onChange={e => setCtxNewCampaign(e.target.value)} />
+                  </div>
+                )}
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
                 <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={createContact} disabled={!ctxNewName.trim() || !ctxNewAccountId || ctxCreating}>
@@ -2275,6 +2377,69 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 </button>
                 <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowNewContact(false)}>Cancel</button>
               </div>
+            </div>
+          )}
+
+          {/* CSV Import Card */}
+          {showContactImport && (
+            <div className="card" style={{ borderLeft: '3px solid #7c3aed', marginBottom: 16 }}>
+              <div className="card-header">
+                <h3>📥 Import Contacts from CSV</h3>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Source, Campaign</span>
+              </div>
+              {!contactCsvRows.length ? (
+                <div>
+                  <input type="file" accept=".csv" onChange={handleContactCsv} style={{ fontSize: 12, color: 'var(--globant-muted)' }} />
+                  <p style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 8 }}>
+                    Tip: Column headers must match exactly (case-insensitive). Duplicates by email or full name are auto-detected.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  {contactImportResult ? (
+                    <div style={{ padding: '12px', background: 'rgba(191,215,48,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}.
+                      <button className="action-btn btn-ghost" style={{ fontSize: 11, marginLeft: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>Import another</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--globant-muted)' }}>
+                        {contactCsvRows.length} rows parsed · {contactCsvRows.filter(r => r.isDuplicate).length} duplicates · {contactCsvRows.filter(r => r.selected && !r.isDuplicate).length} to import
+                      </div>
+                      <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                        <table className="data-table" style={{ fontSize: 11 }}>
+                          <thead>
+                            <tr>
+                              <th style={{ width: 32 }}>
+                                <input type="checkbox" checked={contactCsvRows.every(r => r.isDuplicate || r.selected)} onChange={e => setContactCsvRows(rows => rows.map(r => r.isDuplicate ? r : { ...r, selected: e.target.checked }))} />
+                              </th>
+                              <th>Name</th><th>Account</th><th>Email</th><th>Source</th><th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {contactCsvRows.map((row, i) => (
+                              <tr key={i} style={{ opacity: row.isDuplicate ? 0.45 : 1 }}>
+                                <td><input type="checkbox" checked={row.selected && !row.isDuplicate} disabled={row.isDuplicate} onChange={e => setContactCsvRows(rows => rows.map((r, j) => j === i ? { ...r, selected: e.target.checked } : r))} /></td>
+                                <td>{row.firstName} {row.lastName}</td>
+                                <td>{row.accountName || '—'}</td>
+                                <td>{row.email || '—'}</td>
+                                <td>{row.source || '—'}</td>
+                                <td>{row.isDuplicate ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>Duplicate</span> : <span style={{ color: 'var(--globant-green)' }}>New</span>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={importContacts} disabled={contactImporting || !contactCsvRows.some(r => r.selected && !r.isDuplicate)}>
+                          {contactImporting ? '⏳ Importing...' : `🚀 Import ${contactCsvRows.filter(r => r.selected && !r.isDuplicate).length} contacts`}
+                        </button>
+                        <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>↩ Re-upload</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -2293,6 +2458,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                     <th>Contact</th>
                     <th>Account</th>
                     <th>Influence</th>
+                    <th>Source</th>
                     <th style={{ textAlign: 'center' }}>Touches</th>
                     <th>Actions</th>
                   </tr>
@@ -2315,6 +2481,19 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                         </td>
                         <td style={{ fontSize: 12 }}>{accNames.join(', ')}</td>
                         <td><span className="badge badge-accent">{F(s, 'Level of Influence') || '—'}</span></td>
+                        <td>
+                          {F(s, 'Source') ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10,
+                              background: isInbound(F(s, 'Source')) ? 'rgba(124,58,237,0.15)' : 'rgba(191,215,48,0.15)',
+                              color: isInbound(F(s, 'Source')) ? '#a78bfa' : 'var(--globant-green)',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {F(s, 'Source')}
+                            </span>
+                          ) : <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>—</span>}
+                          {F(s, 'Campaign') && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{F(s, 'Campaign')}</div>}
+                        </td>
                         <td style={{ textAlign: 'center', fontSize: 13 }}>
                           {touches > 0 ? <span style={{ color: 'var(--globant-green)', fontWeight: 700 }}>{touches}</span> : <span style={{ color: 'var(--globant-muted)' }}>—</span>}
                         </td>
@@ -2359,6 +2538,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 { key: 'Phone number', label: 'Phone' },
                 { key: 'LinkedIn', label: 'LinkedIn URL' },
                 { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
+                { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
+                { key: 'Campaign', label: 'Campaign (if inbound)' },
               ]}
               initialValues={editingContact.fields || {}}
               onSave={saveContactEdit}
