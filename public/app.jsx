@@ -259,6 +259,19 @@
       return new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
+    // ============ FUZZY STRING SIMILARITY (bigram-based) ============
+    const strSimilarity = (a, b) => {
+      if (!a || !b) return 0;
+      a = a.toLowerCase().trim(); b = b.toLowerCase().trim();
+      if (a === b) return 1;
+      if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+      const bigrams = s => { const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const bg = s.slice(i, i+2); m.set(bg, (m.get(bg)||0)+1); } return m; };
+      const aB = bigrams(a), bB = bigrams(b);
+      let inter = 0;
+      aB.forEach((c, k) => { inter += Math.min(c, bB.get(k)||0); });
+      return (2 * inter) / (a.length + b.length - 2);
+    };
+
     // ============ STAKEHOLDER HISTORY MODAL ============
     function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData }) {
       if (!stakeholder) return null;
@@ -2410,7 +2423,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           header: true, skipEmptyLines: true,
           complete: (result) => {
             const existingEmails = new Set(stakeholders.map(s => (F(s, 'Email') || '').toLowerCase()).filter(Boolean));
-            const existingNames = new Set(stakeholders.map(s => ((F(s, 'Name') || '') + ' ' + (F(s, 'Lart name') || '')).trim().toLowerCase()));
+            const existingFullNames = stakeholders.map(s => ((F(s, 'Name') || '') + ' ' + (F(s, 'Lart name') || '')).trim());
             const rows = result.data.map(row => {
               const norm = {};
               Object.keys(row).forEach(k => {
@@ -2426,9 +2439,16 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 if (kl === 'campaign' || kl === 'campaña') norm.campaign = row[k]?.trim();
               });
               if (!norm.firstName) return null;
-              const fullName = (norm.firstName + ' ' + (norm.lastName || '')).trim().toLowerCase();
-              const isDuplicate = (norm.email && existingEmails.has(norm.email.toLowerCase())) || existingNames.has(fullName);
-              return { ...norm, isDuplicate, selected: !isDuplicate };
+              const fullName = (norm.firstName + ' ' + (norm.lastName || '')).trim();
+              // Exact match
+              const emailExact = norm.email && existingEmails.has(norm.email.toLowerCase());
+              const nameExact = existingFullNames.some(n => n.toLowerCase() === fullName.toLowerCase());
+              if (emailExact) return { ...norm, isDuplicate: true, duplicateReason: 'Email exists', isFuzzy: false, selected: false };
+              if (nameExact) return { ...norm, isDuplicate: true, duplicateReason: 'Name already exists', isFuzzy: false, selected: false };
+              // Fuzzy name match
+              const fuzzyMatch = existingFullNames.find(n => strSimilarity(n, fullName) >= 0.78);
+              if (fuzzyMatch) return { ...norm, isDuplicate: false, isFuzzy: true, fuzzyReason: `Similar to "${fuzzyMatch}"`, selected: true };
+              return { ...norm, isDuplicate: false, isFuzzy: false, selected: true };
             }).filter(Boolean);
             setContactCsvRows(rows);
             setContactImportResult(null);
@@ -2668,7 +2688,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                   ) : (
                     <>
                       <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--globant-muted)' }}>
-                        {contactCsvRows.length} rows parsed · {contactCsvRows.filter(r => r.isDuplicate).length} duplicates · {contactCsvRows.filter(r => r.selected && !r.isDuplicate).length} to import
+                        {contactCsvRows.length} rows parsed · <span style={{ color: '#ef4444' }}>{contactCsvRows.filter(r => r.isDuplicate).length} exact duplicates</span>{contactCsvRows.filter(r => r.isFuzzy).length > 0 && <> · <span style={{ color: '#f59e0b' }}>{contactCsvRows.filter(r => r.isFuzzy).length} possible duplicates</span></>} · <span style={{ color: 'var(--globant-green)' }}>{contactCsvRows.filter(r => r.selected && !r.isDuplicate).length} to import</span>
                       </div>
                       <div style={{ overflowX: 'auto', marginBottom: 12 }}>
                         <table className="data-table" style={{ fontSize: 11 }}>
@@ -2682,13 +2702,19 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                           </thead>
                           <tbody>
                             {contactCsvRows.map((row, i) => (
-                              <tr key={i} style={{ opacity: row.isDuplicate ? 0.45 : 1 }}>
+                              <tr key={i} style={{ opacity: row.isDuplicate ? 0.45 : 1, background: row.isFuzzy ? 'rgba(251,191,36,0.04)' : 'transparent' }}>
                                 <td><input type="checkbox" checked={row.selected && !row.isDuplicate} disabled={row.isDuplicate} onChange={e => setContactCsvRows(rows => rows.map((r, j) => j === i ? { ...r, selected: e.target.checked } : r))} /></td>
                                 <td>{row.firstName} {row.lastName}</td>
                                 <td>{row.accountName || '—'}</td>
                                 <td>{row.email || '—'}</td>
                                 <td>{row.source || '—'}</td>
-                                <td>{row.isDuplicate ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>Duplicate</span> : <span style={{ color: 'var(--globant-green)' }}>New</span>}</td>
+                                <td>
+                                  {row.isDuplicate
+                                    ? <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontSize: 9 }}>🚫 {row.duplicateReason}</span>
+                                    : row.isFuzzy
+                                    ? <span className="badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#f59e0b', fontSize: 9 }} title={row.fuzzyReason}>⚠️ {row.fuzzyReason}</span>
+                                    : <span className="badge badge-green" style={{ fontSize: 9 }}>✓ New</span>}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -3646,13 +3672,16 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
               });
               return norm;
             }).filter(r => r.name);
-            // Duplicate detection
-            const existingNames = new Set(accounts.map(a => (F(a, 'Account Name') || '').toLowerCase()));
-            const enriched = rows.map(r => ({
-              ...r,
-              isDuplicate: existingNames.has(r.name.toLowerCase()),
-              selected: !existingNames.has(r.name.toLowerCase()),
-            }));
+            // Duplicate detection (exact + fuzzy)
+            const existingAccNames = accounts.map(a => F(a, 'Account Name') || '');
+            const enriched = rows.map(r => {
+              const rLow = r.name.toLowerCase();
+              const exactMatch = existingAccNames.some(n => n.toLowerCase() === rLow);
+              if (exactMatch) return { ...r, isDuplicate: true, duplicateReason: 'Name exists', selected: false };
+              const fuzzyMatch = existingAccNames.find(n => strSimilarity(n, r.name) >= 0.75);
+              if (fuzzyMatch) return { ...r, isDuplicate: false, isFuzzy: true, fuzzyReason: `Similar to "${fuzzyMatch}"`, selected: true };
+              return { ...r, isDuplicate: false, isFuzzy: false, selected: true };
+            });
             setAccCsvRows(enriched);
             setAccImportResult(null);
           }
@@ -4032,19 +4061,25 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               {accCsvRows.length > 0 && (
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--globant-text)' }}>
-                    Preview: {accCsvRows.filter(r => r.selected && !r.isDuplicate).length} new / {accCsvRows.filter(r => r.isDuplicate).length} duplicates / {accCsvRows.length} total
+                    Preview: <span style={{ color: 'var(--globant-green)' }}>{accCsvRows.filter(r => r.selected && !r.isDuplicate).length} new</span> · <span style={{ color: '#ef4444' }}>{accCsvRows.filter(r => r.isDuplicate).length} exact duplicates</span>{accCsvRows.filter(r => r.isFuzzy).length > 0 && <> · <span style={{ color: '#f59e0b' }}>{accCsvRows.filter(r => r.isFuzzy).length} possible duplicates</span></>} · {accCsvRows.length} total
                   </div>
                   <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
                     <table className="data-table">
                       <thead><tr><th style={{ width: 30 }}></th><th>Name</th><th>Website</th><th>Status</th></tr></thead>
                       <tbody>
                         {accCsvRows.map((r, i) => (
-                          <tr key={i} style={{ opacity: r.isDuplicate ? 0.5 : 1 }}>
+                          <tr key={i} style={{ opacity: r.isDuplicate ? 0.5 : 1, background: r.isFuzzy ? 'rgba(251,191,36,0.04)' : 'transparent' }}>
                             <td><input type="checkbox" checked={r.selected && !r.isDuplicate} disabled={r.isDuplicate}
                               onChange={e => { const u = [...accCsvRows]; u[i].selected = e.target.checked; setAccCsvRows(u); }} /></td>
                             <td style={{ fontSize: 12 }}>{r.name}</td>
                             <td style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{r.website || '—'}</td>
-                            <td>{r.isDuplicate ? <span className="badge badge-yellow">Exists</span> : <span className="badge badge-green">New</span>}</td>
+                            <td>
+                              {r.isDuplicate
+                                ? <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontSize: 9 }}>🚫 {r.duplicateReason}</span>
+                                : r.isFuzzy
+                                ? <span className="badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#f59e0b', fontSize: 9 }} title={r.fuzzyReason}>⚠️ {r.fuzzyReason}</span>
+                                : <span className="badge badge-green" style={{ fontSize: 9 }}>✓ New</span>}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
