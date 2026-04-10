@@ -724,6 +724,72 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         linkedIds(b, 'Stakeholders').length - linkedIds(a, 'Stakeholders').length
       ).slice(0, 10);
 
+      // ── Conversion Funnel ──
+      const repliedIds = new Set(outreach.filter(o => F(o, 'Status') === 'Replied').flatMap(o => linkedIds(o, 'Stakeholder')));
+      const meetingIds = new Set(outreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status'))).flatMap(o => linkedIds(o, 'Account')));
+      const funnelSteps = [
+        { label: 'Accounts', value: accounts.length, color: '#60a5fa' },
+        { label: 'Mapped', value: mappedAccounts.length, color: '#818cf8' },
+        { label: 'Contacted', value: new Set(outreach.flatMap(o => linkedIds(o, 'Account'))).size, color: '#a78bfa' },
+        { label: 'Replied', value: repliedIds.size, color: '#f59e0b' },
+        { label: 'Meetings', value: meetingIds.size, color: '#34d399' },
+        { label: 'Open Opps', value: activeOpps.length, color: 'var(--globant-green)' },
+        { label: 'Won', value: wonOpps.length, color: '#4ade80' },
+      ];
+      const funnelMax = funnelSteps[0].value || 1;
+
+      // ── Weighted Forecast ──
+      const stageProbability = { 'Prospecting': 0.1, 'Qualification': 0.2, 'Discovery': 0.3, 'Proposal': 0.5, 'Negotiation': 0.7, 'Closed Won': 1, 'On Hold': 0.15 };
+      const forecastByStage = {};
+      activeOpps.forEach(o => {
+        const stage = F(o, 'Stage') || 'Unknown';
+        const val = o.fields?.['Value'] || 0;
+        const prob = stageProbability[stage] ?? (o.fields?.['Close probability (%)'] || 0.2);
+        if (!forecastByStage[stage]) forecastByStage[stage] = { count: 0, raw: 0, weighted: 0, prob };
+        forecastByStage[stage].count++;
+        forecastByStage[stage].raw += val;
+        forecastByStage[stage].weighted += val * prob;
+      });
+      const totalWeighted = Object.values(forecastByStage).reduce((s, v) => s + v.weighted, 0);
+      const forecastStages = Object.entries(forecastByStage).sort((a, b) => (stageProbability[b[0]] || 0) - (stageProbability[a[0]] || 0));
+
+      // ── Activity Heatmap (last 28 days) ──
+      const heatmapDays = 28;
+      const heatmapData = {};
+      const heatmapStart = new Date(); heatmapStart.setDate(heatmapStart.getDate() - heatmapDays);
+      outreach.forEach(o => {
+        const d = o.fields?.['Date'] ? new Date(o.fields['Date']).toISOString().slice(0,10) : null;
+        if (d && d >= heatmapStart.toISOString().slice(0,10)) heatmapData[d] = (heatmapData[d] || 0) + 1;
+      });
+      const heatmapDaysList = Array.from({ length: heatmapDays }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (heatmapDays - 1 - i));
+        const key = d.toISOString().slice(0,10);
+        return { key, count: heatmapData[key] || 0, label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+      });
+      const heatmapMax = Math.max(...heatmapDaysList.map(d => d.count), 1);
+
+      // ── Top 3 Focus Accounts ──
+      const now2 = new Date();
+      const focusAccounts = mappedAccounts.map(a => {
+        const stIds = linkedIds(a, 'Stakeholders');
+        const accOut = outreach.filter(o => linkedIds(o, 'Account').includes(a.id));
+        const lastOut = accOut.sort((x,y) => new Date(y.fields?.['Date']||0) - new Date(x.fields?.['Date']||0))[0];
+        const daysSince = lastOut ? Math.floor((now2 - new Date(lastOut.fields?.['Date'])) / 86400000) : 999;
+        const hasReply = accOut.some(o => F(o, 'Status') === 'Replied');
+        const hasMeeting = accOut.some(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
+        const openOppCount = activeOpps.filter(o => linkedIds(o,'Account').includes(a.id)).length;
+        const hasNews = !!(F(a,'Recent News'));
+        let score = 0;
+        if (openOppCount > 0) score += 30;
+        if (daysSince > 14 && daysSince < 60) score += 20;
+        if (hasReply && !hasMeeting) score += 15;
+        if (hasNews) score += 10;
+        if (daysSince > 60) score += 5;
+        if (hasMeeting) score -= 10;
+        const reason = openOppCount > 0 ? `${openOppCount} open opp${openOppCount>1?'s':''}` : hasReply ? 'Replied — no meeting yet' : daysSince > 14 ? `${daysSince}d without contact` : 'High potential';
+        return { a, score, daysSince, reason, openOppCount, hasReply, hasMeeting };
+      }).sort((a,b) => b.score - a.score).slice(0, 3);
+
       return (
         <div>
           <div className="page-header">
@@ -762,6 +828,139 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               <div className="kpi-label">Outreach Logged</div>
               <div className="kpi-value">{outreach.length}</div>
               <div className="kpi-sub">activities</div>
+            </div>
+          </div>
+
+          {/* ── Conversion Funnel + Weighted Forecast ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+            {/* Funnel */}
+            <div className="card">
+              <div className="card-header"><h3>🎯 Conversion Funnel</h3></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {funnelSteps.map((step, i) => {
+                  const pct = Math.round((step.value / funnelMax) * 100);
+                  const conv = i > 0 && funnelSteps[i-1].value > 0 ? Math.round((step.value / funnelSteps[i-1].value) * 100) : null;
+                  return (
+                    <div key={step.label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                        <span style={{ fontSize: 12, color: 'var(--globant-muted)', width: 90 }}>{step.label}</span>
+                        <div style={{ flex: 1, height: 22, background: 'var(--globant-darker)', borderRadius: 4, overflow: 'hidden', margin: '0 10px' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: step.color, borderRadius: 4, transition: 'width 0.5s', display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#000', whiteSpace: 'nowrap' }}>{step.value > 0 ? step.value : ''}</span>
+                          </div>
+                        </div>
+                        {conv !== null ? (
+                          <span style={{ fontSize: 10, color: conv >= 50 ? '#4ade80' : conv >= 25 ? '#f59e0b' : '#ef4444', fontWeight: 700, width: 36, textAlign: 'right' }}>{conv}%</span>
+                        ) : <span style={{ width: 36 }} />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--globant-muted)' }}>
+                % = conversion from previous stage
+              </div>
+            </div>
+
+            {/* Weighted Forecast */}
+            <div className="card">
+              <div className="card-header">
+                <h3>📊 Weighted Pipeline Forecast</h3>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)' }}>{formatCurrency(totalWeighted)}</span>
+              </div>
+              {forecastStages.length === 0 ? (
+                <p style={{ color: 'var(--globant-muted)', fontSize: 12 }}>No active opportunities</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {forecastStages.map(([stage, data]) => {
+                    const prob = Math.round((data.prob || 0) * 100);
+                    const stageColor = prob >= 70 ? '#4ade80' : prob >= 40 ? '#f59e0b' : '#60a5fa';
+                    return (
+                      <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 90, fontSize: 11, color: 'var(--globant-muted)', flexShrink: 0 }}>{stage}</div>
+                        <div style={{ flex: 1, height: 18, background: 'var(--globant-darker)', borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${prob}%`, background: stageColor, opacity: 0.7, borderRadius: 4 }} />
+                        </div>
+                        <span style={{ fontSize: 10, color: stageColor, fontWeight: 700, width: 32, textAlign: 'right' }}>{prob}%</span>
+                        <span style={{ fontSize: 11, color: 'var(--globant-text)', width: 60, textAlign: 'right' }}>{formatCurrency(data.raw)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--globant-green)', width: 60, textAlign: 'right', fontWeight: 600 }}>→ {formatCurrency(data.weighted)}</span>
+                        <span style={{ fontSize: 10, color: 'var(--globant-muted)', width: 20, textAlign: 'center' }}>{data.count}</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop: 6, paddingTop: 8, borderTop: '1px solid var(--globant-border)', display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--globant-muted)' }}>Raw pipeline: <strong style={{ color: 'var(--globant-text)' }}>{formatCurrency(activePipeline)}</strong></span>
+                    <span style={{ color: 'var(--globant-muted)' }}>Weighted: <strong style={{ color: 'var(--globant-green)' }}>{formatCurrency(totalWeighted)}</strong></span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Activity Heatmap + Top Focus Accounts ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+            {/* Heatmap */}
+            <div className="card">
+              <div className="card-header">
+                <h3>🔥 Activity Heatmap <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--globant-muted)' }}>last 28 days</span></h3>
+                <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{Object.values(heatmapData).reduce((s,v)=>s+v,0)} touches</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(28, 1fr)', gap: 3 }}>
+                {heatmapDaysList.map(day => {
+                  const intensity = day.count === 0 ? 0 : Math.min(1, day.count / heatmapMax);
+                  const bg = day.count === 0 ? 'var(--globant-darker)' : `rgba(191,215,48,${0.15 + intensity * 0.85})`;
+                  return (
+                    <div key={day.key} title={`${day.label}: ${day.count} activities`}
+                      style={{ aspectRatio: '1', borderRadius: 3, background: bg, cursor: 'default', transition: 'transform 0.1s' }}
+                      onMouseEnter={e => e.target.style.transform='scale(1.3)'}
+                      onMouseLeave={e => e.target.style.transform='scale(1)'}
+                    />
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, color: 'var(--globant-muted)' }}>
+                <span>{heatmapDaysList[0]?.label}</span>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <span>Less</span>
+                  {[0.1,0.3,0.6,1].map(v => <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: `rgba(191,215,48,${v})` }} />)}
+                  <span>More</span>
+                </div>
+                <span>Today</span>
+              </div>
+            </div>
+
+            {/* Top 3 Focus Accounts */}
+            <div className="card">
+              <div className="card-header"><h3>🎯 Focus Now <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--globant-muted)' }}>top 3 accounts to act on today</span></h3></div>
+              {focusAccounts.length === 0 ? (
+                <p style={{ color: 'var(--globant-muted)', fontSize: 12 }}>Add accounts to see recommendations</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {focusAccounts.map(({ a, daysSince, reason, openOppCount, hasReply, hasMeeting }, i) => {
+                    const medals = ['🥇','🥈','🥉'];
+                    const stCount = linkedIds(a, 'Stakeholders').length;
+                    const urgencyColor = openOppCount > 0 ? '#4ade80' : hasReply ? '#f59e0b' : '#60a5fa';
+                    return (
+                      <div key={a.id} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--globant-darker)', borderLeft: `3px solid ${urgencyColor}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{medals[i]} {F(a, 'Account Name')}</div>
+                          <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 3, display: 'flex', gap: 8 }}>
+                            <span>{F(a, 'Industry') || '—'}</span>
+                            <span>{stCount} contacts</span>
+                            {daysSince < 999 && <span style={{ color: daysSince > 14 ? '#ef4444' : '#60a5fa' }}>{daysSince}d ago</span>}
+                          </div>
+                          <div style={{ fontSize: 11, marginTop: 4, color: urgencyColor, fontWeight: 600 }}>→ {reason}</div>
+                        </div>
+                        <div style={{ fontSize: 20 }}>
+                          {openOppCount > 0 ? '💰' : hasMeeting ? '📅' : hasReply ? '💬' : '📬'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
