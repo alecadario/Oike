@@ -271,10 +271,13 @@ Generate 3-5 specific, actionable pain points for this person based on their rol
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
-
-          const a = new AirtableAPI();
-          if (!stakeholder.id.startsWith('tmp_')) { await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated }); }
+          // Show result immediately — save to Airtable in background (graceful fail)
           setLocalPain(generated);
+          if (!stakeholder.id.startsWith('tmp_')) {
+            const a = new AirtableAPI();
+            a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated })
+              .catch(e => console.warn('Could not persist pain points to Airtable:', e.message));
+          }
         } catch (e) {
           console.error(e);
           alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
@@ -2806,7 +2809,10 @@ Generate 3-5 specific, actionable pain points for this person based on their rol
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
             const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
-            if (!eng.s.id.startsWith('tmp_')) { await a.updateRecord(TABLE_IDS.stakeholders, eng.s.id, { 'Pain Points (Generated)': generated }); }
+            if (!eng.s.id.startsWith('tmp_')) {
+              await a.updateRecord(TABLE_IDS.stakeholders, eng.s.id, { 'Pain Points (Generated)': generated })
+                .catch(e => console.warn(`Could not save pain points for ${sFullName}:`, e.message));
+            }
           } catch (e) {
             console.error(`Failed for ${sFullName}:`, e);
           }
