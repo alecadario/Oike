@@ -144,6 +144,17 @@
         if (!res.ok) throw new Error(`Update error: ${res.status}`);
         return await res.json();
       }
+
+      async deleteRecord(tableId, recordId) {
+        const res = await fetch(this.proxyUrl, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ method: 'DELETE', baseId: AIRTABLE_BASE_ID, tableId, recordId }),
+        });
+        if (res.status === 401) { logoutUser(); throw new Error('Session expired'); }
+        if (!res.ok) throw new Error(`Delete error: ${res.status}`);
+        return await res.json();
+      }
     }
 
     // ============ OPENAI API (via backend proxy) ============
@@ -2566,7 +2577,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
     }
 
     // ============ ACTIVITY TRACKER ============
-    function ActivityTracker({ data, api, onLogActivity, onUpdateRecord }) {
+    function ActivityTracker({ data, api, onLogActivity, onUpdateRecord, onDeleteRecord }) {
       const { accounts, outreach, stakeholders } = data;
       const [accountSearch, setAccountSearch] = useState('');
       const [selectedChannel, setSelectedChannel] = useState('');
@@ -2585,6 +2596,13 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           alert('Failed to save activity changes');
           if (onLogActivity) onLogActivity();
         }
+      };
+
+      const deleteActivity = async (activity) => {
+        if (!confirm(`Delete "${F(activity, 'Activity Name') || 'this activity'}"? This cannot be undone.`)) return;
+        if (onDeleteRecord) onDeleteRecord('outreach', activity.id);
+        const a = api || new AirtableAPI();
+        a.deleteRecord(TABLE_IDS.outreach, activity.id).catch(e => { console.error(e); if (onLogActivity) onLogActivity(); });
       };
 
       // Channel stats
@@ -2738,6 +2756,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <span className={`badge ${F(a, 'Status') === 'Meeting Scheduled' || F(a, 'Status') === 'Meeting Booked' ? 'badge-blue' : F(a, 'Status') === 'Replied' ? 'badge-green' : F(a, 'Status') === 'Draft' ? 'badge-yellow' : 'badge-accent'}`}>{F(a, 'Status') === 'Meeting Scheduled' || F(a, 'Status') === 'Meeting Booked' ? '📅 ' : F(a, 'Status') === 'Replied' ? '💬 ' : ''}{F(a, 'Status')}</span>
                         <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setEditingActivity(a)}>✏️</button>
+                        <button style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', cursor: 'pointer' }} onClick={() => deleteActivity(a)} title="Delete activity">🗑</button>
                       </div>
                     </div>
                     <div className="log-meta">
@@ -2775,7 +2794,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
     }
 
     // ============ CP BRIEFINGS ============
-    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navigateToAccountId, clearNavigate }) {
+    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate }) {
       const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -3559,6 +3578,13 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         setSavingOppForm(false);
       };
 
+      const deleteOpp = async (opp) => {
+        if (!confirm(`Delete "${F(opp, 'Deal/Opp name')}"? This cannot be undone.`)) return;
+        if (onDeleteRecord) onDeleteRecord('opportunities', opp.id);
+        const a = api || new AirtableAPI();
+        a.deleteRecord(TABLE_IDS.opportunities, opp.id).catch(e => { console.error(e); if (onLogActivity) onLogActivity(); });
+      };
+
       // Opportunity modal (shared for create + edit)
       const renderOppModal = () => {
         if (!editingOpp) return null;
@@ -4122,6 +4148,11 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                   onClick={e => { e.stopPropagation(); openEditOpp(o); }}
                                   title="Edit opportunity"
                                 >✏️</button>
+                                <button
+                                  style={{ fontSize: 10, padding: '2px 8px', marginLeft: 2, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', cursor: 'pointer' }}
+                                  onClick={e => { e.stopPropagation(); deleteOpp(o); }}
+                                  title="Delete opportunity"
+                                >🗑</button>
                               </div>
                             </div>
                             {isOpen && (
@@ -5903,7 +5934,7 @@ Return ONLY the JSON array, nothing else.`;
     }
 
     // ============ SOLUTIONS HUB ============
-    function SolutionsHub({ data, api, onLogActivity, onAddRecord, goToAccount }) {
+    function SolutionsHub({ data, api, onLogActivity, onAddRecord, onDeleteRecord, goToAccount }) {
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
       const [selectedSolId, setSelectedSolId] = useState('');
       const [searchTerm, setSearchTerm] = useState('');
@@ -5928,6 +5959,54 @@ Return ONLY the JSON array, nothing else.`;
       const [savingNewSol, setSavingNewSol] = useState(false);
 
       const SOL_TYPES = ['Service', 'Product', 'Package', 'Consulting', 'Retainer', 'Other'];
+
+      // ─── OPP EDIT (reuse CPBriefings modal pattern via navigate) ───
+      const [solHubEditingOpp, setSolHubEditingOpp] = useState(null);
+      const [solHubOppForm, setSolHubOppForm] = useState({});
+      const [solHubOppSolIds, setSolHubOppSolIds] = useState([]);
+      const [savingSolHubOpp, setSavingSolHubOpp] = useState(false);
+      const OPP_STAGES_SH = ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closed Won','Closed Lost','On Hold'];
+
+      const openSolHubOppEdit = (opp) => {
+        setSolHubOppForm({
+          name: F(opp, 'Deal/Opp name') || '',
+          description: F(opp, 'Description') || '',
+          stage: F(opp, 'Stage') || '',
+          value: opp.fields?.['Value'] ? String(opp.fields['Value']) : '',
+          closeDate: opp.fields?.['close date'] ? String(opp.fields['close date']).slice(0, 10) : '',
+          openingDate: opp.fields?.['Opening date'] ? String(opp.fields['Opening date']).slice(0, 10) : '',
+          nextStep: F(opp, 'Next step') || '',
+        });
+        setSolHubOppSolIds(linkedIds(opp, 'Solutions'));
+        setSolHubEditingOpp(opp);
+      };
+
+      const saveSolHubOpp = async () => {
+        if (!solHubEditingOpp || !solHubOppForm.name.trim()) return;
+        setSavingSolHubOpp(true);
+        try {
+          const a = api || new AirtableAPI();
+          const fields = { 'Deal/Opp name': solHubOppForm.name.trim() };
+          if (solHubOppForm.description.trim()) fields['Description'] = solHubOppForm.description.trim();
+          if (solHubOppForm.stage) fields['Stage'] = solHubOppForm.stage;
+          if (solHubOppForm.value && !isNaN(Number(solHubOppForm.value))) fields['Value'] = Number(solHubOppForm.value);
+          if (solHubOppForm.closeDate) fields['close date'] = solHubOppForm.closeDate;
+          if (solHubOppForm.openingDate) fields['Opening date'] = solHubOppForm.openingDate;
+          if (solHubOppForm.nextStep.trim()) fields['Next step'] = solHubOppForm.nextStep.trim();
+          if (solHubOppSolIds.length > 0) fields['Solutions'] = solHubOppSolIds;
+          await a.updateRecord(TABLE_IDS.opportunities, solHubEditingOpp.id, fields);
+          setSolHubEditingOpp(null);
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); alert('Failed to save: ' + e.message); }
+        setSavingSolHubOpp(false);
+      };
+
+      const deleteOppSH = async (opp) => {
+        if (!confirm(`Delete "${F(opp, 'Deal/Opp name')}"? This cannot be undone.`)) return;
+        if (onDeleteRecord) onDeleteRecord('opportunities', opp.id);
+        const a = api || new AirtableAPI();
+        a.deleteRecord(TABLE_IDS.opportunities, opp.id).catch(e => { console.error(e); if (onLogActivity) onLogActivity(); });
+      };
 
       const handleCreateSolution = async () => {
         if (!newSolForm.name.trim()) { alert('Solution name is required'); return; }
@@ -6496,6 +6575,55 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </div>
             </div>
 
+            {/* Opp Edit Modal */}
+            {solHubEditingOpp && (() => {
+              const iStyle = { width: '100%', padding: '7px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box' };
+              const lStyle = { fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', display: 'block' };
+              return (
+                <div className="modal-overlay" onClick={() => setSolHubEditingOpp(null)}>
+                  <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <h3 style={{ margin: 0 }}>✏️ Edit Opportunity</h3>
+                      <button onClick={() => setSolHubEditingOpp(null)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div><label style={lStyle}>Name *</label><input style={iStyle} value={solHubOppForm.name} onChange={e => setSolHubOppForm(p => ({ ...p, name: e.target.value }))} /></div>
+                      <div><label style={lStyle}>Description</label><textarea style={{ ...iStyle, minHeight: 60, resize: 'vertical' }} value={solHubOppForm.description} onChange={e => setSolHubOppForm(p => ({ ...p, description: e.target.value }))} /></div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div><label style={lStyle}>Stage</label>
+                          <select style={iStyle} value={solHubOppForm.stage} onChange={e => setSolHubOppForm(p => ({ ...p, stage: e.target.value }))}>
+                            <option value="">Select...</option>
+                            {OPP_STAGES_SH.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                        <div><label style={lStyle}>Value ($)</label><input style={iStyle} type="number" value={solHubOppForm.value} onChange={e => setSolHubOppForm(p => ({ ...p, value: e.target.value }))} /></div>
+                        <div><label style={lStyle}>Opening Date</label><input style={iStyle} type="date" value={solHubOppForm.openingDate} onChange={e => setSolHubOppForm(p => ({ ...p, openingDate: e.target.value }))} /></div>
+                        <div><label style={lStyle}>Close Date</label><input style={iStyle} type="date" value={solHubOppForm.closeDate} onChange={e => setSolHubOppForm(p => ({ ...p, closeDate: e.target.value }))} /></div>
+                      </div>
+                      <div><label style={lStyle}>Next Step</label><input style={iStyle} value={solHubOppForm.nextStep} onChange={e => setSolHubOppForm(p => ({ ...p, nextStep: e.target.value }))} /></div>
+                      <div>
+                        <label style={lStyle}>Solutions</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                          {solHubOppSolIds.map(sid => {
+                            const sol = data.solutions.find(s => s.id === sid);
+                            return sol ? <span key={sid} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 }}>{F(sol, 'Name')} <span style={{ cursor: 'pointer' }} onClick={() => setSolHubOppSolIds(p => p.filter(i => i !== sid))}>✕</span></span> : null;
+                          })}
+                        </div>
+                        <select style={iStyle} value="" onChange={e => { if (e.target.value && !solHubOppSolIds.includes(e.target.value)) setSolHubOppSolIds(p => [...p, e.target.value]); }}>
+                          <option value="">+ Add solution...</option>
+                          {data.solutions.filter(s => !solHubOppSolIds.includes(s.id)).map(s => <option key={s.id} value={s.id}>{F(s, 'Name')}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                      <button className="action-btn btn-primary" style={{ flex: 1 }} onClick={saveSolHubOpp} disabled={savingSolHubOpp}>{savingSolHubOpp ? '⏳ Saving...' : '💾 Save'}</button>
+                      <button className="action-btn btn-ghost" onClick={() => setSolHubEditingOpp(null)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Stakeholders + Opportunities */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {/* Stakeholders */}
@@ -6547,11 +6675,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       const stageColor = stage.toLowerCase().includes('won') ? '#4ade80' : stage.toLowerCase().includes('lost') || stage.toLowerCase().includes('cancel') ? '#ef4444' : isOpen ? '#60a5fa' : '#8888A8';
                       return (
                         <div key={o.id} style={{ padding: '8px 10px', marginBottom: 4, borderRadius: 6, background: `${stageColor}08`, borderLeft: `3px solid ${stageColor}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 600, fontSize: 12 }}>{F(o, 'Deal/Opp name')}</div>
                             <span className="badge" style={{ background: `${stageColor}20`, color: stageColor, fontSize: 9 }}>{stage}</span>
                           </div>
-                          {val > 0 && <span style={{ fontWeight: 700, fontSize: 13, color: stageColor }}>${(val / 1000).toFixed(0)}K</span>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {val > 0 && <span style={{ fontWeight: 700, fontSize: 12, color: stageColor }}>${(val / 1000).toFixed(0)}K</span>}
+                            <button title="Edit" onClick={() => openSolHubOppEdit(o)} style={{ fontSize: 11, padding: '2px 7px', borderRadius: 5, border: '1px solid var(--globant-border)', background: 'rgba(255,255,255,0.04)', color: 'var(--globant-muted)', cursor: 'pointer' }}>✏️</button>
+                            <button title="Delete" onClick={() => deleteOppSH(o)} style={{ fontSize: 11, padding: '2px 7px', borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', cursor: 'pointer' }}>🗑</button>
+                          </div>
                         </div>
                       );
                     })}
@@ -7022,6 +7154,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         }));
       }, []);
 
+      const removeFromData = useCallback((tableKey, recordId) => {
+        setData(prev => ({
+          ...prev,
+          [tableKey]: (prev[tableKey] || []).filter(r => r.id !== recordId)
+        }));
+      }, []);
+
       const [refreshing, setRefreshing] = useState(false);
 
       const loadData = useCallback(async (apiInstance, silent = false) => {
@@ -7170,11 +7309,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         overview: <StrategyOverview data={data} />,
         followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
         contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
-        activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} />,
+        activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         insights: <InsightsView data={data} />,
-        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
-        solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} goToAccount={goToAccount} />,
+        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
+        solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} />,
       };
 
       const navItems = [
