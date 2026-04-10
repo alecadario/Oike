@@ -263,7 +263,11 @@
     function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData }) {
       if (!stakeholder) return null;
       const [genLoading, setGenLoading] = useState(''); // 'pain' | 'linkedin' | ''
+      const PAIN_TS_LS_KEY = 'oike_pain_timestamps';
       const [localPain, setLocalPain] = useState(F(stakeholder, 'Pain Points (Generated)') || F(stakeholder, 'Pain points') || '');
+      const [localPainTs, setLocalPainTs] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(PAIN_TS_LS_KEY) || '{}')[stakeholder.id] || null; } catch { return null; }
+      });
       const [localLinkedin, setLocalLinkedin] = useState(F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '');
       const [quickAction, setQuickAction] = useState(''); // 'bounced' | 'reply' | 'meeting' | 'notinterested' | ''
       const [quickNote, setQuickNote] = useState('');
@@ -310,6 +314,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
           // Show result immediately — save to Airtable in background (graceful fail)
           setLocalPain(generated);
+          const painTs = new Date().toISOString();
+          setLocalPainTs(painTs);
+          try {
+            const painTsMap = JSON.parse(localStorage.getItem(PAIN_TS_LS_KEY) || '{}');
+            painTsMap[stakeholder.id] = painTs;
+            localStorage.setItem(PAIN_TS_LS_KEY, JSON.stringify(painTsMap));
+          } catch {}
           if (!stakeholder.id.startsWith('tmp_')) {
             const a = new AirtableAPI();
             a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated })
@@ -411,7 +422,14 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             {/* Pain Points */}
             <div style={{ padding: '10px 12px', background: 'rgba(191,215,48,0.06)', borderRadius: 8, marginBottom: 10, borderLeft: '3px solid var(--globant-green)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>PAIN POINTS</span>
+                <div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>PAIN POINTS</span>
+                  {localPainTs && (
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 1 }}>
+                      Last updated: {new Date(localPainTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+                </div>
                 <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '3px 10px' }}
                   onClick={generatePainPoints} disabled={genLoading === 'pain'}>
                   {genLoading === 'pain' ? '⏳ Generating...' : painText ? '🔄 Regenerate' : '✨ Generate with AI'}
@@ -1240,7 +1258,7 @@ Keep it natural — write for the ear, not the eye.`,
         first: {
           label: 'First Contact',
           goal: 'This is the FIRST outreach ever to this person. Your only goal: open a conversation and earn a response. Do NOT try to sell or pitch. Create genuine curiosity based on their specific context and propose one clear, low-friction next step.',
-          extra: `Do NOT reference any previous conversation — this is cold outreach. Lead with THEIR world (a challenge, a news trigger, an industry shift), not with ${COMPANY_PROFILE.companyName}.`,
+          extra: `Do NOT reference any previous conversation — this is cold outreach. Lead with THEIR world (a challenge, a news trigger, an industry shift), not with ${COMPANY_PROFILE.companyName}. CRITICAL: Since this is first contact, the message MUST include a brief self-introduction — one sentence mentioning who you are (name if available), your role, and ${COMPANY_PROFILE.companyName}. Place it naturally, not as the opening line.`,
         },
         followup2: {
           label: 'Follow-up 2',
@@ -3030,10 +3048,22 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       }, [navigateToAccountId, clearNavigate]);
       const [talkingPoints, setTalkingPoints] = useState('');
       const [loadingTP, setLoadingTP] = useState(false);
-      const [execSummaryMap, setExecSummaryMap] = useState({});
+      const EXEC_SUMMARY_LS_KEY = 'oike_exec_summaries';
+      const [execSummaryData, setExecSummaryData] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(EXEC_SUMMARY_LS_KEY) || '{}'); } catch { return {}; }
+      });
       const [loadingSummary, setLoadingSummary] = useState(false);
-      const execSummary = selectedAccountId ? (execSummaryMap[selectedAccountId] || '') : '';
-      const setExecSummary = (val) => setExecSummaryMap(prev => ({ ...prev, [selectedAccountId]: val }));
+      const execSummaryEntry = selectedAccountId ? (execSummaryData[selectedAccountId] || null) : null;
+      const execSummary = execSummaryEntry?.text || '';
+      const execSummaryUpdatedAt = execSummaryEntry?.updatedAt || null;
+      const setExecSummary = (text) => {
+        const updatedAt = new Date().toISOString();
+        setExecSummaryData(prev => {
+          const next = { ...prev, [selectedAccountId]: { text, updatedAt } };
+          try { localStorage.setItem(EXEC_SUMMARY_LS_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      };
       const [historyStakeholder, setHistoryStakeholder] = useState(null);
       const [editingNotes, setEditingNotes] = useState(false);
       const [notesValue, setNotesValue] = useState('');
@@ -4152,7 +4182,14 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                   ); })()}
                   <div className="card" style={{ borderLeft: '3px solid #60a5fa' }}>
                     <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3>🧠 Executive Summary</h3>
+                      <div>
+                        <h3>🧠 Executive Summary</h3>
+                        {execSummaryUpdatedAt && (
+                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>
+                            Last updated: {new Date(execSummaryUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
                       <button className="action-btn btn-primary" style={{ fontSize: 11 }}
                         onClick={generateExecSummary} disabled={loadingSummary}>
                         {loadingSummary ? '⏳ Generating...' : execSummary ? '🔄 Regenerate' : '✨ Generate with AI'}
