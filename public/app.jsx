@@ -7046,14 +7046,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       return (
         <div className="modal-overlay" onClick={onClose}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
               <h3 style={{ margin: 0 }}>⚙️ Settings</h3>
               <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12, flexShrink: 0 }}>
               {[
                 { key: 'workspace', label: '🏢 Workspace' },
                 ...(isAdmin ? [{ key: 'profile', label: '🤖 AI Profile' }] : []),
@@ -7088,7 +7088,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
             {/* AI Profile tab (admin only) */}
             {tab === 'profile' && isAdmin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'rgba(191,215,48,0.08)', border: '1px solid rgba(191,215,48,0.2)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.6 }}>
                   These values are injected into all AI prompts. Set them to match your company — every client gets their own AI context.
                 </div>
@@ -7155,13 +7156,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   </div>
                 </div>
 
-                <button
-                  className="action-btn btn-primary"
-                  style={{ marginTop: 4, padding: '10px 0', width: '100%', fontSize: 13 }}
-                  onClick={handleSave}
-                >
-                  {saved ? '✅ Saved!' : '💾 Save AI Profile'}
-                </button>
+                </div>
+                {/* Save button — fixed at bottom */}
+                <div style={{ flexShrink: 0, paddingTop: 12, borderTop: '1px solid var(--globant-border)', marginTop: 4 }}>
+                  <button
+                    className="action-btn btn-primary"
+                    style={{ padding: '10px 0', width: '100%', fontSize: 13 }}
+                    onClick={handleSave}
+                  >
+                    {saved ? '✅ Saved!' : '💾 Save AI Profile'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
