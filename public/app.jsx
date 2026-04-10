@@ -2607,6 +2607,11 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const [stakeholderSearch, setStakeholderSearch] = useState('');
       const [filterSolutionId, setFilterSolutionId] = useState('');
       const [filterIndustry, setFilterIndustry] = useState('');
+      const [filterCountry, setFilterCountry] = useState('');
+      const [editingOpp, setEditingOpp] = useState(null);   // null | { opp: record | null, isNew: bool }
+      const [oppForm, setOppForm] = useState({});
+      const [oppFormSolIds, setOppFormSolIds] = useState([]);
+      const [savingOppForm, setSavingOppForm] = useState(false);
       const [cpSelectedStakeholder, setCpSelectedStakeholder] = useState(null);
       const [cpMeetingModal, setCpMeetingModal] = useState(null);
       const [cpMeetingNotes, setCpMeetingNotes] = useState('');
@@ -2677,8 +2682,11 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         if (filterIndustry) {
           list = list.filter(a => (F(a, 'Industry') || '') === filterIndustry);
         }
+        if (filterCountry) {
+          list = list.filter(a => (F(a, 'Country') || '') === filterCountry);
+        }
         return list;
-      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry]);
+      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry]);
 
       const account = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) : null;
 
@@ -3295,11 +3303,154 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         setCreatingSol(false);
       };
 
+      // ─── OPPORTUNITY CREATE / EDIT ───
+      const OPP_STAGES = ['Prospecting', 'Qualification', 'Discovery', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost', 'On Hold'];
+
+      const openNewOpp = () => {
+        setOppForm({ name: '', stage: 'Prospecting', description: '', owner: '', value: '', closeDate: '', openingDate: '', nextStep: '' });
+        setOppFormSolIds([]);
+        setEditingOpp({ opp: null, isNew: true });
+      };
+
+      const openEditOpp = (opp) => {
+        setOppForm({
+          name: F(opp, 'Deal/Opp name') || '',
+          stage: F(opp, 'Stage') || '',
+          description: F(opp, 'Reason') || '',
+          owner: F(opp, 'Opp Owner') || '',
+          value: opp.fields?.['Value'] != null ? String(opp.fields['Value']) : '',
+          closeDate: opp.fields?.['close date'] ? String(opp.fields['close date']).slice(0, 10) : '',
+          openingDate: opp.fields?.['Opening date'] ? String(opp.fields['Opening date']).slice(0, 10) : '',
+          nextStep: F(opp, 'Next step') || '',
+        });
+        setOppFormSolIds(linkedIds(opp, 'Solutions'));
+        setEditingOpp({ opp, isNew: false });
+      };
+
+      const saveOppForm = async () => {
+        if (!oppForm.name.trim()) { alert('Opportunity name is required'); return; }
+        setSavingOppForm(true);
+        try {
+          const a = api || new AirtableAPI();
+          const fields = {
+            'Deal/Opp name': oppForm.name.trim(),
+            'Stage': oppForm.stage || 'Prospecting',
+            'Reason': oppForm.description.trim() || undefined,
+            'Opp Owner': oppForm.owner.trim() || undefined,
+            'Next step': oppForm.nextStep.trim() || undefined,
+          };
+          if (oppForm.value && !isNaN(Number(oppForm.value))) fields['Value'] = Number(oppForm.value);
+          if (oppForm.closeDate) fields['close date'] = oppForm.closeDate;
+          if (oppForm.openingDate) fields['Opening date'] = oppForm.openingDate;
+          if (oppFormSolIds.length > 0) fields['Solutions'] = oppFormSolIds.map(id => ({ id }));
+          // Remove undefined
+          Object.keys(fields).forEach(k => fields[k] === undefined && delete fields[k]);
+
+          if (editingOpp.isNew) {
+            fields['Account'] = account ? [{ id: account.id }] : [];
+            const newRec = await a.createRecord(TABLE_IDS.opportunities, fields);
+            if (onAddRecord) onAddRecord('opportunities', { ...fields, Account: account ? [account.id] : [] });
+          } else {
+            await a.updateRecord(TABLE_IDS.opportunities, editingOpp.opp.id, fields);
+            if (onUpdateRecord) onUpdateRecord('opportunities', editingOpp.opp.id, fields);
+          }
+          setEditingOpp(null);
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error(e);
+          alert('Failed to save opportunity: ' + e.message);
+        }
+        setSavingOppForm(false);
+      };
+
+      // Opportunity modal (shared for create + edit)
+      const renderOppModal = () => {
+        if (!editingOpp) return null;
+        const iStyle = { width: '100%', padding: '7px 9px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 12, boxSizing: 'border-box' };
+        const lStyle = { fontSize: 10, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 3, textTransform: 'uppercase', display: 'block' };
+        const set = (key, val) => setOppForm(p => ({ ...p, [key]: val }));
+        return (
+          <div className="modal-overlay" onClick={() => setEditingOpp(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                <h3 style={{ margin: 0 }}>{editingOpp.isNew ? '🚀 New Opportunity' : '✏️ Edit Opportunity'}</h3>
+                <button onClick={() => setEditingOpp(null)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={lStyle}>Deal / Opportunity Name *</label>
+                  <input style={iStyle} value={oppForm.name} onChange={e => set('name', e.target.value)} placeholder="e.g. AI Platform — Phase 1" autoFocus />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={lStyle}>Stage</label>
+                    <select style={iStyle} value={oppForm.stage} onChange={e => set('stage', e.target.value)}>
+                      {OPP_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lStyle}>Value (USD)</label>
+                    <input style={iStyle} type="number" value={oppForm.value} onChange={e => set('value', e.target.value)} placeholder="e.g. 50000" />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={lStyle}>Opening Date</label>
+                    <input style={iStyle} type="date" value={oppForm.openingDate} onChange={e => set('openingDate', e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={lStyle}>Close Date</label>
+                    <input style={iStyle} type="date" value={oppForm.closeDate} onChange={e => set('closeDate', e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label style={lStyle}>Owner</label>
+                  <input style={iStyle} value={oppForm.owner} onChange={e => set('owner', e.target.value)} placeholder="e.g. John Smith" />
+                </div>
+                <div>
+                  <label style={lStyle}>Description / Notes</label>
+                  <textarea style={{ ...iStyle, minHeight: 70, resize: 'vertical' }} value={oppForm.description} onChange={e => set('description', e.target.value)} placeholder="Context, deal background, blockers..." />
+                </div>
+                <div>
+                  <label style={lStyle}>Next Step</label>
+                  <input style={iStyle} value={oppForm.nextStep} onChange={e => set('nextStep', e.target.value)} placeholder="e.g. Send proposal by Friday" />
+                </div>
+                <div>
+                  <label style={lStyle}>Solutions</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                    {oppFormSolIds.map(sid => {
+                      const sol = solutions.find(s => s.id === sid);
+                      return sol ? (
+                        <span key={sid} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          {F(sol, 'Name')}
+                          <span style={{ cursor: 'pointer', fontWeight: 700 }} onClick={() => setOppFormSolIds(prev => prev.filter(id => id !== sid))}>×</span>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                  <select style={iStyle} value="" onChange={e => { if (e.target.value && !oppFormSolIds.includes(e.target.value)) setOppFormSolIds(prev => [...prev, e.target.value]); }}>
+                    <option value="">+ Add solution...</option>
+                    {solutions.filter(s => !oppFormSolIds.includes(s.id)).map(s => <option key={s.id} value={s.id}>{F(s, 'Name')}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button className="action-btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditingOpp(null)}>Cancel</button>
+                  <button className="action-btn btn-primary" style={{ flex: 2 }} onClick={saveOppForm} disabled={savingOppForm || !oppForm.name.trim()}>
+                    {savingOppForm ? '⏳ Saving...' : editingOpp.isNew ? '🚀 Create Opportunity' : '💾 Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
       // Reset talking points and recs when account changes
       useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); }, [selectedAccountId]);
 
       return (
         <div>
+          {renderOppModal()}
           <div className="page-header">
             <h1>Accounts</h1>
             <p>Executive account briefings — one-pager per account</p>
@@ -3331,9 +3482,24 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 <option key={ind} value={ind}>{ind}</option>
               ))}
             </select>
-            {(filterSolutionId || filterIndustry) && (
-              <span style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 600 }}>
-                {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''}
+            <select
+              className="input-field"
+              style={{ maxWidth: 180, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterCountry ? '#f472b6' : 'var(--globant-muted)', borderRadius: 8 }}
+              value={filterCountry}
+              onChange={e => { setFilterCountry(e.target.value); setSelectedAccountId(''); }}
+            >
+              <option value="">🌍 All Countries</option>
+              {[...new Set(accounts.map(a => F(a, 'Country')).filter(Boolean))].sort().map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {(filterSolutionId || filterIndustry || filterCountry) && (
+              <span
+                style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, cursor: 'pointer', padding: '4px 8px', background: 'rgba(191,215,48,0.1)', borderRadius: 5 }}
+                onClick={() => { setFilterSolutionId(''); setFilterIndustry(''); setFilterCountry(''); }}
+                title="Clear all filters"
+              >
+                {filteredAccounts.length} result{filteredAccounts.length !== 1 ? 's' : ''} · ✕ clear
               </span>
             )}
             {!selectedAccountId && (
@@ -3717,36 +3883,49 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                     )}
                   </div>
 
-                  {opps.length > 0 && (
-                    <div className="card">
-                      <div className="card-header"><h3>🚀 Pipeline ({opps.length})</h3></div>
-                      {opps.map(o => {
+                  <div className="card">
+                    <div className="card-header">
+                      <h3>🚀 Pipeline ({opps.length})</h3>
+                      <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={openNewOpp}>
+                        ➕ New Opp
+                      </button>
+                    </div>
+                    {opps.length === 0 && (
+                      <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No opportunities yet. Click "New Opp" to create one.</p>
+                    )}
+                    {opps.length > 0 && opps.map(o => {
                         const stage = F(o, 'Stage');
                         const value = o.fields?.['Value'];
                         const stageColor = (stage||'').toLowerCase().includes('won') ? 'badge-green' : (stage||'').toLowerCase().includes('lost') || (stage||'').toLowerCase().includes('cancel') ? 'badge-red' : 'badge-blue';
                         const isOpen = selectedOppId === o.id;
                         return (
                           <div key={o.id} style={{ borderBottom: '1px solid var(--globant-border)' }}>
-                            <div style={{ padding: '10px 0', fontSize: 12, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                              onClick={() => {
-                                if (isOpen) { setSelectedOppId(''); }
-                                else {
-                                  setSelectedOppId(o.id);
-                                  setOppNotes(F(o, 'Reason') || '');
-                                  setOppNextStep(F(o, 'Next step') || '');
-                                  setOppStakeholder(F(o, 'Stakeholders') || '');
-                                  setOppSolutionIds(linkedIds(o, 'Solutions'));
-                                  setEditingOppNotes(false);
-                                  setShowAddOppStk(false);
-                                }
-                              }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ padding: '10px 0', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1 }}
+                                onClick={() => {
+                                  if (isOpen) { setSelectedOppId(''); }
+                                  else {
+                                    setSelectedOppId(o.id);
+                                    setOppNotes(F(o, 'Reason') || '');
+                                    setOppNextStep(F(o, 'Next step') || '');
+                                    setOppStakeholder(F(o, 'Stakeholders') || '');
+                                    setOppSolutionIds(linkedIds(o, 'Solutions'));
+                                    setEditingOppNotes(false);
+                                    setShowAddOppStk(false);
+                                  }
+                                }}>
                                 <span style={{ color: 'var(--globant-green)', fontSize: 10 }}>{isOpen ? '▼' : '▶'}</span>
                                 <span style={{ fontWeight: 600 }}>{F(o, 'Deal/Opp name')}</span>
                               </div>
-                              <div style={{ display: 'flex', gap: 4 }}>
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                 <span className={`badge ${stageColor}`}>{stage}</span>
                                 {value ? <span className="badge badge-green">{formatCurrency(value)}</span> : null}
+                                <button
+                                  className="action-btn btn-ghost"
+                                  style={{ fontSize: 10, padding: '2px 8px', marginLeft: 4 }}
+                                  onClick={e => { e.stopPropagation(); openEditOpp(o); }}
+                                  title="Edit opportunity"
+                                >✏️</button>
                               </div>
                             </div>
                             {isOpen && (
@@ -3940,8 +4119,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           </div>
                         );
                       })}
-                    </div>
-                  )}
+                  </div>
 
                   {accEvents.length > 0 && (
                     <div className="card">
