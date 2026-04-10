@@ -5738,22 +5738,27 @@ Return ONLY the JSON array, nothing else.`;
         setSavingNewSol(true);
         try {
           const a = api || new AirtableAPI();
-          const fields = {
-            'Name': newSolForm.name.trim(),
-            'Service | Solution Detail': newSolForm.description.trim() || undefined,
-            'Stakeholder Key Message': newSolForm.keyMessage.trim() || undefined,
-          };
-          // Type and Price fields — graceful if not in Airtable yet
-          if (newSolForm.type) fields['Type'] = newSolForm.type;
-          if (newSolForm.price.trim()) fields['Price'] = newSolForm.price.trim();
-          // Remove undefined
-          Object.keys(fields).forEach(k => fields[k] === undefined && delete fields[k]);
-          const newRec = await a.createRecord(TABLE_IDS.solutions, fields);
-          if (onAddRecord) onAddRecord('solutions', fields);
+
+          // Step 1: create with guaranteed-safe fields only
+          const safeFields = { 'Name': newSolForm.name.trim() };
+          if (newSolForm.description.trim()) safeFields['Service | Solution Detail'] = newSolForm.description.trim();
+          if (newSolForm.keyMessage.trim()) safeFields['Stakeholder Key Message'] = newSolForm.keyMessage.trim();
+
+          const newRec = await a.createRecord(TABLE_IDS.solutions, safeFields);
+
+          // Step 2: try to save Type & Price separately — if fields don't exist in Airtable yet, fail silently
+          if (newRec?.id && (newSolForm.type || newSolForm.price.trim())) {
+            const extraFields = {};
+            if (newSolForm.type) extraFields['Type'] = newSolForm.type;
+            if (newSolForm.price.trim()) extraFields['Price'] = newSolForm.price.trim();
+            a.updateRecord(TABLE_IDS.solutions, newRec.id, extraFields)
+              .catch(e => console.warn('Type/Price fields not in Airtable yet:', e.message));
+          }
+
+          if (onAddRecord) onAddRecord('solutions', { ...safeFields, Type: newSolForm.type, Price: newSolForm.price });
           setShowNewSol(false);
           setNewSolForm({ name: '', type: 'Service', description: '', price: '', keyMessage: '' });
           if (onLogActivity) onLogActivity();
-          // Navigate to the new solution if we got its id back
           if (newRec?.id) setSelectedSolId(newRec.id);
         } catch (e) {
           console.error(e);
