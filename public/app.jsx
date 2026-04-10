@@ -4387,6 +4387,21 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               allData={data}
             />
           )}
+
+          {editingAccount && (
+            <EditModal
+              title={`Edit: ${F(editingAccount, 'Account Name') || 'Account'}`}
+              fields={[
+                { key: 'Account Name', label: 'Account Name' },
+                { key: 'Website', label: 'Website' },
+                { key: 'Industry', label: 'Industry' },
+                { key: 'Inside Sales Status', label: 'Inside Sales Status', type: 'select', options: ['Prospect', 'Active Outreach', 'Meeting Booked', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'On Hold', 'Dormant'] },
+              ]}
+              initialValues={editingAccount.fields || {}}
+              onSave={saveAccountEdit}
+              onClose={() => setEditingAccount(null)}
+            />
+          )}
         </div>
       );
     }
@@ -4893,21 +4908,6 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               )}
             </div>
           </div>
-
-          {editingAccount && (
-            <EditModal
-              title={`Edit: ${F(editingAccount, 'Account Name') || 'Account'}`}
-              fields={[
-                { key: 'Account Name', label: 'Account Name' },
-                { key: 'Website', label: 'Website' },
-                { key: 'Industry', label: 'Industry' },
-                { key: 'Inside Sales Status', label: 'Inside Sales Status', type: 'select', options: ['Prospect', 'Active Outreach', 'Meeting Booked', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'On Hold', 'Dormant'] },
-              ]}
-              initialValues={editingAccount.fields || {}}
-              onSave={saveAccountEdit}
-              onClose={() => setEditingAccount(null)}
-            />
-          )}
         </div>
       );
     }
