@@ -911,6 +911,23 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const account = data.accounts.find(a => accountIds.includes(a.id));
       const accountName = account ? F(account, 'Account Name') : 'the company';
       const industry = account ? F(account, 'Industry') : '';
+      const accountCountry = account ? (F(account, 'Country') || '') : '';
+      const countryLanguageMap = {
+        'Saudi Arabia': 'English', 'KSA': 'English', 'UAE': 'English', 'Qatar': 'English',
+        'Bahrain': 'English', 'Kuwait': 'English', 'Oman': 'English', 'Jordan': 'English',
+        'Egypt': 'English', 'Morocco': 'English (or French if culturally preferred)',
+        'Spain': 'Spanish', 'Mexico': 'Spanish', 'Colombia': 'Spanish', 'Argentina': 'Spanish',
+        'Chile': 'Spanish', 'Peru': 'Spanish', 'Venezuela': 'Spanish', 'Ecuador': 'Spanish',
+        'Bolivia': 'Spanish', 'Paraguay': 'Spanish', 'Uruguay': 'Spanish',
+        'Brazil': 'Portuguese', 'Portugal': 'Portuguese',
+        'France': 'French', 'Belgium': 'French',
+        'Germany': 'German', 'Austria': 'German', 'Switzerland': 'German or French',
+        'Italy': 'Italian', 'Netherlands': 'English or Dutch', 'Poland': 'English or Polish',
+        'Turkey': 'English or Turkish', 'India': 'English', 'Pakistan': 'English',
+        'United States': 'English', 'USA': 'English', 'United Kingdom': 'English', 'UK': 'English',
+        'Canada': 'English', 'Australia': 'English', 'Singapore': 'English',
+      };
+      const suggestedLanguage = accountCountry ? (countryLanguageMap[accountCountry] || 'English') : '';
       const recentNews = account ? (F(account, 'Recent News') || '') : '';
       const newsText = typeof recentNews === 'string' ? recentNews.slice(0, 400) : '';
       const intelPlan = account ? (F(account, 'Inside sales plan') || '') : '';
@@ -1077,6 +1094,7 @@ ${extraContext ? `⚠️ CRITICAL — SENDER'S PERSONAL CONTEXT (MUST be incorpo
 ${eventContext && eventMode === 'invite' ? `🎪 EVENT CONTEXT — Use this event as the reason to reach out:\n${eventContext}\nAPPROACH: Keep it simple and natural. Ask if they're planning to attend the event, and say you'd love to meet them there / grab a coffee / say hello. Do NOT write a formal invitation or pitch the event. Just use it as a warm, human excuse to connect. Example tone: "I'll be at [event] — are you planning to go? Would love to meet in person."\n` : ''}${eventContext && eventMode === 'followup' ? `🤝 POST-EVENT FOLLOW-UP — The sender already met this person at the event:\n${eventContext}\nAPPROACH: This is a warm follow-up after an in-person meeting. Reference that you met at the event naturally — don't make it awkward or overly formal. Acknowledge the conversation you had (keep it vague since we don't know the details), express genuine interest in continuing it, and include one clear next step (a call, a coffee, sending something). Tone: warm, human, brief. It should feel like a message from someone who actually remembers the conversation and wants to take it further. Do NOT pitch heavily — the relationship is already warm. Example tone: "Great meeting you at [event] — wanted to follow up on what we discussed. Would love to continue the conversation over a quick call next week."\n` : ''}
 ${solutionContext ? `🛠️ SOLUTION TO PITCH — The sender wants to position this specific solution/service in the message:\n${solutionContext}\nYou MUST weave this solution naturally into the message — explain how it addresses the stakeholder's pain points or industry challenges. Reference the solution's capabilities specifically, don't be generic. The solution is the VALUE PROPOSITION of this message.\n` : ''}
 SENDER: ${COMPANY_PROFILE.senderName}, ${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}
+${suggestedLanguage ? `\n🌍 LANGUAGE: The account is based in ${accountCountry}. Write the message in ${suggestedLanguage}. If the sender's personal context explicitly specifies a different language, use that instead.\n` : ''}
 ${COMPANY_PROFILE.voiceTone ? `\n🎙️ SENDER'S VOICE & TONE (CRITICAL — this defines HOW the message sounds):\n- Personality: ${COMPANY_PROFILE.voiceTone}\n${COMPANY_PROFILE.voiceAvoid ? `- NEVER do this: ${COMPANY_PROFILE.voiceAvoid}\n` : ''}${COMPANY_PROFILE.voiceExample ? `- Write like this real example from the sender: "${COMPANY_PROFILE.voiceExample}"\n` : ''}- The message MUST sound like this person wrote it, not like an AI. Match the energy, rhythm and vocabulary from the example above.\n` : ''}
 RULES:
 - Lead with THEIR world, not yours. First sentence must reference something about THEM (role, company, news, challenge)
