@@ -81,6 +81,9 @@
         senderName: 'Your Name',
         senderTitle: 'Business Consultant',
         goals: '',
+        voiceTone: '',
+        voiceAvoid: '',
+        voiceExample: '',
       };
       try {
         const saved = localStorage.getItem(COMPANY_PROFILE_KEY);
@@ -1074,7 +1077,7 @@ ${extraContext ? `⚠️ CRITICAL — SENDER'S PERSONAL CONTEXT (MUST be incorpo
 ${eventContext && eventMode === 'invite' ? `🎪 EVENT CONTEXT — Use this event as the reason to reach out:\n${eventContext}\nAPPROACH: Keep it simple and natural. Ask if they're planning to attend the event, and say you'd love to meet them there / grab a coffee / say hello. Do NOT write a formal invitation or pitch the event. Just use it as a warm, human excuse to connect. Example tone: "I'll be at [event] — are you planning to go? Would love to meet in person."\n` : ''}${eventContext && eventMode === 'followup' ? `🤝 POST-EVENT FOLLOW-UP — The sender already met this person at the event:\n${eventContext}\nAPPROACH: This is a warm follow-up after an in-person meeting. Reference that you met at the event naturally — don't make it awkward or overly formal. Acknowledge the conversation you had (keep it vague since we don't know the details), express genuine interest in continuing it, and include one clear next step (a call, a coffee, sending something). Tone: warm, human, brief. It should feel like a message from someone who actually remembers the conversation and wants to take it further. Do NOT pitch heavily — the relationship is already warm. Example tone: "Great meeting you at [event] — wanted to follow up on what we discussed. Would love to continue the conversation over a quick call next week."\n` : ''}
 ${solutionContext ? `🛠️ SOLUTION TO PITCH — The sender wants to position this specific solution/service in the message:\n${solutionContext}\nYou MUST weave this solution naturally into the message — explain how it addresses the stakeholder's pain points or industry challenges. Reference the solution's capabilities specifically, don't be generic. The solution is the VALUE PROPOSITION of this message.\n` : ''}
 SENDER: ${COMPANY_PROFILE.senderName}, ${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}
-
+${COMPANY_PROFILE.voiceTone ? `\n🎙️ SENDER'S VOICE & TONE (CRITICAL — this defines HOW the message sounds):\n- Personality: ${COMPANY_PROFILE.voiceTone}\n${COMPANY_PROFILE.voiceAvoid ? `- NEVER do this: ${COMPANY_PROFILE.voiceAvoid}\n` : ''}${COMPANY_PROFILE.voiceExample ? `- Write like this real example from the sender: "${COMPANY_PROFILE.voiceExample}"\n` : ''}- The message MUST sound like this person wrote it, not like an AI. Match the energy, rhythm and vocabulary from the example above.\n` : ''}
 RULES:
 - Lead with THEIR world, not yours. First sentence must reference something about THEM (role, company, news, challenge)
 - Personalize with their first name only — never full name in the body
@@ -7103,6 +7106,35 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   <label style={labelStyle}>Company Goals / Extra Context (optional)</label>
                   <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={profile.goals} onChange={e => setProfile(p => ({ ...p, goals: e.target.value }))} placeholder="e.g. Expand into healthcare and government sectors. Focus on AI and data analytics offerings." />
                   <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Added to AI prompts as extra strategic context</div>
+                </div>
+
+                {/* Voice & Tone section */}
+                <div style={{ borderTop: '1px solid var(--globant-border)', paddingTop: 14, marginTop: 2 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    ✍️ Voice & Tone
+                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--globant-muted)' }}>— how the AI should sound when writing your messages</span>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Tone / Personality</label>
+                    <input style={inputStyle} value={profile.voiceTone || ''} onChange={e => setProfile(p => ({ ...p, voiceTone: e.target.value }))}
+                      placeholder="e.g. direct, warm, confident, no fluff, slight humor" />
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Adjectives that describe how you communicate</div>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>What to NEVER do</label>
+                    <input style={inputStyle} value={profile.voiceAvoid || ''} onChange={e => setProfile(p => ({ ...p, voiceAvoid: e.target.value }))}
+                      placeholder="e.g. never use 'I hope this finds you well', no emojis, no bullet points in messages" />
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Hard rules — the AI will never break these</div>
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Example phrase (optional)</label>
+                    <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={profile.voiceExample || ''} onChange={e => setProfile(p => ({ ...p, voiceExample: e.target.value }))}
+                      placeholder="Paste a real message or sentence you wrote. The AI will calibrate its style to match yours." />
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>The closer to your real voice, the better the output</div>
+                  </div>
                 </div>
 
                 <button
