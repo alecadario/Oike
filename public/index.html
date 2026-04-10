@@ -296,12 +296,14 @@
       CURRENT_USER = data.user;
       localStorage.setItem('oike_token', data.token);
       localStorage.setItem('oike_user', JSON.stringify(data.user));
-      BASE_ID = data.baseId;
-      localStorage.setItem('oike_base_id', data.baseId);
-      // Apply config
-      AIRTABLE_BASE_ID = data.config.baseId;
-      TABLE_IDS = data.config.tables;
-      CLIENT_CONFIG = data.config;
+      // Set base ID from login response
+      const loginBaseId = data.baseId || data.config?.baseId || '';
+      BASE_ID = loginBaseId;
+      AIRTABLE_BASE_ID = loginBaseId;
+      localStorage.setItem('oike_base_id', loginBaseId);
+      TABLE_IDS = data.config?.tables || {};
+      CLIENT_CONFIG = data.config || {};
+      console.log('LOGIN OK — baseId:', AIRTABLE_BASE_ID, 'tables:', TABLE_IDS);
       return data;
     }
 
