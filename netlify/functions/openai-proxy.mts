@@ -1,5 +1,23 @@
 import type { Context, Config } from "@netlify/functions";
-import { verifyToken } from "./auth.mts";
+
+// ── Inline JWT verify (no cross-file imports) ──
+async function verifyToken(token: string, secret: string): Promise<Record<string, any> | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const data = `${headerB64}.${payloadB64}`;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const sigStr = atob(sigB64.replace(/-/g, '+').replace(/_/g, '/'));
+    const sigBytes = new Uint8Array([...sigStr].map((c) => c.charCodeAt(0)));
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(data));
+    if (!valid) return null;
+    const payloadStr = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(payloadStr);
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
 
 function getJwtSecret(): string {
   return Netlify.env.get('JWT_SECRET') || 'oike-default-secret-change-me-2026';
@@ -12,27 +30,23 @@ export default async (req: Request, context: Context) => {
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      status: 405, headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  // ── Auth check ──
   const authHeader = req.headers.get('authorization') || '';
   const token = authHeader.replace('Bearer ', '');
   const payload = await verifyToken(token, getJwtSecret());
   if (!payload) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      status: 401, headers: { 'Content-Type': 'application/json' },
     });
   }
 
   const OPENAI_KEY = Netlify.env.get('OPENAI_API_KEY');
   if (!OPENAI_KEY) {
     return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
 
@@ -42,17 +56,13 @@ export default async (req: Request, context: Context) => {
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: 'Missing messages array' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages, temperature, max_tokens }),
     });
 
@@ -60,20 +70,17 @@ export default async (req: Request, context: Context) => {
 
     if (!response.ok) {
       return new Response(JSON.stringify(data), {
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' },
+        status: response.status, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const content = data.choices?.[0]?.message?.content || '';
     return new Response(JSON.stringify({ content, usage: data.usage }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      status: 200, headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
 };

@@ -1,5 +1,22 @@
 import type { Context, Config } from "@netlify/functions";
-import { buildClientConfig } from "./get-config.mts";
+
+// ── Inline config (no cross-file imports) ──
+const STANDARD_TABLES: Record<string, string> = {
+  accounts: 'tblkeZ9zXiH2YQJu0',
+  stakeholders: 'tblwwNrPg6q2jYxfv',
+  opportunities: 'tbljQCLi82To2DPvT',
+  actionPlan: 'tblbn0GDUO8i0g7bX',
+  outreach: 'tblAvzPQnug9VBcX5',
+  solutions: 'tbl1Ji8Mr8eBcAf15',
+  events: 'tblQj3t4HUsmmnPiN',
+  clientPartners: 'tblwBsDhNdAvcMwzy',
+  sources: 'tblciUlYmvQHJm71w',
+  users: 'tblCyjbxtx0MTPYq9',
+};
+
+function buildClientConfig(baseId: string) {
+  return { baseId, tables: { ...STANDARD_TABLES }, fields: {} };
+}
 
 // ── Simple JWT implementation (HMAC-SHA256) ──
 
