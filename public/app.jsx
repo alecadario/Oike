@@ -2437,8 +2437,14 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 if (kl === 'account' || kl === 'company' || kl === 'empresa') norm.accountName = row[k]?.trim();
                 if (kl === 'source' || kl === 'fuente') norm.source = row[k]?.trim();
                 if (kl === 'campaign' || kl === 'campaña') norm.campaign = row[k]?.trim();
+                if (kl === 'country' || kl === 'pais' || kl === 'país') norm.country = row[k]?.trim();
               });
               if (!norm.firstName) return null;
+              // Auto-inherit country from matched account if not set
+              if (!norm.country && norm.accountName) {
+                const matchedAcc = accounts.find(ac => (F(ac, 'Account Name') || '').toLowerCase() === (norm.accountName || '').toLowerCase());
+                if (matchedAcc) norm.country = F(matchedAcc, 'Country') || '';
+              }
               const fullName = (norm.firstName + ' ' + (norm.lastName || '')).trim();
               // Exact match
               const emailExact = norm.email && existingEmails.has(norm.email.toLowerCase());
@@ -2474,6 +2480,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             if (row.linkedin) fields['LinkedIn'] = row.linkedin;
             if (row.source) fields['Source'] = row.source;
             if (row.campaign) fields['Campaign'] = row.campaign;
+            const resolvedCountry = row.country || (matchedAcc ? F(matchedAcc, 'Country') : '') || '';
+            if (resolvedCountry) fields['Country'] = resolvedCountry;
             if (matchedAcc) fields['Account'] = [matchedAcc.id];
             if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
             await a.createRecord(TABLE_IDS.stakeholders, fields);
@@ -2697,7 +2705,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                               <th style={{ width: 32 }}>
                                 <input type="checkbox" checked={contactCsvRows.every(r => r.isDuplicate || r.selected)} onChange={e => setContactCsvRows(rows => rows.map(r => r.isDuplicate ? r : { ...r, selected: e.target.checked }))} />
                               </th>
-                              <th>Name</th><th>Account</th><th>Email</th><th>Source</th><th>Status</th>
+                              <th>Name</th><th>Account</th><th>Email</th><th>Country</th><th>Source</th><th>Status</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2707,6 +2715,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                                 <td>{row.firstName} {row.lastName}</td>
                                 <td>{row.accountName || '—'}</td>
                                 <td>{row.email || '—'}</td>
+                                <td style={{ fontSize: 11 }}>{row.country ? <span style={{ color: 'var(--globant-muted)' }}>{row.country}</span> : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}</td>
                                 <td>{row.source || '—'}</td>
                                 <td>
                                   {row.isDuplicate
