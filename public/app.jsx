@@ -879,6 +879,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [extraContext, setExtraContext] = useState('');
       const [ccPartner, setCcPartner] = useState(true);
       const [selectedEventId, setSelectedEventId] = useState('');
+      const [eventMode, setEventMode] = useState('invite'); // 'invite' | 'followup'
       const [selectedSolutionId, setSelectedSolutionId] = useState('');
 
       const currentMessage = generatedMessages[tab] || '';
@@ -1059,7 +1060,7 @@ CHANNEL: ${selectedChannel}
 - Format: ${chGuide.format}
 
 ${extraContext ? `⚠️ CRITICAL — SENDER'S PERSONAL CONTEXT (MUST be incorporated into the message):\n"${extraContext}"\nYou MUST weave this context naturally into the message. This is first-hand intel from the sender and takes priority over other data.\n` : ''}
-${eventContext ? `🎪 EVENT CONTEXT — Use this event as the reason to reach out:\n${eventContext}\nAPPROACH: Keep it simple and natural. Ask if they're planning to attend the event, and say you'd love to meet them there / grab a coffee / say hello. Do NOT write a formal invitation or pitch the event. Just use it as a warm, human excuse to connect. Example tone: "I'll be at [event] — are you planning to go? Would love to meet in person."\n` : ''}
+${eventContext && eventMode === 'invite' ? `🎪 EVENT CONTEXT — Use this event as the reason to reach out:\n${eventContext}\nAPPROACH: Keep it simple and natural. Ask if they're planning to attend the event, and say you'd love to meet them there / grab a coffee / say hello. Do NOT write a formal invitation or pitch the event. Just use it as a warm, human excuse to connect. Example tone: "I'll be at [event] — are you planning to go? Would love to meet in person."\n` : ''}${eventContext && eventMode === 'followup' ? `🤝 POST-EVENT FOLLOW-UP — The sender already met this person at the event:\n${eventContext}\nAPPROACH: This is a warm follow-up after an in-person meeting. Reference that you met at the event naturally — don't make it awkward or overly formal. Acknowledge the conversation you had (keep it vague since we don't know the details), express genuine interest in continuing it, and include one clear next step (a call, a coffee, sending something). Tone: warm, human, brief. It should feel like a message from someone who actually remembers the conversation and wants to take it further. Do NOT pitch heavily — the relationship is already warm. Example tone: "Great meeting you at [event] — wanted to follow up on what we discussed. Would love to continue the conversation over a quick call next week."\n` : ''}
 ${solutionContext ? `🛠️ SOLUTION TO PITCH — The sender wants to position this specific solution/service in the message:\n${solutionContext}\nYou MUST weave this solution naturally into the message — explain how it addresses the stakeholder's pain points or industry challenges. Reference the solution's capabilities specifically, don't be generic. The solution is the VALUE PROPOSITION of this message.\n` : ''}
 SENDER: ${COMPANY_PROFILE.senderName}, ${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}
 
@@ -1174,9 +1175,9 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
 
             {/* Step 3: Event reference */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>3. EVENT REFERENCE <span style={{ fontWeight: 400 }}>(optional — select an event to frame the message as an invitation)</span></label>
+              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>3. EVENT REFERENCE <span style={{ fontWeight: 400 }}>(optional)</span></label>
               <select className="input-field" style={{ width: '100%', fontSize: 12 }}
-                value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)}>
+                value={selectedEventId} onChange={e => { setSelectedEventId(e.target.value); setEventMode('invite'); }}>
                 <option value="">— No event (general outreach) —</option>
                 {events.sort((a, b) => new Date(b.fields?.['Starting'] || 0) - new Date(a.fields?.['Starting'] || 0)).map(ev => {
                   const evName = F(ev, 'Event Name') || 'Unnamed';
@@ -1185,10 +1186,24 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 })}
               </select>
               {selectedEvent && (
-                <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: '3px solid var(--globant-green)' }}>
-                  🎪 <strong>{F(selectedEvent, 'Event Name')}</strong>
-                  {selectedEvent.fields?.['Starting'] && <span> · {new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>}
-                  {F(selectedEvent, 'Aditional context') && <span> · {(F(selectedEvent, 'Aditional context') || '').slice(0, 100)}...</span>}
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                    <button
+                      onClick={() => setEventMode('invite')}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, border: `1px solid ${eventMode === 'invite' ? 'var(--globant-green)' : 'var(--globant-border)'}`, background: eventMode === 'invite' ? 'rgba(191,215,48,0.15)' : 'rgba(255,255,255,0.03)', color: eventMode === 'invite' ? 'var(--globant-green)' : 'var(--globant-muted)', cursor: 'pointer', fontWeight: eventMode === 'invite' ? 700 : 400 }}>
+                      🎫 Invite — "Are you going?"
+                    </button>
+                    <button
+                      onClick={() => setEventMode('followup')}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, border: `1px solid ${eventMode === 'followup' ? '#a78bfa' : 'var(--globant-border)'}`, background: eventMode === 'followup' ? 'rgba(167,139,250,0.15)' : 'rgba(255,255,255,0.03)', color: eventMode === 'followup' ? '#a78bfa' : 'var(--globant-muted)', cursor: 'pointer', fontWeight: eventMode === 'followup' ? 700 : 400 }}>
+                      🤝 Follow-up — "Great meeting you"
+                    </button>
+                  </div>
+                  <div style={{ padding: '6px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: `3px solid ${eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)'}` }}>
+                    {eventMode === 'invite' ? '🎪' : '🤝'} <strong>{F(selectedEvent, 'Event Name')}</strong>
+                    {selectedEvent.fields?.['Starting'] && <span> · {new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>}
+                    <span style={{ marginLeft: 8, color: eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)' }}>{eventMode === 'invite' ? 'Invite mode' : 'Follow-up mode'}</span>
+                  </div>
                 </div>
               )}
             </div>
