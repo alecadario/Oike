@@ -2746,9 +2746,10 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                         <td>
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                             <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setSelectedStakeholder(s)}>✨</button>
-                            {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'WhatsApp', fallback)}>💬</button>}
-                            {email && <button className="action-btn btn-email" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'Email', fallback)}>✉️</button>}
-                            {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'LinkedIn', fallback)}>🔗</button>}
+                            {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 11, padding: '4px 8px' }} title="WhatsApp" onClick={() => useMessage(s, 'WhatsApp', fallback)}>💬</button>}
+                            {email && <button className="action-btn btn-email" style={{ fontSize: 11, padding: '4px 8px' }} title="Email" onClick={() => useMessage(s, 'Email', fallback)}>✉️</button>}
+                            {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} title="LinkedIn" onClick={() => useMessage(s, 'LinkedIn', fallback)}>🔗</button>}
+                            {phone && <button className="action-btn btn-call" style={{ fontSize: 11, padding: '4px 8px' }} title="Call" onClick={() => useMessage(s, 'Call', fallback)}>📞</button>}
                             <button title="Edit contact" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-border)', background: 'rgba(255,255,255,0.04)', color: 'var(--globant-muted)', cursor: 'pointer' }} onClick={() => setEditingContact(s)}>✏️</button>
                           </div>
                         </td>
