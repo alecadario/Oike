@@ -2677,13 +2677,13 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             <div className="card" style={{ borderLeft: '3px solid #7c3aed', marginBottom: 16 }}>
               <div className="card-header">
                 <h3>📥 Import Contacts from CSV</h3>
-                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Source, Campaign</span>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Country, Source, Campaign</span>
               </div>
               {!contactCsvRows.length ? (
                 <div>
                   <input type="file" accept=".csv" onChange={handleContactCsv} style={{ fontSize: 12, color: 'var(--globant-muted)' }} />
                   <p style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 8 }}>
-                    Tip: Column headers must match exactly (case-insensitive). Duplicates by email or full name are auto-detected.
+                    Tip: Column headers must match exactly (case-insensitive). Country is auto-inherited from the account if not specified. Duplicates by email or full name are auto-detected.
                   </p>
                 </div>
               ) : (
