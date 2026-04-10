@@ -496,6 +496,9 @@
       const [quickAction, setQuickAction] = useState(''); // 'bounced' | 'reply' | 'meeting' | 'notinterested' | ''
       const [quickNote, setQuickNote] = useState('');
       const [savingQuick, setSavingQuick] = useState(false);
+      const [quickMsg, setQuickMsg] = useState('');
+      const [quickMsgChannel, setQuickMsgChannel] = useState('LinkedIn');
+      const [sendingQuickMsg, setSendingQuickMsg] = useState(false);
 
       const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Lart name') ? ` ${F(stakeholder, 'Lart name')}` : '');
       const accNames = resolveLinked(stakeholder, 'Account', accounts, 'Account Name');
@@ -691,6 +694,57 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   {sOutreach.length > 0 ? `${Math.floor((new Date() - new Date(sOutreach[0].fields?.['Date'])) / (1000*60*60*24))}d` : '—'}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Last Touch</div>
+              </div>
+            </div>
+
+            {/* Manual Quick Message */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--globant-text)' }}>✍️ Quick Message</div>
+              <textarea className="input-field" style={{ width: '100%', minHeight: 70, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, marginBottom: 8 }}
+                placeholder="Write your message here... it will be copied, logged, and the channel opened." value={quickMsg} onChange={e => setQuickMsg(e.target.value)} />
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {['LinkedIn', 'WhatsApp', 'Email'].map(ch => (
+                  <button key={ch} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 8, cursor: 'pointer',
+                    background: quickMsgChannel === ch ? 'rgba(191,215,48,0.2)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${quickMsgChannel === ch ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                    color: quickMsgChannel === ch ? 'var(--globant-green)' : 'var(--globant-text)',
+                    fontWeight: quickMsgChannel === ch ? 700 : 400,
+                  }} onClick={() => setQuickMsgChannel(ch)}>
+                    {ch === 'LinkedIn' ? '🔗' : ch === 'WhatsApp' ? '💬' : '✉️'} {ch}
+                  </button>
+                ))}
+                <button className="action-btn btn-primary" style={{ fontSize: 11, marginLeft: 'auto' }}
+                  disabled={!quickMsg.trim() || sendingQuickMsg}
+                  onClick={async () => {
+                    if (!quickMsg.trim()) return;
+                    setSendingQuickMsg(true);
+                    const name = F(stakeholder, 'Name') || '';
+                    const email = F(stakeholder, 'Email') || '';
+                    const phone = F(stakeholder, 'Phone number') || '';
+                    const linkedin = F(stakeholder, 'LinkedIn') || '';
+                    try { await navigator.clipboard.writeText(quickMsg); } catch(e) {}
+                    if (quickMsgChannel === 'LinkedIn' && linkedin) window.open(linkedin, '_blank');
+                    else if (quickMsgChannel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(quickMsg)}`, '_blank');
+                    else if (quickMsgChannel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(quickMsg)}`, '_blank');
+                    try {
+                      const a = new AirtableAPI(localStorage.getItem('at_key'));
+                      await a.createRecord(TABLE_IDS.outreach, {
+                        'Activity Name': `${quickMsgChannel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
+                        'Account': accountIds, 'Stakeholder': [stakeholder.id],
+                        'Channel': quickMsgChannel, 'Date': new Date().toISOString(),
+                        'Status': 'Sent', 'Message': quickMsg,
+                        'Notes': 'Sent via Quick Message',
+                        'Logged By': CURRENT_USER?.name || '',
+                        'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
+                        'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+                      });
+                      if (onRefresh) onRefresh();
+                    } catch (e) { console.error('Quick message log failed:', e); }
+                    setQuickMsg('');
+                    setSendingQuickMsg(false);
+                  }}>
+                  {sendingQuickMsg ? '⏳ Sending...' : '🚀 Send & Log'}
+                </button>
               </div>
             </div>
 
@@ -2218,6 +2272,276 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
       );
     }
 
+    // ============ CONTACTS SECTION ============
+    function ContactsSection({ data, api, onLogActivity }) {
+      const { accounts, stakeholders, outreach } = data;
+      const [searchName, setSearchName] = useState('');
+      const [searchAccount, setSearchAccount] = useState('');
+      const [selectedInfluence, setSelectedInfluence] = useState('');
+      const [historyStakeholder, setHistoryStakeholder] = useState(null);
+      const [selectedStakeholder, setSelectedStakeholder] = useState(null);
+      const [showNewContact, setShowNewContact] = useState(false);
+      const [ctxNewName, setCtxNewName] = useState('');
+      const [ctxNewLast, setCtxNewLast] = useState('');
+      const [ctxNewRole, setCtxNewRole] = useState('');
+      const [ctxNewEmail, setCtxNewEmail] = useState('');
+      const [ctxNewPhone, setCtxNewPhone] = useState('');
+      const [ctxNewLinkedin, setCtxNewLinkedin] = useState('');
+      const [ctxNewInfluence, setCtxNewInfluence] = useState('');
+      const [ctxNewAccountId, setCtxNewAccountId] = useState('');
+      const [ctxCreating, setCtxCreating] = useState(false);
+      const [showNewAccount, setShowNewAccount] = useState(false);
+      const [ctxNewAccountName, setCtxNewAccountName] = useState('');
+      const [ctxNewAccountWebsite, setCtxNewAccountWebsite] = useState('');
+      const [ctxCreatingAccount, setCtxCreatingAccount] = useState(false);
+
+      const createInlineAccount = async () => {
+        if (!ctxNewAccountName.trim()) return;
+        setCtxCreatingAccount(true);
+        try {
+          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const fields = { 'Account Name': ctxNewAccountName.trim() };
+          if (ctxNewAccountWebsite.trim()) fields['Website'] = ctxNewAccountWebsite.trim();
+          if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
+          if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
+          const record = await a.createRecord(TABLE_IDS.accounts, fields);
+          if (record?.id) setCtxNewAccountId(record.id);
+          setCtxNewAccountName(''); setCtxNewAccountWebsite('');
+          setShowNewAccount(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); alert('Failed to create account'); }
+        setCtxCreatingAccount(false);
+      };
+
+      const createContact = async () => {
+        if (!ctxNewName.trim() || !ctxNewAccountId) return;
+        setCtxCreating(true);
+        try {
+          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const fields = { 'Name': ctxNewName.trim(), 'Account': [ctxNewAccountId] };
+          if (ctxNewLast.trim()) fields['Lart name'] = ctxNewLast.trim();
+          if (ctxNewRole.trim()) fields['Role'] = ctxNewRole.trim();
+          if (ctxNewEmail.trim()) fields['Email'] = ctxNewEmail.trim();
+          if (ctxNewPhone.trim()) fields['Phone number'] = ctxNewPhone.trim();
+          if (ctxNewLinkedin.trim()) fields['LinkedIn'] = ctxNewLinkedin.trim();
+          if (ctxNewInfluence) fields['Level of Influence'] = ctxNewInfluence;
+          if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
+          if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
+          await a.createRecord(TABLE_IDS.stakeholders, fields);
+          setCtxNewName(''); setCtxNewLast(''); setCtxNewRole(''); setCtxNewEmail('');
+          setCtxNewPhone(''); setCtxNewLinkedin(''); setCtxNewInfluence(''); setCtxNewAccountId('');
+          setShowNewContact(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); alert('Failed to create contact'); }
+        setCtxCreating(false);
+      };
+
+      const useMessage = async (stakeholder, channel, message) => {
+        const name = F(stakeholder, 'Name') || '';
+        const email = F(stakeholder, 'Email') || '';
+        const phone = F(stakeholder, 'Phone number') || '';
+        const linkedin = F(stakeholder, 'LinkedIn') || '';
+        if (channel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+        else if (channel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(message)}`, '_blank');
+        else if (channel === 'LinkedIn' && linkedin) { navigator.clipboard.writeText(message).catch(() => {}); window.open(linkedin, '_blank'); }
+        const companyIds = linkedIds(stakeholder, 'Account');
+        try {
+          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          await a.createRecord(TABLE_IDS.outreach, {
+            'Activity Name': `${channel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
+            'Account': companyIds, 'Stakeholder': [stakeholder.id],
+            'Channel': channel, 'Date': new Date().toISOString(),
+            'Status': 'Sent', 'Message': message,
+            'Notes': 'Sent from Contacts',
+            'Logged By': CURRENT_USER?.name || '',
+            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
+            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+          });
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); }
+      };
+
+      const influenceLevels = useMemo(() => {
+        const levels = new Set();
+        stakeholders.forEach(s => { const l = F(s, 'Level of Influence'); if (l) levels.add(l); });
+        return [...levels].sort();
+      }, [stakeholders]);
+
+      const filtered = useMemo(() => stakeholders.filter(s => {
+        if (searchName && !(F(s, 'Name') || '').toLowerCase().includes(searchName.toLowerCase())) return false;
+        if (searchAccount) {
+          const term = searchAccount.toLowerCase();
+          const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+          if (!accNames.some(n => n.toLowerCase().includes(term))) return false;
+        }
+        if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return false;
+        return true;
+      }), [stakeholders, searchName, searchAccount, selectedInfluence, accounts]);
+
+      return (
+        <div>
+          <div className="page-header">
+            <h1>Contacts</h1>
+            <p>All stakeholders · {stakeholders.length} total</p>
+          </div>
+
+          <div className="filters-row">
+            <input className="input-field" style={{ maxWidth: 220 }} placeholder="Search by name..." value={searchName} onChange={e => setSearchName(e.target.value)} />
+            <input className="input-field" style={{ maxWidth: 220 }} placeholder="Filter by account..." value={searchAccount} onChange={e => setSearchAccount(e.target.value)} />
+            <select className="input-field" style={{ maxWidth: 200 }} value={selectedInfluence} onChange={e => setSelectedInfluence(e.target.value)}>
+              <option value="">All Influence Levels</option>
+              {influenceLevels.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <button className="action-btn btn-primary" style={{ fontSize: 12, marginLeft: 'auto' }} onClick={() => setShowNewContact(!showNewContact)}>
+              {showNewContact ? '✕ Close' : '➕ New Contact'}
+            </button>
+          </div>
+
+          {/* New Contact Form */}
+          {showNewContact && (
+            <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', marginBottom: 16 }}>
+              <div className="card-header"><h3>➕ New Contact</h3></div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>FIRST NAME *</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. Khalid" value={ctxNewName} onChange={e => setCtxNewName(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LAST NAME</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. Al-Rashid" value={ctxNewLast} onChange={e => setCtxNewLast(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ACCOUNT *</label>
+                  {!showNewAccount ? (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <select className="input-field" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }} value={ctxNewAccountId} onChange={e => setCtxNewAccountId(e.target.value)}>
+                        <option value="">Select account...</option>
+                        {accounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
+                      </select>
+                      <button onClick={() => setShowNewAccount(true)} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-green)', background: 'rgba(191,215,48,0.1)', color: 'var(--globant-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ New</button>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '8px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, border: '1px solid rgba(191,215,48,0.2)' }}>
+                      <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '5px 8px', marginBottom: 4 }} placeholder="Company name *" value={ctxNewAccountName} onChange={e => setCtxNewAccountName(e.target.value)} />
+                      <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '5px 8px', marginBottom: 6 }} placeholder="Website (optional)" value={ctxNewAccountWebsite} onChange={e => setCtxNewAccountWebsite(e.target.value)} />
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="action-btn btn-primary" style={{ fontSize: 10, flex: 1 }} onClick={createInlineAccount} disabled={!ctxNewAccountName.trim() || ctxCreatingAccount}>{ctxCreatingAccount ? '⏳' : '✓ Create Account'}</button>
+                        <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => { setShowNewAccount(false); setCtxNewAccountName(''); setCtxNewAccountWebsite(''); }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ROLE</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. CTO" value={ctxNewRole} onChange={e => setCtxNewRole(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EMAIL</label>
+                  <input className="input-field" type="email" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="email@company.com" value={ctxNewEmail} onChange={e => setCtxNewEmail(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>PHONE</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="+971..." value={ctxNewPhone} onChange={e => setCtxNewPhone(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LINKEDIN URL</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://linkedin.com/in/..." value={ctxNewLinkedin} onChange={e => setCtxNewLinkedin(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>INFLUENCE</label>
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={ctxNewInfluence} onChange={e => setCtxNewInfluence(e.target.value)}>
+                    <option value="">Select...</option>
+                    <option value="Decision Maker">Decision Maker</option>
+                    <option value="High">High</option>
+                    <option value="Influencer">Influencer</option>
+                    <option value="Champion">Champion</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={createContact} disabled={!ctxNewName.trim() || !ctxNewAccountId || ctxCreating}>
+                  {ctxCreating ? '⏳ Creating...' : '🚀 Create Contact'}
+                </button>
+                <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowNewContact(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Contacts Table */}
+          <div className="card">
+            <div className="card-header">
+              <h3>👤 All Contacts ({filtered.length})</h3>
+              {(searchName || searchAccount || selectedInfluence) && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Filtered from {stakeholders.length} total</span>}
+            </div>
+            {filtered.length === 0 ? (
+              <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '12px 0' }}>No contacts found. {stakeholders.length === 0 ? 'Add your first contact above.' : 'Try clearing your filters.'}</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Contact</th>
+                    <th>Account</th>
+                    <th>Influence</th>
+                    <th style={{ textAlign: 'center' }}>Touches</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(s => {
+                    const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+                    const phone = F(s, 'Phone number');
+                    const email = F(s, 'Email');
+                    const linkedin = F(s, 'LinkedIn');
+                    const touches = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id)).length;
+                    const fallback = `Hi ${F(s, 'Name')}, reaching out from Globant regarding potential collaboration.`;
+                    return (
+                      <tr key={s.id}>
+                        <td>
+                          <div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>
+                            {F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role')}</div>
+                        </td>
+                        <td style={{ fontSize: 12 }}>{accNames.join(', ')}</td>
+                        <td><span className="badge badge-accent">{F(s, 'Level of Influence') || '—'}</span></td>
+                        <td style={{ textAlign: 'center', fontSize: 13 }}>
+                          {touches > 0 ? <span style={{ color: 'var(--globant-green)', fontWeight: 700 }}>{touches}</span> : <span style={{ color: 'var(--globant-muted)' }}>—</span>}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setSelectedStakeholder(s)}>✨</button>
+                            {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'WhatsApp', fallback)}>💬</button>}
+                            {email && <button className="action-btn btn-email" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'Email', fallback)}>✉️</button>}
+                            {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'LinkedIn', fallback)}>🔗</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {selectedStakeholder && (
+            <AIMessageModal stakeholder={selectedStakeholder} onClose={() => setSelectedStakeholder(null)} onSend={useMessage} data={data} />
+          )}
+          {historyStakeholder && (
+            <StakeholderHistoryModal
+              stakeholder={historyStakeholder}
+              outreach={outreach}
+              accounts={accounts}
+              onClose={() => setHistoryStakeholder(null)}
+              onRefresh={onLogActivity}
+              allData={data}
+            />
+          )}
+        </div>
+      );
+    }
+
     // ============ ACTIVITY TRACKER ============
     function ActivityTracker({ data }) {
       const { accounts, outreach, stakeholders } = data;
@@ -3148,8 +3472,8 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       return (
         <div>
           <div className="page-header">
-            <h1>CP Briefings</h1>
-            <p>Executive account briefings for Client Partners — one-pager per account</p>
+            <h1>Accounts</h1>
+            <p>Executive account briefings — one-pager per account</p>
           </div>
 
           {/* Search + Import */}
@@ -4709,7 +5033,37 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       const [suggestionReason, setSuggestionReason] = useState({});
       const [evHistoryStakeholder, setEvHistoryStakeholder] = useState(null);
       const [evSelectedStakeholder, setEvSelectedStakeholder] = useState(null);
+      const [showAddEvent, setShowAddEvent] = useState(false);
+      const [evNewName, setEvNewName] = useState('');
+      const [evNewStart, setEvNewStart] = useState('');
+      const [evNewEnd, setEvNewEnd] = useState('');
+      const [evNewContext, setEvNewContext] = useState('');
+      const [evNewWebsite, setEvNewWebsite] = useState('');
+      const [evNewAttachUrl, setEvNewAttachUrl] = useState('');
+      const [evCreating, setEvCreating] = useState(false);
       const now = new Date();
+
+      const createEvent = async () => {
+        if (!evNewName.trim() || !evNewStart) return;
+        setEvCreating(true);
+        try {
+          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const fields = {
+            'Event Name': evNewName.trim(),
+            'Starting': new Date(evNewStart).toISOString(),
+          };
+          if (evNewEnd) fields['End date'] = new Date(evNewEnd).toISOString();
+          if (evNewContext.trim()) fields['Aditional context'] = evNewContext.trim();
+          if (evNewWebsite.trim()) fields['Website'] = evNewWebsite.trim();
+          if (evNewAttachUrl.trim()) fields['Attachments'] = [{ url: evNewAttachUrl.trim() }];
+          await a.createRecord(TABLE_IDS.events, fields);
+          setEvNewName(''); setEvNewStart(''); setEvNewEnd('');
+          setEvNewContext(''); setEvNewWebsite(''); setEvNewAttachUrl('');
+          setShowAddEvent(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); alert('Failed to create event'); }
+        setEvCreating(false);
+      };
 
       const upcoming = events.filter(ev => {
         const start = ev.fields?.['Starting'] ? new Date(ev.fields['Starting']) : null;
@@ -5156,10 +5510,55 @@ Return ONLY the JSON array, nothing else.`;
       // Events list view
       return (
         <div>
-          <div className="page-header">
-            <h1>Events Hub</h1>
-            <p>Manage events, track invitations and stakeholder engagement</p>
+          <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1>Events Hub</h1>
+              <p>Manage events, track invitations and stakeholder engagement</p>
+            </div>
+            <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => setShowAddEvent(!showAddEvent)}>
+              {showAddEvent ? '✕ Close' : '➕ Add Event'}
+            </button>
           </div>
+
+          {/* Add Event Form */}
+          {showAddEvent && (
+            <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', marginBottom: 16 }}>
+              <div className="card-header"><h3>🎪 New Event</h3></div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EVENT NAME *</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. GITEX 2025" value={evNewName} onChange={e => setEvNewName(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>START DATE *</label>
+                  <input type="date" className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={evNewStart} onChange={e => setEvNewStart(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>END DATE</label>
+                  <input type="date" className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={evNewEnd} onChange={e => setEvNewEnd(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>WEBSITE</label>
+                  <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://..." value={evNewWebsite} onChange={e => setEvNewWebsite(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ADDITIONAL CONTEXT</label>
+                <textarea className="input-field" style={{ width: '100%', minHeight: 60, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }} placeholder="Event description, theme, target audience..." value={evNewContext} onChange={e => setEvNewContext(e.target.value)} />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ATTACHMENT URL <span style={{ fontWeight: 400, textTransform: 'none' }}>(Google Drive / Dropbox / any public link)</span></label>
+                <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://drive.google.com/..." value={evNewAttachUrl} onChange={e => setEvNewAttachUrl(e.target.value)} />
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={createEvent} disabled={!evNewName.trim() || !evNewStart || evCreating}>
+                  {evCreating ? '⏳ Creating...' : '🚀 Create Event'}
+                </button>
+                <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowAddEvent(false)}>Cancel</button>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>💡 Make sure "Website" and "Attachments" fields exist in your Events table in Airtable</span>
+              </div>
+            </div>
+          )}
 
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
@@ -6119,7 +6518,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       const goToAccount = useCallback((accountId) => {
         setNavigateToAccountId(accountId);
-        setPage('cpbriefings');
+        setPage('accounts');
       }, []);
 
       const [refreshing, setRefreshing] = useState(false);
@@ -6270,20 +6669,22 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const pages = {
         overview: <StrategyOverview data={data} />,
         followup: <FollowupCenter data={data} api={api} onLogActivity={() => api && loadData(api, true)} />,
+        contacts: <ContactsSection data={data} api={api} onLogActivity={() => api && loadData(api, true)} />,
         activity: <ActivityTracker data={data} />,
         events: <EventsHub data={data} api={api} onLogActivity={() => api && loadData(api, true)} />,
         insights: <InsightsView data={data} />,
-        cpbriefings: <CPBriefings data={data} api={api} onLogActivity={() => api && loadData(api, true)} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
+        accounts: <CPBriefings data={data} api={api} onLogActivity={() => api && loadData(api, true)} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={() => api && loadData(api, true)} goToAccount={goToAccount} />,
       };
 
       const navItems = [
         { icon: '📊', label: 'Strategy Overview', key: 'overview' },
         { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
+        { icon: '👤', label: 'Contacts', key: 'contacts' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🎪', label: 'Events', key: 'events' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
-        { icon: '📋', label: 'CP Briefings', key: 'cpbriefings' },
+        { icon: '🏢', label: 'Accounts', key: 'accounts' },
         { icon: '🛠️', label: 'Solutions Hub', key: 'solutionshub' },
       ];
 
