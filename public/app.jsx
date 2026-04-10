@@ -5529,7 +5529,7 @@ Return ONLY the JSON array, nothing else.`;
     }
 
     // ============ SOLUTIONS HUB ============
-    function SolutionsHub({ data, api, onLogActivity, goToAccount }) {
+    function SolutionsHub({ data, api, onLogActivity, onAddRecord, goToAccount }) {
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
       const [selectedSolId, setSelectedSolId] = useState('');
       const [searchTerm, setSearchTerm] = useState('');
@@ -5547,6 +5547,42 @@ Return ONLY the JSON array, nothing else.`;
       const [loadingSolSummary, setLoadingSolSummary] = useState(false);
       const solExecSummary = selectedSolId ? (solExecSummaryMap[selectedSolId] || '') : '';
       const setSolExecSummary = (val) => setSolExecSummaryMap(prev => ({ ...prev, [selectedSolId]: val }));
+
+      // ─── NEW SOLUTION ───
+      const [showNewSol, setShowNewSol] = useState(false);
+      const [newSolForm, setNewSolForm] = useState({ name: '', type: 'Service', description: '', price: '', keyMessage: '' });
+      const [savingNewSol, setSavingNewSol] = useState(false);
+
+      const SOL_TYPES = ['Service', 'Product', 'Package', 'Consulting', 'Retainer', 'Other'];
+
+      const handleCreateSolution = async () => {
+        if (!newSolForm.name.trim()) { alert('Solution name is required'); return; }
+        setSavingNewSol(true);
+        try {
+          const a = api || new AirtableAPI();
+          const fields = {
+            'Name': newSolForm.name.trim(),
+            'Service | Solution Detail': newSolForm.description.trim() || undefined,
+            'Stakeholder Key Message': newSolForm.keyMessage.trim() || undefined,
+          };
+          // Type and Price fields — graceful if not in Airtable yet
+          if (newSolForm.type) fields['Type'] = newSolForm.type;
+          if (newSolForm.price.trim()) fields['Price'] = newSolForm.price.trim();
+          // Remove undefined
+          Object.keys(fields).forEach(k => fields[k] === undefined && delete fields[k]);
+          const newRec = await a.createRecord(TABLE_IDS.solutions, fields);
+          if (onAddRecord) onAddRecord('solutions', fields);
+          setShowNewSol(false);
+          setNewSolForm({ name: '', type: 'Service', description: '', price: '', keyMessage: '' });
+          if (onLogActivity) onLogActivity();
+          // Navigate to the new solution if we got its id back
+          if (newRec?.id) setSelectedSolId(newRec.id);
+        } catch (e) {
+          console.error(e);
+          alert('Failed to create solution: ' + e.message);
+        }
+        setSavingNewSol(false);
+      };
 
       const now = new Date();
 
@@ -5865,13 +5901,21 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           });
         };
 
+        const solType = F(selectedSol, 'Type') || '';
+        const solPrice = F(selectedSol, 'Price') || '';
+        const typeColor = solType === 'Service' ? '#60a5fa' : solType === 'Product' ? '#4ade80' : solType === 'Retainer' ? 'var(--globant-accent)' : solType === 'Consulting' ? '#fbbf24' : '#60a5fa';
+
         return (
           <div>
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <button className="action-btn btn-ghost" style={{ fontSize: 11, marginBottom: 8 }} onClick={() => { setSelectedSolId(''); setAiRecs(''); }}>← Back to Solutions</button>
-                <h1>🛠️ {F(selectedSol, 'Name')}</h1>
-                <p>{F(selectedSol, 'Service | Solution Detail') ? (typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail').slice(0, 150) + '...' : '') : 'No detail available'}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <h1 style={{ margin: 0 }}>🛠️ {F(selectedSol, 'Name')}</h1>
+                  {solType && <span style={{ background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}50`, borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{solType}</span>}
+                  {solPrice && <span style={{ background: 'rgba(191,215,48,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 6, padding: '3px 12px', fontSize: 13, fontWeight: 700 }}>💰 {solPrice}</span>}
+                </div>
+                <p style={{ marginTop: 6 }}>{F(selectedSol, 'Service | Solution Detail') ? (typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail').slice(0, 180) : '') : 'No detail available'}</p>
               </div>
               <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateRecs} disabled={loadingRecs}>
                 {loadingRecs ? '⏳ Analyzing...' : '✨ AI Recommendations'}
@@ -6143,10 +6187,67 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       // ─── LIST VIEW ───
       return (
         <div>
-          <div className="page-header">
-            <h1>Solutions Hub</h1>
-            <p>Explore solutions, track adoption across accounts, and get strategic recommendations</p>
+          <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1>Solutions Hub</h1>
+              <p>Explore solutions, track adoption across accounts, and get strategic recommendations</p>
+            </div>
+            <button className="action-btn btn-primary" style={{ fontSize: 12, padding: '8px 16px', marginTop: 4 }}
+              onClick={() => { setShowNewSol(true); setNewSolForm({ name: '', type: 'Service', description: '', price: '', keyMessage: '' }); }}>
+              ➕ New Solution
+            </button>
           </div>
+
+          {/* New Solution Modal */}
+          {showNewSol && (() => {
+            const iStyle = { width: '100%', padding: '8px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box' };
+            const lStyle = { fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', display: 'block' };
+            return (
+              <div className="modal-overlay" onClick={() => setShowNewSol(false)}>
+                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                    <h3 style={{ margin: 0 }}>🛠️ New Solution</h3>
+                    <button onClick={() => setShowNewSol(false)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <label style={lStyle}>Name *</label>
+                      <input style={iStyle} value={newSolForm.name} onChange={e => setNewSolForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. AI Process Automation" autoFocus />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <label style={lStyle}>Type</label>
+                        <select style={iStyle} value={newSolForm.type} onChange={e => setNewSolForm(p => ({ ...p, type: e.target.value }))}>
+                          {SOL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lStyle}>Price (optional)</label>
+                        <input style={iStyle} value={newSolForm.price} onChange={e => setNewSolForm(p => ({ ...p, price: e.target.value }))} placeholder="e.g. $5,000/mo or From $20K" />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lStyle}>Description</label>
+                      <textarea style={{ ...iStyle, minHeight: 80, resize: 'vertical' }} value={newSolForm.description} onChange={e => setNewSolForm(p => ({ ...p, description: e.target.value }))} placeholder="What does this solution do? What problem does it solve?" />
+                    </div>
+                    <div>
+                      <label style={lStyle}>Key Message for Stakeholders (optional)</label>
+                      <textarea style={{ ...iStyle, minHeight: 60, resize: 'vertical' }} value={newSolForm.keyMessage} onChange={e => setNewSolForm(p => ({ ...p, keyMessage: e.target.value }))} placeholder="Main value prop to pitch to decision-makers..." />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--globant-muted)', background: 'rgba(96,165,250,0.08)', borderRadius: 6, padding: '8px 12px' }}>
+                      💡 To enable Type and Price fields, add them in your Airtable Solutions table: <strong>Type</strong> (Single line text) and <strong>Price</strong> (Single line text)
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                      <button className="action-btn btn-ghost" onClick={() => setShowNewSol(false)}>Cancel</button>
+                      <button className="action-btn btn-primary" onClick={handleCreateSolution} disabled={savingNewSol || !newSolForm.name.trim()}>
+                        {savingNewSol ? '⏳ Creating...' : '✅ Create Solution'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="filters-row" style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
             <input className="input-field" style={{ maxWidth: 350 }} placeholder="Search solution..." value={searchTerm}
@@ -6176,22 +6277,46 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
           {/* Solutions list */}
           <div className="card">
-            <div className="card-header"><h3>Select a Solution</h3></div>
+            <div className="card-header"><h3>Solutions</h3></div>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
-                <thead><tr><th>Solution</th><th style={{ textAlign: 'center' }}>Accounts</th><th style={{ textAlign: 'center' }}>Stakeholders</th><th style={{ textAlign: 'center' }}>Outreach</th><th style={{ textAlign: 'center' }}>Replies</th><th style={{ textAlign: 'center' }}>Open Opps</th><th style={{ textAlign: 'right' }}>Pipeline</th></tr></thead>
+                <thead><tr>
+                  <th>Solution</th>
+                  <th>Type</th>
+                  <th>Price</th>
+                  <th style={{ textAlign: 'center' }}>Accounts</th>
+                  <th style={{ textAlign: 'center' }}>Stakeholders</th>
+                  <th style={{ textAlign: 'center' }}>Outreach</th>
+                  <th style={{ textAlign: 'center' }}>Replies</th>
+                  <th style={{ textAlign: 'center' }}>Open Opps</th>
+                  <th style={{ textAlign: 'right' }}>Pipeline</th>
+                </tr></thead>
                 <tbody>
-                  {filteredSolutions.map(m => (
-                    <tr key={m.id} onClick={() => { setSelectedSolId(m.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
-                      <td style={{ fontWeight: 600 }}>{m.name}</td>
-                      <td style={{ textAlign: 'center' }}>{m.accountCount}</td>
-                      <td style={{ textAlign: 'center' }}>{m.stakeholderCount}</td>
-                      <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, color: m.outreachCount > 0 ? 'var(--globant-green)' : 'var(--globant-muted)' }}>{m.outreachCount}</span></td>
-                      <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, color: m.replied > 0 ? 'var(--globant-success)' : 'var(--globant-muted)' }}>{m.replied}</span></td>
-                      <td style={{ textAlign: 'center' }}>{m.openOppCount > 0 ? <span className="badge badge-blue">{m.openOppCount}</span> : '—'}</td>
-                      <td style={{ textAlign: 'right' }}>{m.pipeline > 0 ? '$' + (m.pipeline / 1000).toFixed(0) + 'K' : '—'}</td>
-                    </tr>
-                  ))}
+                  {filteredSolutions.map(m => {
+                    const solType = F(m.sol, 'Type') || '';
+                    const solPrice = F(m.sol, 'Price') || '';
+                    const typeColor = solType === 'Service' ? 'badge-blue' : solType === 'Product' ? 'badge-green' : solType === 'Retainer' ? 'badge-accent' : solType === 'Consulting' ? 'badge-yellow' : 'badge-blue';
+                    return (
+                      <tr key={m.id} onClick={() => { setSelectedSolId(m.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
+                        <td style={{ fontWeight: 600 }}>
+                          {m.name}
+                          {F(m.sol, 'Service | Solution Detail') && (
+                            <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 400, marginTop: 2, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {typeof F(m.sol, 'Service | Solution Detail') === 'string' ? F(m.sol, 'Service | Solution Detail').slice(0, 80) : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td>{solType ? <span className={`badge ${typeColor}`} style={{ fontSize: 10 }}>{solType}</span> : <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>—</span>}</td>
+                        <td style={{ fontSize: 12, fontWeight: 600, color: solPrice ? 'var(--globant-green)' : 'var(--globant-muted)' }}>{solPrice || '—'}</td>
+                        <td style={{ textAlign: 'center' }}>{m.accountCount}</td>
+                        <td style={{ textAlign: 'center' }}>{m.stakeholderCount}</td>
+                        <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, color: m.outreachCount > 0 ? 'var(--globant-green)' : 'var(--globant-muted)' }}>{m.outreachCount}</span></td>
+                        <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, color: m.replied > 0 ? 'var(--globant-success)' : 'var(--globant-muted)' }}>{m.replied}</span></td>
+                        <td style={{ textAlign: 'center' }}>{m.openOppCount > 0 ? <span className="badge badge-blue">{m.openOppCount}</span> : '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{m.pipeline > 0 ? '$' + (m.pipeline / 1000).toFixed(0) + 'K' : '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
