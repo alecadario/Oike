@@ -2529,10 +2529,13 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           'Email': values['Email'] || '',
           'Phone number': values['Phone number'] || '',
           'LinkedIn': values['LinkedIn'] || '',
-          'Level of Influence': values['Level of Influence'] || '',
-          'Source': values['Source'] || '',
           'Campaign': values['Campaign'] || '',
         };
+        // Single Select fields: send null if empty (Airtable rejects empty strings for these)
+        updatedFields['Level of Influence'] = values['Level of Influence'] || null;
+        updatedFields['Source'] = values['Source'] || null;
+        // Remove null fields to let Airtable clear them cleanly
+        Object.keys(updatedFields).forEach(k => { if (updatedFields[k] === null) updatedFields[k] = null; });
         if (onUpdateRecord) onUpdateRecord('stakeholders', editingContact.id, updatedFields);
         setEditingContact(null);
         const a = api || new AirtableAPI();
