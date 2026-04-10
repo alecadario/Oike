@@ -252,8 +252,6 @@
 
       // Pain Points: GPT-4o generated (analysis-based)
       const generatePainPoints = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI API key in Settings first'); return; }
         setGenLoading('pain');
         try {
           const prompt = `You are a B2B sales research analyst. Analyze this stakeholder and identify their likely pain points.
@@ -272,21 +270,14 @@ Generate 3-5 specific, actionable pain points for this person based on their rol
 
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 400 }),
-          });
-          if (!res.ok) throw new Error('OpenAI error');
-          const aiRes = await res.json();
-          const generated = aiRes.choices?.[0]?.message?.content || '';
+          const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
 
-          const a = new AirtableAPI(localStorage.getItem('at_key'));
-          await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated });
+          const a = new AirtableAPI();
+          if (!stakeholder.id.startsWith('tmp_')) { await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated }); }
           setLocalPain(generated);
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Check OpenAI API key.');
+          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
         }
         setGenLoading('');
       };
@@ -294,10 +285,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       // LinkedIn Insights: Triggers Airtable AI (real LinkedIn data)
       const refreshLinkedIn = async () => {
         const atKey = localStorage?.getItem?.('at_key');
-        if (!atKey) { alert('Connect Airtable first'); return; }
         setGenLoading('linkedin');
         try {
-          const a = new AirtableAPI(atKey);
+          const a = new AirtableAPI();
           // Step 1: Update trigger field to fire Airtable Automation
           const triggerTime = new Date().toISOString();
           console.log('[LinkedIn] Step 1: Updating AI Refresh Trigger to', triggerTime);
@@ -462,7 +452,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     else if (quickMsgChannel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(quickMsg)}`, '_blank');
                     else if (quickMsgChannel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(quickMsg)}`, '_blank');
                     try {
-                      const a = new AirtableAPI(localStorage.getItem('at_key'));
+                      const a = new AirtableAPI();
                       await a.createRecord(TABLE_IDS.outreach, {
                         'Activity Name': `${quickMsgChannel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
                         'Account': accountIds, 'Stakeholder': [stakeholder.id],
@@ -525,7 +515,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                         onClick={async () => {
                           setSavingQuick(true);
                           try {
-                            const a = new AirtableAPI(localStorage.getItem('at_key'));
+                            const a = new AirtableAPI();
                             await a.createRecord(TABLE_IDS.outreach, {
                               'Activity Name': `${act.label} — ${sName} — ${new Date().toLocaleDateString('en-US')}`,
                               'Account': accountIds,
@@ -1008,8 +998,6 @@ Keep it natural — write for the ear, not the eye.`,
       };
 
       const handleGenerate = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Please set OpenAI API key in Settings'); return; }
         if (!selectedChannel) { alert('Select a channel first'); return; }
 
         setLoadingAI(true);
@@ -1060,18 +1048,11 @@ RULES:
 - MENA context: be respectful but not overly formal. Avoid Western-centric references. If the stakeholder is in KSA/UAE, be aware of business culture but don't overdo cultural references.
 ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you\'d love to meet there. Do NOT write a formal invitation.\n' : ''}${solutionContext ? '- SOLUTION: Weave the solution naturally as a value prop connected to their pain points. Don\'t pitch — hint at relevant results.\n' : ''}${extraContext ? '- SENDER CONTEXT: The personal context provided MUST appear naturally in the message — it\'s first-hand intel and takes priority.\n' : ''}- Write ONLY the message. No meta-commentary, no explanations, no "Here's a message for..." prefix.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 500 }),
-          });
-          if (!res.ok) throw new Error('OpenAI API error');
-          const aiRes = await res.json();
-          const generated = aiRes.choices?.[0]?.message?.content || '';
+          const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Check your OpenAI API key.');
+          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
         }
         setLoadingAI(false);
       };
@@ -1087,7 +1068,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         if (!currentMessage.trim() || !selectedChannel) return;
         setSavingDraft(true);
         try {
-          const a = new AirtableAPI(localStorage.getItem('at_key'));
+          const a = new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `[DRAFT] ${selectedChannel} to ${sName} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': accountIds,
@@ -1321,7 +1302,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         const name = F(stakeholder, 'Name') || '';
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `Reply from ${name} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds,
@@ -1345,7 +1326,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         const name = F(stakeholder, 'Name') || '';
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `Meeting Scheduled: ${name} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds,
@@ -1421,7 +1402,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
           'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
         };
         if (onAddRecord) onAddRecord('outreach', outreachFields);
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.outreach, outreachFields)
           .then(() => activateAccountIfNeeded(a, companyIds, data.accounts))
           .then(() => { if (onLogActivity) onLogActivity(); })
@@ -1447,7 +1428,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         setFuNewPhone(''); setFuNewLinkedin(''); setFuNewInfluence(''); setFuNewAccountId('');
         setShowFuNewStk(false);
         // API in background
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
@@ -1524,15 +1505,11 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
             </div>
           </div>
 
-          {/* Manual + Bulk Import */}
+          {/* Manual contact creation */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <button className="action-btn btn-primary" style={{ fontSize: 12 }}
-              onClick={() => { setShowFuNewStk(!showFuNewStk); setShowImport(false); }}>
+              onClick={() => setShowFuNewStk(!showFuNewStk)}>
               {showFuNewStk ? '✕ Close' : '➕ New Contact'}
-            </button>
-            <button className="action-btn btn-ghost" style={{ fontSize: 12 }}
-              onClick={() => { setShowImport(!showImport); setShowFuNewStk(false); }}>
-              {showImport ? '✕ Close Import' : '📥 Import CSV'}
             </button>
           </div>
 
@@ -1600,8 +1577,8 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
             </div>
           )}
 
-          {/* CSV Bulk Import */}
-          <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)', display: showImport ? 'block' : 'none' }}>
+          {/* CSV Bulk Import — moved to Contacts section */}
+          <div className="card" style={{ display: 'none' }}>
             <div className="card-header">
               <h3 style={{ color: 'var(--globant-accent)' }}>📥 Bulk Import Contacts</h3>
               <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Upload CSV to add stakeholders — duplicates auto-detected</span>
@@ -1714,7 +1691,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
                           setCsvStatus('importing');
                           const toImport = csvRows.filter(r => r.selected);
                           let created = 0, failed = 0, errors = [];
-                          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+                          const a = api || new AirtableAPI();
                           for (const row of toImport) {
                             try {
                               const fields = {
@@ -2081,7 +2058,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         setCtxCreatingAccount(true);
         // Need real ID to link contact — must await, but skip full reload
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           const fields = { 'Account Name': ctxNewAccountName.trim() };
           if (ctxNewAccountWebsite.trim()) fields['Website'] = ctxNewAccountWebsite.trim();
           if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
@@ -2116,7 +2093,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         setCtxNewPhone(''); setCtxNewLinkedin(''); setCtxNewInfluence(''); setCtxNewAccountId('');
         setShowNewContact(false);
         // API in background
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
@@ -2142,7 +2119,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
           'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
         };
         if (onAddRecord) onAddRecord('outreach', outreachFields);
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.outreach, outreachFields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => console.error(e));
@@ -2161,7 +2138,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         };
         if (onUpdateRecord) onUpdateRecord('stakeholders', editingContact.id, updatedFields);
         setEditingContact(null);
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.updateRecord(TABLE_IDS.stakeholders, editingContact.id, updatedFields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to save. Refreshing...'); if (onLogActivity) onLogActivity(); });
@@ -2787,11 +2764,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
 
       // Bulk generate pain points for all stakeholders
       const bulkGeneratePainPoints = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
         const atKey = localStorage?.getItem?.('at_key');
-        if (!openaiKey) { alert('Set OpenAI API key in Settings first'); return; }
-        if (!atKey) { alert('Connect Airtable first'); return; }
-
         const targets = stakeholderEngagement.filter(e => {
           const existing = F(e.s, 'Pain Points (Generated)') || '';
           return !existing || existing.length < 10;
@@ -2803,7 +2776,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
         }
 
         setBulkPainLoading(true);
-        const a = new AirtableAPI(atKey);
+        const a = new AirtableAPI();
         const accName = account ? F(account, 'Account Name') : '';
         const accIndustry = account ? F(account, 'Industry') : '';
         const accFocus = account ? (Array.isArray(F(account, 'Service / Focus')) ? F(account, 'Service / Focus').join(', ') : F(account, 'Service / Focus') || '') : '';
@@ -2832,15 +2805,8 @@ Generate 3-5 specific, actionable pain points for this person based on their rol
 
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
-            const res = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 400 }),
-            });
-            if (!res.ok) throw new Error('OpenAI error');
-            const aiRes = await res.json();
-            const generated = aiRes.choices?.[0]?.message?.content || '';
-            await a.updateRecord(TABLE_IDS.stakeholders, eng.s.id, { 'Pain Points (Generated)': generated });
+            const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
+            if (!eng.s.id.startsWith('tmp_')) { await a.updateRecord(TABLE_IDS.stakeholders, eng.s.id, { 'Pain Points (Generated)': generated }); }
           } catch (e) {
             console.error(`Failed for ${sFullName}:`, e);
           }
@@ -2854,8 +2820,6 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
       // Generate Executive Summary
       const generateExecSummary = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI API key in Settings first'); return; }
         setLoadingSummary(true);
         try {
           const newsStr = newsLines.slice(0, 5).join('\n') || 'No recent news';
@@ -2920,25 +2884,16 @@ Write the Executive Summary with these sections (use ### headers):
 
 Be specific. Use names. No generic advice. Under 300 words total.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 700 }),
-          });
-          if (!res.ok) throw new Error('OpenAI error');
-          const aiRes = await res.json();
-          setExecSummary(aiRes.choices?.[0]?.message?.content || 'Could not generate summary.');
+          setExecSummary(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 700 }) || 'Could not generate summary.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Check OpenAI API key.');
+          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
         }
         setLoadingSummary(false);
       };
 
       // Generate AI talking points
       const generateTalkingPoints = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Please set OpenAI API key first'); return; }
         setLoadingTP(true);
         try {
           const stakeholderSummary = stakeholderEngagement.map(e => {
@@ -2984,25 +2939,16 @@ Format each as:
 
 Be specific, not generic. The CP needs to sound informed and prepared.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 600 }),
-          });
-          if (!res.ok) throw new Error('OpenAI API error');
-          const aiRes = await res.json();
-          setTalkingPoints(aiRes.choices?.[0]?.message?.content || 'Could not generate talking points.');
+          setTalkingPoints(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 600 }) || 'Could not generate talking points.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate talking points. Check API key.');
+          alert('Failed to generate talking points. Error: ' + (e.message || 'unknown error'));
         }
         setLoadingTP(false);
       };
 
       // Generate "Who to Contact" AI recommendations
       const generateContactRecs = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI API key in Settings first'); return; }
         setLoadingRecs(true);
         try {
           const stakeholderSummary = stakeholderEngagement.length > 0
@@ -3054,17 +3000,10 @@ Based on ALL this context, provide actionable outreach recommendations:
 
 Be specific, direct, and actionable. No generic advice. Use names when referring to existing stakeholders. Format with clear sections and bullet points. Keep it under 400 words.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 700 }),
-          });
-          if (!res.ok) throw new Error('OpenAI error');
-          const aiRes = await res.json();
-          setContactRecs(aiRes.choices?.[0]?.message?.content || 'No recommendations generated.');
+          setContactRecs(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 700 }) || 'No recommendations generated.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Check OpenAI API key.');
+          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
         }
         setLoadingRecs(false);
       };
@@ -3074,7 +3013,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         const sn = F(stakeholder, 'Name') || '';
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `Meeting Scheduled: ${sn} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds, 'Stakeholder': [stakeholder.id],
@@ -3095,7 +3034,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         const sn = F(stakeholder, 'Name') || '';
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `Call with ${sn} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds, 'Stakeholder': [stakeholder.id],
@@ -3131,7 +3070,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
 
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `${channel} to ${sn} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds, 'Stakeholder': [stakeholder.id],
@@ -3158,7 +3097,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         if (onAddRecord) onAddRecord('accounts', fields);
         setNewAccName(''); setNewAccWebsite(''); setShowNewAccount(false);
         // API in background
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.accounts, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to create account'); if (onLogActivity) onLogActivity(); });
@@ -3181,7 +3120,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         setNewStkName(''); setNewStkLastName(''); setNewStkRole(''); setNewStkEmail('');
         setNewStkPhone(''); setNewStkLinkedin(''); setNewStkInfluence(''); setShowNewStakeholder(false);
         // API in background
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to create stakeholder'); if (onLogActivity) onLogActivity(); });
@@ -3222,7 +3161,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         if (!toImport.length) return;
         setAccImporting(true);
         let created = 0, failed = 0;
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         for (const row of toImport) {
           try {
             const fields = { 'Account Name': row.name };
@@ -3241,8 +3180,6 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
       const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file || !account) return;
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI API key in Settings first'); return; }
         setUploadingFile(true);
         try {
           let content = '';
@@ -3268,20 +3205,13 @@ Provide:
 
 Be concise and actionable. Focus on what's useful for a BDR prospecting this account.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 500 }),
-          });
-          if (!res.ok) throw new Error('OpenAI error');
-          const aiRes = await res.json();
-          const summary = aiRes.choices?.[0]?.message?.content || '';
+          const summary = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 500 });
 
           const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
           const newEntry = `\n\n📎 FILE: ${file.name} (uploaded ${dateStr})\n${summary}`;
           const updatedNotes = (intelNotes || '') + newEntry;
 
-          const atApi = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const atApi = api || new AirtableAPI();
           await atApi.updateRecord(TABLE_IDS.accounts, account.id, { 'Intel Notes': updatedNotes });
           if (onLogActivity) onLogActivity();
         } catch (e) {
@@ -3300,7 +3230,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       const addSolutionToAccount = async (solId) => {
         if (!account) return;
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Solutions': [...currentSolIds, solId] });
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error(e); alert('Failed to add solution'); }
@@ -3310,7 +3240,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         if (!account) return;
         setRemovingSol(solId);
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Solutions': currentSolIds.filter(id => id !== solId) });
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error(e); alert('Failed to remove solution'); }
@@ -3321,7 +3251,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         if (!newSolName.trim() || !account) return;
         setCreatingSol(true);
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           const newRec = await a.createRecord(TABLE_IDS.solutions, {
             'Name': newSolName.trim(),
             'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
@@ -3472,7 +3402,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               <div className="card-header"><h3>Select an Account</h3></div>
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table">
-                  <thead><tr><th>Account</th><th style={{ textAlign: 'center' }}>Stakeholders</th><th style={{ textAlign: 'center' }}>Outreach</th><th style={{ textAlign: 'center' }}>Opps</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Account</th><th style={{ textAlign: 'center' }}>Stakeholders</th><th style={{ textAlign: 'center' }}>Outreach</th><th style={{ textAlign: 'center' }}>Opps</th><th>Status</th><th></th></tr></thead>
                   <tbody>
                     {filteredAccounts.map(a => {
                       const stCount = linkedIds(a, 'Stakeholders').length;
@@ -3485,6 +3415,9 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           <td style={{ textAlign: 'center' }}>{oCount > 0 ? <span style={{ color: 'var(--globant-green)', fontWeight: 700 }}>{oCount}</span> : '—'}</td>
                           <td style={{ textAlign: 'center' }}>{oppCount > 0 ? <span className="badge badge-blue">{oppCount}</span> : '—'}</td>
                           <td>{F(a, 'Inside Sales Status') ? <span className="badge badge-accent">{F(a, 'Inside Sales Status')}</span> : '—'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 7px' }} onClick={e => { e.stopPropagation(); setEditingAccount(a); }}>✏️</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -4396,6 +4329,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 { key: 'Website', label: 'Website' },
                 { key: 'Industry', label: 'Industry' },
                 { key: 'Inside Sales Status', label: 'Inside Sales Status', type: 'select', options: ['Prospect', 'Active Outreach', 'Meeting Booked', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'On Hold', 'Dormant'] },
+                { key: 'Company Description', label: 'Company Description', type: 'textarea', fullWidth: true },
               ]}
               initialValues={editingAccount.fields || {}}
               onSave={saveAccountEdit}
@@ -4965,7 +4899,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         setEvNewContext(''); setEvNewWebsite(''); setEvNewAttachUrl('');
         setShowAddEvent(false);
         // API in background
-        const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+        const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.events, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => { console.error(e); alert('Failed to create event'); if (onLogActivity) onLogActivity(); });
@@ -5011,7 +4945,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           // 1. Log outreach activity
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `Event Invite: ${sName} → ${evName} — ${new Date().toLocaleDateString('en-US')}`,
@@ -5040,8 +4974,6 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
       // AI-powered suggestion for event invitations
       const generateSmartSuggestions = async (event, notInvitedList) => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set your OpenAI API key in Settings first'); return; }
         setLoadingSuggestions(true);
         try {
           const evName = F(event, 'Event Name') || '';
@@ -5081,14 +5013,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
 
 Return ONLY the JSON array, nothing else.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.4, max_tokens: 1000 }),
-          });
-          if (!res.ok) throw new Error('OpenAI API error');
-          const aiRes = await res.json();
-          const text = aiRes.choices?.[0]?.message?.content?.trim() || '[]';
+          const text = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 1000 });
           const cleaned = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
           const parsed = JSON.parse(cleaned);
           const ids = parsed.map(p => p.id);
@@ -5110,7 +5035,7 @@ Return ONLY the JSON array, nothing else.`;
       const uninviteStakeholder = async (stakeholder, event) => {
         setRemovingInvite(stakeholder.id);
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           const currentInvited = linkedIds(event, 'Stakeholders invited');
           const updated = currentInvited.filter(id => id !== stakeholder.id);
           await a.updateRecord(TABLE_IDS.events, event.id, {
@@ -5143,7 +5068,7 @@ Return ONLY the JSON array, nothing else.`;
         // Log outreach
         const companyIds = linkedIds(stakeholder, 'Account');
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
             'Activity Name': `${channel} to ${sn} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds, 'Stakeholder': [stakeholder.id],
@@ -5642,7 +5567,7 @@ Return ONLY the JSON array, nothing else.`;
         if (!selectedSol) return;
         setSavingNotes(true);
         try {
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'Extra imput': notesValue });
           setSolNotes(notesValue);
           setEditingNotes(false);
@@ -5655,21 +5580,14 @@ Return ONLY the JSON array, nothing else.`;
       const handleFileUpload = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI key in Settings'); return; }
         setUploadingFile(true);
         try {
           const text = await file.text();
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: `Summarize the following file content. Extract the most relevant points for a B2B sales team selling this solution. Be concise (5-8 bullets max).\n\nFile: ${file.name}\n\n${text.slice(0, 8000)}` }], temperature: 0.4, max_tokens: 500 }),
-          });
-          const aiRes = await res.json();
-          const summary = aiRes.choices?.[0]?.message?.content || '';
+          const prompt = `Summarize the following file content. Extract the most relevant points for a B2B sales team selling this solution. Be concise (5-8 bullets max).\n\nFile: ${file.name}\n\n${text.slice(0, 8000)}`;
+          const summary = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 500 });
           const entry = `\n\n📎 FILE: ${file.name} (uploaded ${new Date().toLocaleDateString('en-GB')})\n${summary}`;
           const updated = (solNotes || '') + entry;
-          const a = api || new AirtableAPI(localStorage.getItem('at_key'));
+          const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'Extra imput': updated });
           setSolNotes(updated);
           if (onLogActivity) onLogActivity();
@@ -5680,8 +5598,6 @@ Return ONLY the JSON array, nothing else.`;
 
       // Solution Executive Summary
       const generateSolExecSummary = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI API key in Settings first'); return; }
         if (!selectedSol || !selectedMetrics) return;
         setLoadingSolSummary(true);
         try {
@@ -5772,25 +5688,16 @@ Write the Executive Summary with these sections (use ### headers):
 
 Be specific. Use real names from the data. No generic advice. Under 350 words total.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 800 }),
-          });
-          if (!res.ok) throw new Error('OpenAI error');
-          const aiRes = await res.json();
-          setSolExecSummary(aiRes.choices?.[0]?.message?.content || 'Could not generate summary.');
+          setSolExecSummary(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 800 }) || 'Could not generate summary.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Check OpenAI API key.');
+          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
         }
         setLoadingSolSummary(false);
       };
 
       // AI Recommendations
       const generateRecs = async () => {
-        const openaiKey = localStorage?.getItem?.('openai_key');
-        if (!openaiKey) { alert('Set OpenAI key in Settings'); return; }
         if (!selectedSol || !selectedMetrics) return;
         setLoadingRecs(true);
         try {
@@ -5848,13 +5755,7 @@ What's weak? Stale accounts, low reply rates, missing stakeholder coverage?
 ### 📋 Next Actions
 Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 weeks.`;
 
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.6, max_tokens: 1200 }),
-          });
-          const aiRes = await res.json();
-          setAiRecs(aiRes.choices?.[0]?.message?.content || 'No recommendations generated.');
+          setAiRecs(await callOpenAI({ prompt, temperature: 0.6, max_tokens: 1200 }) || 'No recommendations generated.');
         } catch (e) { console.error(e); alert('Failed to generate recommendations'); }
         setLoadingRecs(false);
       };
