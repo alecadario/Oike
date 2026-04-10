@@ -71,6 +71,29 @@
 
     const channelIcon = { WhatsApp: '💬', Email: '✉️', LinkedIn: '🔗', Call: '📞' };
 
+    // ============ COMPANY PROFILE (configurable per client) ============
+    const COMPANY_PROFILE_KEY = 'oike_company_profile';
+    let COMPANY_PROFILE = (() => {
+      const defaults = {
+        companyName: 'Your Company',
+        services: 'digital transformation, AI, CX, data',
+        market: 'your target market',
+        senderName: 'Your Name',
+        senderTitle: 'Business Consultant',
+        goals: '',
+      };
+      try {
+        const saved = localStorage.getItem(COMPANY_PROFILE_KEY);
+        if (saved) return { ...defaults, ...JSON.parse(saved) };
+      } catch (e) { /* ignore */ }
+      return defaults;
+    })();
+
+    function saveCompanyProfile(profile) {
+      COMPANY_PROFILE = { ...COMPANY_PROFILE, ...profile };
+      localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(COMPANY_PROFILE));
+    }
+
     // ============ AIRTABLE API (via backend proxy) ============
     class AirtableAPI {
       constructor(apiKeyOrNull) {
@@ -266,7 +289,7 @@ RECENT COMPANY NEWS: ${newsText || 'Not available'}
 Generate 3-5 specific, actionable pain points for this person based on their role and industry context. Each pain point should:
 - Be specific to their role (not generic)
 - Reference industry challenges they likely face
-- Connect to areas where Globant (digital transformation, AI, CX, data) could help
+- Connect to areas where ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}) could help
 
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
@@ -956,9 +979,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 - First line: "Subject: [specific, curiosity-driven subject — reference their company name or a concrete trigger, max 8 words]"
 - Then blank line, then body (60-90 words MAX — shorter is better for cold outreach)
 - Opening: 1 sentence that shows you know something specific about THEM (news, role, challenge). Never generic.
-- Body: 1 short paragraph connecting Globant's capability to THEIR specific situation. No laundry list of services.
+- Body: 1 short paragraph connecting ${COMPANY_PROFILE.companyName}'s capability to THEIR specific situation. No laundry list of services.
 - CTA: 1 clear, low-commitment ask (e.g. "Would a 15-min call next week make sense?" or "Happy to share how we approached this for [similar company]")
-- Sign-off: "Best,\\nAlejandra Cadario\\nBusiness Consultant — Globant"
+- Sign-off: "Best,\\n${COMPANY_PROFILE.senderName}\\n${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}"
 - NEVER use "I hope this finds you well", "I wanted to reach out", "I came across your profile", "I'd love to", or any filler phrases`,
         },
         LinkedIn: {
@@ -975,7 +998,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           tone: 'confident, conversational, structured — a talk track that sounds natural when spoken aloud, not read from a script',
           format: `Write a call script (80-100 words) with these labeled sections:
 [OPENER] — Pattern interrupt opening (NOT "Hi, my name is..." — instead lead with a trigger: "I saw that [company] just..." or "I was looking into [industry challenge]...")
-[HOOK] — 1 sentence connecting their situation to a specific result Globant has delivered
+[HOOK] — 1 sentence connecting their situation to a specific result ${COMPANY_PROFILE.companyName} has delivered
 [QUESTION] — An open-ended question that gets them talking about their challenge (NOT "Do you have 5 minutes?")
 [OBJECTION READY] — 1 short response for "We're not interested right now" (pivot to value or future timing)
 Keep it natural — write for the ear, not the eye.`,
@@ -986,7 +1009,7 @@ Keep it natural — write for the ear, not the eye.`,
         first: {
           label: 'First Contact',
           goal: 'This is the FIRST outreach ever to this person. Your only goal: open a conversation and earn a response. Do NOT try to sell or pitch. Create genuine curiosity based on their specific context and propose one clear, low-friction next step.',
-          extra: 'Do NOT reference any previous conversation — this is cold outreach. Lead with THEIR world (a challenge, a news trigger, an industry shift), not with Globant.',
+          extra: `Do NOT reference any previous conversation — this is cold outreach. Lead with THEIR world (a challenge, a news trigger, an industry shift), not with ${COMPANY_PROFILE.companyName}.`,
         },
         followup2: {
           label: 'Follow-up 2',
@@ -1008,7 +1031,7 @@ Keep it natural — write for the ear, not the eye.`,
           const chGuide = channelPrompts[selectedChannel];
           const tabGuide = tabPrompts[tab];
 
-          const prompt = `You are a B2B sales copywriter for Globant (digital transformation, AI, CX, data).
+          const prompt = `You are a B2B sales copywriter for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
 
 STAKEHOLDER:
 - Name: ${sName}
@@ -1038,18 +1061,18 @@ CHANNEL: ${selectedChannel}
 ${extraContext ? `⚠️ CRITICAL — SENDER'S PERSONAL CONTEXT (MUST be incorporated into the message):\n"${extraContext}"\nYou MUST weave this context naturally into the message. This is first-hand intel from the sender and takes priority over other data.\n` : ''}
 ${eventContext ? `🎪 EVENT CONTEXT — Use this event as the reason to reach out:\n${eventContext}\nAPPROACH: Keep it simple and natural. Ask if they're planning to attend the event, and say you'd love to meet them there / grab a coffee / say hello. Do NOT write a formal invitation or pitch the event. Just use it as a warm, human excuse to connect. Example tone: "I'll be at [event] — are you planning to go? Would love to meet in person."\n` : ''}
 ${solutionContext ? `🛠️ SOLUTION TO PITCH — The sender wants to position this specific solution/service in the message:\n${solutionContext}\nYou MUST weave this solution naturally into the message — explain how it addresses the stakeholder's pain points or industry challenges. Reference the solution's capabilities specifically, don't be generic. The solution is the VALUE PROPOSITION of this message.\n` : ''}
-SENDER: Alejandra Cadario, Business Consultant — Globant
+SENDER: ${COMPANY_PROFILE.senderName}, ${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}
 
 RULES:
 - Lead with THEIR world, not yours. First sentence must reference something about THEM (role, company, news, challenge)
 - Personalize with their first name only — never full name in the body
 - Reference recent news or LinkedIn activity ONLY if it's specific and recent — vague references are worse than none
-- Connect Globant's capabilities to THEIR specific challenges — never list services generically
+- Connect ${COMPANY_PROFILE.companyName}'s capabilities to THEIR specific challenges — never list services generically
 - BANNED PHRASES: "I hope this finds you well", "I came across your profile", "I wanted to reach out", "I'd love to connect", "just checking in", "following up", "touching base", "quick question", "I noticed that you", "as a leader in"
 - ONE clear micro-CTA — low commitment, specific (not "let me know if you're interested")
 - Sound like a real person, not a template. Read it aloud — if it sounds robotic, rewrite it.
-- MENA context: be respectful but not overly formal. Avoid Western-centric references. If the stakeholder is in KSA/UAE, be aware of business culture but don't overdo cultural references.
-${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you\'d love to meet there. Do NOT write a formal invitation.\n' : ''}${solutionContext ? '- SOLUTION: Weave the solution naturally as a value prop connected to their pain points. Don\'t pitch — hint at relevant results.\n' : ''}${extraContext ? '- SENDER CONTEXT: The personal context provided MUST appear naturally in the message — it\'s first-hand intel and takes priority.\n' : ''}- Write ONLY the message. No meta-commentary, no explanations, no "Here's a message for..." prefix.`;
+- ${COMPANY_PROFILE.market ? `Market context (${COMPANY_PROFILE.market}): tailor tone and references to the target market. Be culturally aware without overdoing it.` : ''}
+${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n` : ''}${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you\'d love to meet there. Do NOT write a formal invitation.\n' : ''}${solutionContext ? '- SOLUTION: Weave the solution naturally as a value prop connected to their pain points. Don\'t pitch — hint at relevant results.\n' : ''}${extraContext ? '- SENDER CONTEXT: The personal context provided MUST appear naturally in the message — it\'s first-hand intel and takes priority.\n' : ''}- Write ONLY the message. No meta-commentary, no explanations, no "Here's a message for..." prefix.`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
@@ -1456,7 +1479,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
             <td>
               {(() => {
                 const preMsg = F(s, 'Personalized Email Introduction') || '';
-                const fallback = `Hi ${F(s, 'Name')}, reaching out from Globant regarding potential collaboration.`;
+                const fallback = `Hi ${F(s, 'Name')}, reaching out from ${COMPANY_PROFILE.companyName} regarding potential collaboration.`;
                 const msg = preMsg || fallback;
                 return (
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -1898,7 +1921,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
               const startDt = new Date(start);
               const endDt = new Date(startDt.getTime() + 30 * 60 * 1000);
               const fmt = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-              const title = `Globant x ${msAccNames[0] || 'Account'} — ${msName}`;
+              const title = `${COMPANY_PROFILE.companyName} x ${msAccNames[0] || 'Account'} — ${msName}`;
               const details = `Meeting with ${msName} (${msRole}) at ${msAccNames.join(', ')}\n\n${meetingNotes || 'Intro call'}`;
               return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(startDt)}/${fmt(endDt)}&details=${encodeURIComponent(details)}${msEmail ? `&add=${encodeURIComponent(msEmail)}` : ''}`;
             };
@@ -2281,7 +2304,7 @@ ${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you
                     const email = F(s, 'Email');
                     const linkedin = F(s, 'LinkedIn');
                     const touches = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id)).length;
-                    const fallback = `Hi ${F(s, 'Name')}, reaching out from Globant regarding potential collaboration.`;
+                    const fallback = `Hi ${F(s, 'Name')}, reaching out from ${COMPANY_PROFILE.companyName} regarding potential collaboration.`;
                     return (
                       <tr key={s.id}>
                         <td>
@@ -2804,7 +2827,7 @@ RECENT COMPANY NEWS: ${accNews || 'Not available'}
 Generate 3-5 specific, actionable pain points for this person based on their role and industry context. Each pain point should:
 - Be specific to their role (not generic)
 - Reference industry challenges they likely face
-- Connect to areas where Globant (digital transformation, AI, CX, data) could help
+- Connect to areas where ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}) could help
 
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
@@ -2874,10 +2897,10 @@ ${eventsStr}
 Write the Executive Summary with these sections (use ### headers):
 
 ### 🏢 Account Snapshot
-2-3 sentences: What does this company do, what's their current situation based on news, and why are they relevant for Globant.
+2-3 sentences: What does this company do, what's their current situation based on news, and why are they relevant for ${COMPANY_PROFILE.companyName}.
 
 ### 🎯 Strategic Angle
-2-3 sentences: What's the best entry point for Globant? Which solutions/services are most relevant and why? What pain points or triggers should we leverage?
+2-3 sentences: What's the best entry point for ${COMPANY_PROFILE.companyName}? Which solutions/services are most relevant and why? What pain points or triggers should we leverage?
 
 ### 📊 Pipeline Status
 2-3 sentences: Current state of opportunities, what stage they're in, blockers, and what needs to happen next to advance them.
@@ -2935,7 +2958,7 @@ ${intelNotes ? intelNotes.slice(0, 400) : 'No additional notes'}
 
 Generate exactly 4 TALKING POINTS for the Client Partner. Each should:
 1. Reference a specific stakeholder by name and their pain point
-2. Connect it to a Globant capability or the mapped solution
+2. Connect it to a ${COMPANY_PROFILE.companyName} capability or the mapped solution
 3. Be actionable — what to say or ask in the meeting
 4. Use recent news if relevant as a conversation hook
 
@@ -2977,7 +3000,7 @@ Be specific, not generic. The CP needs to sound informed and prepared.`;
           const newsStr = typeof recentNews === 'string' ? recentNews.slice(0, 400) : '';
           const planStr = typeof intelPlan === 'string' ? intelPlan.slice(0, 300) : '';
 
-          const prompt = `You are a senior B2B sales strategist advising a BDR (Business Development Representative) at Globant (digital transformation, AI, CX, data consulting) who is prospecting ${name} in the ${industry || 'enterprise'} sector.
+          const prompt = `You are a senior B2B sales strategist advising a BDR (Business Development Representative) at ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}) who is prospecting ${name} in the ${industry || 'enterprise'} sector.
 
 ACCOUNT CONTEXT:
 - Company: ${name}
@@ -4251,7 +4274,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               const startDt = new Date(`${cpMeetingDate}T${cpMeetingTime || '10:00'}`);
               const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
               const fmt = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-              const title = `Globant x ${msAccNames[0] || 'Account'} — ${msName}`;
+              const title = `${COMPANY_PROFILE.companyName} x ${msAccNames[0] || 'Account'} — ${msName}`;
               const details = `Meeting with ${msName} (${msRole}) at ${msAccNames.join(', ')}\n\n${cpMeetingNotes || 'Intro call'}`;
               return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(startDt)}/${fmt(endDt)}&details=${encodeURIComponent(details)}${msEmail ? `&add=${encodeURIComponent(msEmail)}` : ''}`;
             };
@@ -4934,7 +4957,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         const evName = F(event, 'Event Name') || '';
         const evDate = formatDate(event.fields?.['Starting']);
         const aiInvite = F(event, 'Stakeholder Invitation') || '';
-        const fallbackInvite = `Hi ${sName}, I'd like to invite you to "${evName}" on ${evDate}. It could be a great opportunity to connect and explore how Globant can support your goals. Would you be interested? Looking forward to hearing from you.`;
+        const fallbackInvite = `Hi ${sName}, I'd like to invite you to "${evName}" on ${evDate}. It could be a great opportunity to connect and explore how ${COMPANY_PROFILE.companyName} can support your goals. Would you be interested? Looking forward to hearing from you.`;
         const message = aiInvite || fallbackInvite;
         const subject = `Invitation: ${evName} — ${evDate}`;
 
@@ -4996,7 +5019,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
             return `ID:${s.id} | ${F(s, 'Name')} ${F(s, 'Lart name') || ''} | ${F(s, 'Role') || '?'} at ${accNames.join(', ')} | Industry: ${accIndustries.join(', ')} | Influence: ${F(s, 'Level of Influence') || '?'} | Pain: ${painStr}`;
           }).join('\n');
 
-          const prompt = `You are a B2B sales strategist for Globant (digital transformation, AI, CX).
+          const prompt = `You are a B2B sales strategist for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
 
 EVENT:
 - Name: ${evName}
@@ -5646,7 +5669,7 @@ Return ONLY the JSON array, nothing else.`;
           const nonMapped = accounts.filter(a => !solAccIds.includes(a.id) && linkedIds(a, 'Stakeholders').length > 0);
           const potentialStr = nonMapped.slice(0, 8).map(a => `- ${F(a, 'Account Name')} | ${F(a, 'Industry') || '?'} | Tier: ${F(a, 'Tier') || '?'}`).join('\n');
 
-          const prompt = `You are a senior B2B sales strategist for Globant. Create an EXECUTIVE SUMMARY for this SOLUTION to help a BDR understand the full picture and plan next moves.
+          const prompt = `You are a senior B2B sales strategist for ${COMPANY_PROFILE.companyName}. Create an EXECUTIVE SUMMARY for this SOLUTION to help a BDR understand the full picture and plan next moves.
 
 SOLUTION: ${F(selectedSol, 'Name')}
 DETAIL: ${solDetailText || 'Not available'}
@@ -5675,7 +5698,7 @@ ${potentialStr || 'None'}
 Write the Executive Summary with these sections (use ### headers):
 
 ### 🛠️ Solution Overview
-2-3 sentences: What this solution does, its key value prop for MENA market, and current positioning status.
+2-3 sentences: What this solution does, its key value prop for ${COMPANY_PROFILE.market || 'your target market'}, and current positioning status.
 
 ### 📊 Traction & Pipeline
 2-3 sentences: How is this solution performing? Accounts engaged, outreach results, reply rates, meetings, pipeline value. What's working and what's not.
@@ -5726,7 +5749,7 @@ Be specific. Use real names from the data. No generic advice. Under 350 words to
           const nonSolAccounts = accounts.filter(a => !solAccIds.includes(a.id) && linkedIds(a, 'Stakeholders').length > 0);
           const potentialTargets = nonSolAccounts.slice(0, 10).map(a => `${F(a, 'Account Name')} | ${F(a, 'Industry') || '?'} | Tier: ${F(a, 'Tier') || '?'} | Stakeholders: ${linkedIds(a, 'Stakeholders').length}`).join('\n');
 
-          const prompt = `You are a senior B2B sales strategist for Globant (digital transformation, AI, CX).
+          const prompt = `You are a senior B2B sales strategist for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
 
 SOLUTION: ${F(selectedSol, 'Name')}
 Detail: ${solDetailText || 'Not available'}
@@ -6343,6 +6366,122 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
     }
 
+    // ============ SETTINGS MODAL ============
+    function SettingsModal({ onClose }) {
+      const isAdmin = CURRENT_USER?.role === 'admin';
+      const [tab, setTab] = useState('workspace');
+      const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
+      const [saved, setSaved] = useState(false);
+
+      const handleSave = () => {
+        saveCompanyProfile(profile);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      };
+
+      const inputStyle = {
+        width: '100%', padding: '8px 10px', background: 'var(--globant-input)',
+        border: '1px solid var(--globant-border)', borderRadius: 6,
+        color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box',
+      };
+      const labelStyle = { fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', display: 'block' };
+
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>⚙️ Settings</h3>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12 }}>
+              {[
+                { key: 'workspace', label: '🏢 Workspace' },
+                ...(isAdmin ? [{ key: 'profile', label: '🤖 AI Profile' }] : []),
+              ].map(t => (
+                <button key={t.key} onClick={() => setTab(t.key)} style={{
+                  background: tab === t.key ? 'rgba(191,215,48,0.15)' : 'none',
+                  border: tab === t.key ? '1px solid rgba(191,215,48,0.3)' : '1px solid transparent',
+                  color: tab === t.key ? 'var(--globant-green)' : 'var(--globant-muted)',
+                  borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                }}>{t.label}</button>
+              ))}
+            </div>
+
+            {/* Workspace tab */}
+            {tab === 'workspace' && (
+              <div>
+                <div style={{ padding: '12px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>Workspace</div>
+                  <div style={{ fontSize: 14, color: 'var(--globant-text)', fontWeight: 600 }}>{CLIENT_CONFIG.name || 'Oike'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>Plan: {CLIENT_CONFIG.plan || 'standard'}</div>
+                </div>
+                <div style={{ padding: '12px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>Services</div>
+                  <div style={{ fontSize: 12, color: 'var(--globant-green)', marginBottom: 4 }}>✅ Database connected</div>
+                  <div style={{ fontSize: 12, color: 'var(--globant-green)' }}>✅ AI engine active</div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--globant-muted)', textAlign: 'center', marginTop: 16 }}>
+                  Powered by <strong style={{ color: 'var(--globant-green)' }}>Oike</strong> · Sales Intelligence Platform
+                </div>
+              </div>
+            )}
+
+            {/* AI Profile tab (admin only) */}
+            {tab === 'profile' && isAdmin && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'rgba(191,215,48,0.08)', border: '1px solid rgba(191,215,48,0.2)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.6 }}>
+                  These values are injected into all AI prompts. Set them to match your company — every client gets their own AI context.
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Company Name</label>
+                  <input style={inputStyle} value={profile.companyName} onChange={e => setProfile(p => ({ ...p, companyName: e.target.value }))} placeholder="e.g. Globant" />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Services / Capabilities</label>
+                  <input style={inputStyle} value={profile.services} onChange={e => setProfile(p => ({ ...p, services: e.target.value }))} placeholder="e.g. digital transformation, AI, CX, data" />
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Short comma-separated list used in AI prompts</div>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Target Market / Region</label>
+                  <input style={inputStyle} value={profile.market} onChange={e => setProfile(p => ({ ...p, market: e.target.value }))} placeholder="e.g. MENA, KSA &amp; UAE" />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Sender Name</label>
+                  <input style={inputStyle} value={profile.senderName} onChange={e => setProfile(p => ({ ...p, senderName: e.target.value }))} placeholder="e.g. Alejandra Cadario" />
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Name used in message sign-offs and AI context</div>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Sender Title</label>
+                  <input style={inputStyle} value={profile.senderTitle} onChange={e => setProfile(p => ({ ...p, senderTitle: e.target.value }))} placeholder="e.g. Business Consultant" />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Company Goals / Extra Context (optional)</label>
+                  <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={profile.goals} onChange={e => setProfile(p => ({ ...p, goals: e.target.value }))} placeholder="e.g. Expand into healthcare and government sectors. Focus on AI and data analytics offerings." />
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Added to AI prompts as extra strategic context</div>
+                </div>
+
+                <button
+                  className="action-btn btn-primary"
+                  style={{ marginTop: 4, padding: '10px 0', width: '100%', fontSize: 13 }}
+                  onClick={handleSave}
+                >
+                  {saved ? '✅ Saved!' : '💾 Save AI Profile'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     // ============ MAIN APP ============
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
@@ -6606,33 +6745,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           </div>
 
           {/* Settings Modal */}
-          {showSettings && (
-            <div className="modal-overlay" onClick={() => setShowSettings(false)}>
-              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h3 style={{ margin: 0 }}>⚙️ Settings</h3>
-                  <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-                </div>
-
-                {/* Connection info */}
-                <div style={{ padding: '12px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>Workspace</div>
-                  <div style={{ fontSize: 14, color: 'var(--globant-text)', fontWeight: 600 }}>{CLIENT_CONFIG.name || 'Oike'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>Plan: {CLIENT_CONFIG.plan || 'standard'}</div>
-                </div>
-
-                <div style={{ padding: '12px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>Services</div>
-                  <div style={{ fontSize: 12, color: 'var(--globant-green)', marginBottom: 4 }}>✅ Database connected</div>
-                  <div style={{ fontSize: 12, color: 'var(--globant-green)' }}>✅ AI engine active</div>
-                </div>
-
-                <div style={{ fontSize: 11, color: 'var(--globant-muted)', textAlign: 'center', marginTop: 16 }}>
-                  Powered by <strong style={{ color: 'var(--globant-green)' }}>Oike</strong> · Sales Intelligence Platform
-                </div>
-              </div>
-            </div>
-          )}
+          {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
         </div>
       );
     }
