@@ -3347,7 +3347,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           Object.keys(fields).forEach(k => fields[k] === undefined && delete fields[k]);
 
           if (editingOpp.isNew) {
-            fields['Account'] = account ? [{ id: account.id }] : [];
+            fields['Account'] = account ? [account.id] : [];
             const newRec = await a.createRecord(TABLE_IDS.opportunities, fields);
             if (onAddRecord) onAddRecord('opportunities', { ...fields, Account: account ? [account.id] : [] });
           } else {
