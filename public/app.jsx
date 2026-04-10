@@ -1051,9 +1051,9 @@ ACCOUNT CONTEXT:
 - Inside Sales Plan: ${planText || 'Not available'}
 - Intel Notes (recent context from BDR): ${intelNotesText || 'None'}
 
-MESSAGE TYPE: ${tabGuide.label}
-${tabGuide.goal}
-${tabGuide.extra}
+MESSAGE TYPE: ${eventContext && eventMode === 'followup' ? 'Post-Event Follow-up' : tabGuide.label}
+${eventContext && eventMode === 'followup' ? 'This is a WARM follow-up after meeting in person at an event. The relationship has already started — do NOT treat this as cold outreach. Skip introductions, reference the meeting naturally, and focus on continuing the conversation with one clear next step.' : tabGuide.goal}
+${eventContext && eventMode === 'followup' ? '' : tabGuide.extra}
 
 CHANNEL: ${selectedChannel}
 - Tone: ${chGuide.tone}
@@ -1073,7 +1073,7 @@ RULES:
 - ONE clear micro-CTA — low commitment, specific (not "let me know if you're interested")
 - Sound like a real person, not a template. Read it aloud — if it sounds robotic, rewrite it.
 - ${COMPANY_PROFILE.market ? `Market context (${COMPANY_PROFILE.market}): tailor tone and references to the target market. Be culturally aware without overdoing it.` : ''}
-${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n` : ''}${eventContext ? '- EVENT: Keep it casual — ask if they\'re attending, say you\'d love to meet there. Do NOT write a formal invitation.\n' : ''}${solutionContext ? '- SOLUTION: Weave the solution naturally as a value prop connected to their pain points. Don\'t pitch — hint at relevant results.\n' : ''}${extraContext ? '- SENDER CONTEXT: The personal context provided MUST appear naturally in the message — it\'s first-hand intel and takes priority.\n' : ''}- Write ONLY the message. No meta-commentary, no explanations, no "Here's a message for..." prefix.`;
+${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n` : ''}${eventContext && eventMode === 'invite' ? '- EVENT: Keep it casual — ask if they\'re attending, say you\'d love to meet there. Do NOT write a formal invitation.\n' : ''}${eventContext && eventMode === 'followup' ? '- POST-EVENT: You ALREADY met them. DO NOT ask if they\'re attending. Reference the meeting as something that already happened. The tone is warm, not cold.\n' : ''}${solutionContext ? '- SOLUTION: Weave the solution naturally as a value prop connected to their pain points. Don\'t pitch — hint at relevant results.\n' : ''}${extraContext ? '- SENDER CONTEXT: The personal context provided MUST appear naturally in the message — it\'s first-hand intel and takes priority.\n' : ''}- Write ONLY the message. No meta-commentary, no explanations, no "Here's a message for..." prefix.`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
