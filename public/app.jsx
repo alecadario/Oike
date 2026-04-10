@@ -2291,7 +2291,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return false;
         if (filterSource && F(s, 'Source') !== filterSource) return false;
         return true;
-      }), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, accounts]);
+      }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || '')), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, accounts]);
 
       return (
         <div>
@@ -2642,7 +2642,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         if (selectedChannel && F(a, 'Channel') !== selectedChannel) return false;
         if (selectedStatus && F(a, 'Status') !== selectedStatus) return false;
         return true;
-      }), [outreach, accountSearch, accounts, selectedChannel, selectedStatus]);
+      }).sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0)), [outreach, accountSearch, accounts, selectedChannel, selectedStatus]);
 
       const channelColors = { WhatsApp: '#25D366', Email: '#60a5fa', LinkedIn: '#0A66C2', Call: '#fbbf24' };
 
@@ -2890,7 +2890,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const filteredAccounts = useMemo(() => {
         let list = searchTerm
           ? accounts.filter(a => (F(a, 'Account Name') || '').toLowerCase().includes(searchTerm.toLowerCase()))
-          : mappedAccounts.sort((a, b) => linkedIds(b, 'Stakeholders').length - linkedIds(a, 'Stakeholders').length);
+          : [...mappedAccounts].sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
         if (filterSolutionId) {
           list = list.filter(a => linkedIds(a, 'Solutions').includes(filterSolutionId));
         }
@@ -6068,9 +6068,10 @@ Return ONLY the JSON array, nothing else.`;
         }).sort((a, b) => b.accountCount - a.accountCount);
       }, [solutions, accounts, stakeholders, outreach, opportunities]);
 
-      const filteredSolutions = searchTerm
+      const filteredSolutions = (searchTerm
         ? solutionMetrics.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        : solutionMetrics;
+        : [...solutionMetrics]
+      ).sort((a, b) => a.name.localeCompare(b.name));
 
       // Selected solution detail
       const selectedSol = selectedSolId ? solutions.find(s => s.id === selectedSolId) : null;
