@@ -3523,7 +3523,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           if (oppForm.value && !isNaN(Number(oppForm.value))) fields['Value'] = Number(oppForm.value);
           if (oppForm.closeDate) fields['close date'] = oppForm.closeDate;
           if (oppForm.openingDate) fields['Opening date'] = oppForm.openingDate;
-          if (oppFormSolIds.length > 0) fields['Solutions'] = oppFormSolIds.map(id => ({ id }));
+          if (oppFormSolIds.length > 0) fields['Solutions'] = oppFormSolIds;
           // Remove undefined
           Object.keys(fields).forEach(k => fields[k] === undefined && delete fields[k]);
 
