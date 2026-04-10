@@ -87,7 +87,8 @@ export default async (req: Request, context: Context) => {
     const data = await response.json();
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ ...data, _debug: { baseId, tableId, url } }), {
+      console.error(`[airtable-proxy] ${response.status} on ${method} ${url}`, JSON.stringify(data));
+      return new Response(JSON.stringify({ ...data, _debug: { baseId, tableId, url, method } }), {
         status: response.status, headers: { 'Content-Type': 'application/json' },
       });
     }
