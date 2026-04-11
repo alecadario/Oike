@@ -7555,6 +7555,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [showSettings, setShowSettings] = useState(false);
       const [configError, setConfigError] = useState('');
       const [navigateToAccountId, setNavigateToAccountId] = useState('');
+      const [sidebarOpen, setSidebarOpen] = useState(false);
 
       const goToAccount = useCallback((accountId) => {
         setNavigateToAccountId(accountId);
@@ -7754,9 +7755,27 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         { icon: '🧠', label: 'Insights', key: 'insights' },
       ];
 
+      const currentPageLabel = (navItems.find(i => i.key === page) || {}).label || 'Overview';
+
       return (
         <div>
-          <div className="sidebar">
+          {/* Mobile top bar */}
+          <div className="mobile-topbar">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--globant-text)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: '4px 6px' }}
+            >&#9776;</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #BFD730, #8fa824)', width: 28, height: 28, fontSize: 14 }}>O</div>
+              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--globant-text)' }}>{currentPageLabel}</span>
+            </div>
+          </div>
+          {/* Sidebar overlay (tap to close) */}
+          <div
+            className={'sidebar-overlay' + (sidebarOpen ? ' mob-open' : '')}
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className={'sidebar' + (sidebarOpen ? ' mob-open' : '')}>
             <div className="sidebar-logo">
               <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #BFD730, #8fa824)' }}>O</div>
               <div>
@@ -7768,8 +7787,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               {navItems.map(item => (
                 <div
                   key={item.key}
-                  className={`nav-item ${page === item.key ? 'active' : ''}`}
-                  onClick={() => setPage(item.key)}
+                  className={'nav-item ' + (page === item.key ? 'active' : '')}
+                  onClick={() => { setPage(item.key); setSidebarOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
