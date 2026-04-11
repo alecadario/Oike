@@ -7572,6 +7572,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [logStkId, setLogStkId] = useState('');
       const [logNotes, setLogNotes] = useState('');
       const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+      const [logTime, setLogTime] = useState('');
+      const [logSaved, setLogSaved] = useState(false);
       const [logLoading, setLogLoading] = useState(false);
       const { accounts, stakeholders, outreach, opportunities } = data;
 
@@ -7677,9 +7679,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       };
       const openCalendar = (accId) => {
         const acc = accounts.find(a=>a.id===accId);
-        const title = encodeURIComponent(`Meeting — ${acc?F(acc,'Account Name'):''}`);
-        const dateStr = logDate.replace(/-/g,'');
-        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateStr}/${dateStr}&details=${encodeURIComponent(logNotes)}`,'_blank');
+        const title = encodeURIComponent('Meeting — '+(acc?F(acc,'Account Name'):''));
+        const d = logDate.replace(/-/g,'');
+        let startStr, endStr;
+        if (logTime) {
+          const [hh,mm] = logTime.split(':');
+          const endH = String(Number(hh)+1).padStart(2,'0');
+          startStr = d+'T'+hh+mm+'00'; endStr = d+'T'+endH+mm+'00';
+        } else { startStr = d; endStr = d; }
+        const details = encodeURIComponent(logNotes||(acc?'Meeting with '+F(acc,'Account Name'):''));
+        window.open('https://calendar.google.com/calendar/render?action=TEMPLATE&text='+title+'&dates='+startStr+'/'+endStr+'&details='+details,'_blank');
+        setShowLogForm(false); setLogNotes(''); setLogStkId(''); setLogTime(''); setLogSaved(false);
       };
       const scanCard = (file) => {
         setCardScanLoading(true);
@@ -7723,10 +7733,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!logAccId) return;
         setLogLoading(true);
         try {
-          const fields = { 'Channel':logType==='call'?'Call':logType==='meeting'?'Meeting':'Email','Status':logType==='meeting'?'Meeting Scheduled':'Sent','Notes':logNotes||'','Date':logDate||new Date().toISOString().split('T')[0],'Account':[logAccId],...(logStkId?{'Stakeholder':[logStkId]}:{}) };
+          const timeNote = (logType==='meeting' && logTime) ? ' @ '+logTime : '';
+          const fields = { 'Channel':logType==='call'?'Call':logType==='meeting'?'Meeting':'Email','Status':logType==='meeting'?'Meeting Scheduled':'Sent','Notes':(logNotes||'')+timeNote,'Date':logDate||new Date().toISOString().split('T')[0],'Account':[logAccId],...(logStkId?{'Stakeholder':[logStkId]}:{}) };
           const rec = await api.createRecord(TABLE_IDS.outreach, fields);
-          if (rec && addToData) addToData('outreach',{...fields,id:rec.id});
-          setShowLogForm(false); setLogNotes(''); setLogStkId('');
+          if (rec && addToData) addToData('outreach', fields);
+          setLogSaved(true);
+          if (logType !== 'meeting') { setShowLogForm(false); setLogNotes(''); setLogStkId(''); setLogTime(''); setLogSaved(false); }
         } catch { alert('Error logging.'); }
         setLogLoading(false);
       };
@@ -8038,7 +8050,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 </div>
                 <div style={{display:'flex',gap:8,marginBottom:14}}>
                   {[['call','📞 Call','#fbbf24'],['meeting','📅 Meeting','#60a5fa'],['email','✉️ Email','#4ade80']].map(([t,lbl,c])=>(
-                    <button key={t} onClick={()=>setLogType(t)} style={{flex:1,padding:'10px 4px',border:`1px solid ${logType===t?c:'var(--globant-border)'}`,borderRadius:8,background:logType===t?c+'18':'transparent',color:logType===t?c:'var(--globant-muted)',fontWeight:logType===t?700:400,fontSize:12,cursor:'pointer'}}>{lbl}</button>
+                    <button key={t} onClick={()=>{setLogType(t);setLogSaved(false);}} style={{flex:1,padding:'10px 4px',border:'1px solid '+(logType===t?c:'var(--globant-border)'),borderRadius:8,background:logType===t?c+'18':'transparent',color:logType===t?c:'var(--globant-muted)',fontWeight:logType===t?700:400,fontSize:12,cursor:'pointer'}}>{lbl}</button>
                   ))}
                 </div>
                 <div style={{marginBottom:12}}>
@@ -8057,16 +8069,33 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     </select>
                   </div>
                 )}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Date</div>
-                  <input type="date" style={G.inp} value={logDate} onChange={e=>setLogDate(e.target.value)} />
+                <div style={{display:'flex',gap:8,marginBottom:12}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Date</div>
+                    <input type="date" style={G.inp} value={logDate} onChange={e=>setLogDate(e.target.value)} />
+                  </div>
+                  {logType==='meeting' && (
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Time</div>
+                      <input type="time" style={G.inp} value={logTime} onChange={e=>setLogTime(e.target.value)} />
+                    </div>
+                  )}
                 </div>
                 <div style={{marginBottom:16}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Notes</div>
                   <textarea style={{...G.inp,minHeight:80,resize:'vertical',fontFamily:'inherit',lineHeight:1.5}} placeholder="What happened? Next steps?" value={logNotes} onChange={e=>setLogNotes(e.target.value)} />
                 </div>
-                <button onClick={logActivityNew} disabled={!logAccId||logLoading} style={{...G.pbtn,marginBottom:logType==='meeting'?10:0,opacity:!logAccId||logLoading?0.6:1}}>{logLoading?'⏳ Saving...':'💾 Save'}</button>
-                {logType==='meeting' && <button onClick={()=>openCalendar(logAccId)} style={{width:'100%',background:'rgba(96,165,250,0.1)',border:'1px solid rgba(96,165,250,0.25)',borderRadius:10,padding:'12px',color:'#60a5fa',fontWeight:600,fontSize:14,cursor:'pointer'}}>📅 Add to Google Calendar</button>}
+                {!logSaved
+                  ? <button onClick={logActivityNew} disabled={!logAccId||logLoading} style={{...G.pbtn,opacity:!logAccId||logLoading?0.6:1}}>{logLoading?'⏳ Saving...':'💾 Save Activity'}</button>
+                  : <div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'10px 14px',background:'rgba(74,222,128,0.08)',border:'1px solid rgba(74,222,128,0.25)',borderRadius:10}}>
+                        <span style={{color:'#4ade80',fontSize:18}}>✅</span>
+                        <span style={{fontSize:13,color:'#4ade80',fontWeight:600}}>Activity saved!</span>
+                      </div>
+                      {logType==='meeting' && <button onClick={()=>openCalendar(logAccId)} style={{width:'100%',background:'rgba(96,165,250,0.1)',border:'1px solid rgba(96,165,250,0.25)',borderRadius:10,padding:'13px',color:'#60a5fa',fontWeight:700,fontSize:14,cursor:'pointer'}}>📅 Add to Google Calendar</button>}
+                      <button onClick={()=>{setShowLogForm(false);setLogNotes('');setLogStkId('');setLogTime('');setLogSaved(false);}} style={{width:'100%',marginTop:8,background:'transparent',border:'1px solid var(--globant-border)',borderRadius:10,padding:'11px',color:'var(--globant-muted)',fontSize:13,cursor:'pointer'}}>Close</button>
+                    </div>
+                }
               </div>
             </div>
           )}
