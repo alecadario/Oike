@@ -7547,420 +7547,536 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
     // ============ MOBILE APP ============
     function MobileApp({ data, api, addToData }) {
-      const [view, setView] = useState('list');
-      const [selAcc, setSelAcc] = useState(null);
-      const [tab, setTab] = useState('summary');
-      const [search, setSearch] = useState('');
-
-      // Message tab state
-      const [msgStk, setMsgStk] = useState(null);
+      const [tab, setTab] = useState('insights');
+      // Contacts state
+      const [contactSearch, setContactSearch] = useState('');
+      const [selContact, setSelContact] = useState(null);
+      const [showAddContact, setShowAddContact] = useState(false);
+      const [newContact, setNewContact] = useState({ name: '', lastName: '', role: '', email: '', phone: '', linkedin: '', accountId: '' });
+      const [cardScanLoading, setCardScanLoading] = useState(false);
+      const [savingContact, setSavingContact] = useState(false);
       const [msgChannel, setMsgChannel] = useState('Email');
       const [msgText, setMsgText] = useState('');
       const [msgLoading, setMsgLoading] = useState(false);
       const [msgCopied, setMsgCopied] = useState(false);
-
-      // Log tab state
-      const [logMode, setLogMode] = useState(null);
-      const [logStk, setLogStk] = useState(null);
+      const [showMsgComposer, setShowMsgComposer] = useState(false);
+      // Accounts state
+      const [accSearch, setAccSearch] = useState('');
+      // Activity state
+      const [actFilter, setActFilter] = useState('all');
+      const [showLogForm, setShowLogForm] = useState(false);
+      const [logType, setLogType] = useState('call');
+      const [logAccId, setLogAccId] = useState('');
+      const [logStkId, setLogStkId] = useState('');
       const [logNotes, setLogNotes] = useState('');
       const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
       const [logLoading, setLogLoading] = useState(false);
-      const [logDone, setLogDone] = useState(false);
+      const { accounts, stakeholders, outreach, opportunities } = data;
 
-      const { accounts, stakeholders, outreach } = data;
+      // ── Computed data ──
+      const insights = useMemo(() => {
+        const recs = []; const now = Date.now();
+        const cold = stakeholders.filter(s => {
+          const so = outreach.filter(o => linkedIds(o,'Stakeholder').includes(s.id));
+          if (!so.length) return false;
+          const last = Math.max(...so.map(o => new Date(o.fields?.Date||0)));
+          return (now-last)/86400000 > 14;
+        }).slice(0,3);
+        if (cold.length) recs.push({ icon:'🔥', color:'#ef4444', title:`${cold.length} contact${cold.length>1?'s':''} need follow-up`, sub: cold.map(s=>[F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' ')).join(', '), dest:'contacts' });
+        const hot = accounts.filter(a => {
+          const hasOpp = opportunities.some(o=>linkedIds(o,'Account').includes(a.id)&&!['Won','Lost'].includes(F(o,'Stage')||''));
+          const ao = outreach.filter(o=>linkedIds(o,'Account').includes(a.id));
+          const last = ao.length ? Math.max(...ao.map(o=>new Date(o.fields?.Date||0))) : 0;
+          return hasOpp && (now-last)/86400000 > 7;
+        }).slice(0,3);
+        if (hot.length) recs.push({ icon:'💼', color:'#fbbf24', title:`${hot.length} deal${hot.length>1?'s':''} need attention`, sub: hot.map(a=>F(a,'Account Name')||'').join(', '), dest:'accounts' });
+        const never = stakeholders.filter(s => linkedIds(s,'Account').some(id=>accounts.find(a=>a.id===id)) && !outreach.some(o=>linkedIds(o,'Stakeholder').includes(s.id))).slice(0,3);
+        if (never.length) recs.push({ icon:'👋', color:'#60a5fa', title:`${never.length} contact${never.length>1?'s':''} never reached`, sub: never.map(s=>[F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' ')).join(', '), dest:'contacts' });
+        const today = new Date().toISOString().split('T')[0];
+        const todayM = outreach.filter(o=>o.fields?.Date===today&&F(o,'Channel')==='Meeting').length;
+        if (todayM) recs.push({ icon:'📅', color:'#a78bfa', title:`${todayM} meeting${todayM>1?'s':''} today`, sub:'Check your calendar', dest:'activity' });
+        return recs;
+      }, [accounts, stakeholders, outreach, opportunities]);
 
-      const filteredAccounts = useMemo(() =>
-        accounts
-          .filter(a => !search || (F(a, 'Account Name') || '').toLowerCase().includes(search.toLowerCase()))
-          .sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || '')),
-        [accounts, search]
-      );
+      const filteredContacts = useMemo(() => {
+        if (!contactSearch.trim()) return [];
+        const t = contactSearch.toLowerCase();
+        return stakeholders.filter(s => {
+          const name = [F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' ').toLowerCase();
+          return name.includes(t)||(F(s,'Role')||'').toLowerCase().includes(t)||(F(s,'Email')||'').toLowerCase().includes(t);
+        }).slice(0,25);
+      }, [stakeholders, contactSearch]);
 
-      const accStk = useMemo(() =>
-        selAcc ? stakeholders.filter(s => linkedIds(s, 'Account').includes(selAcc.id)) : [],
-        [selAcc, stakeholders]
-      );
+      const contactOutreach = useMemo(() =>
+        selContact ? outreach.filter(o=>linkedIds(o,'Stakeholder').includes(selContact.id)).sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0)) : [],
+        [selContact, outreach]);
 
-      const accOutreach = useMemo(() =>
-        selAcc ? outreach.filter(o =>
-          linkedIds(o, 'Account').includes(selAcc.id) ||
-          accStk.some(s => linkedIds(o, 'Stakeholder').includes(s.id))
-        ) : [],
-        [selAcc, outreach, accStk]
-      );
+      const contactAccount = useMemo(() => {
+        if (!selContact) return null;
+        const id = linkedIds(selContact,'Account')[0];
+        return accounts.find(a=>a.id===id)||null;
+      }, [selContact, accounts]);
 
-      const stkEngagement = useMemo(() => accStk.map(s => {
-        const touches = accOutreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id));
-        const hasReplied = touches.some(o => F(o, 'Status') === 'Replied');
-        const hasMeeting = touches.some(o => F(o, 'Status') === 'Meeting Scheduled');
-        const sorted = [...touches].sort((a, b) => new Date(b.fields?.Date || 0) - new Date(a.fields?.Date || 0));
-        const lastTouch = sorted[0];
-        const daysSince = lastTouch?.fields?.Date ? Math.floor((Date.now() - new Date(lastTouch.fields.Date)) / 86400000) : null;
-        const sName = [F(s, 'Name'), F(s, 'Lart name')].filter(Boolean).join(' ') || 'Unknown';
-        return { s, sName, hasReplied, hasMeeting, totalTouches: touches.length, lastTouch, daysSince };
-      }), [accStk, accOutreach]);
+      const filteredAccounts = useMemo(() => {
+        if (!accSearch.trim()) return [];
+        const t = accSearch.toLowerCase();
+        return accounts.filter(a=>(F(a,'Account Name')||'').toLowerCase().includes(t)).slice(0,10);
+      }, [accounts, accSearch]);
 
-      const openAccount = (acc) => {
-        setSelAcc(acc);
-        setView('detail');
-        setTab('summary');
-        setMsgStk(null);
-        setMsgText('');
-        setLogMode(null);
-        setLogDone(false);
-      };
+      // ── Helpers ──
+      const iColor = (inf) => inf==='High'||inf==='Decision Maker'?'#ef4444':inf==='Influencer'||inf==='Champion'?'#f472b6':inf==='Medium'?'#fbbf24':'#94a3b8';
+      const chIcon = { Call:'📞', Meeting:'📅', Email:'✉️', LinkedIn:'in', WhatsApp:'💬' };
+      const chColor = { Call:'#fbbf24', Meeting:'#60a5fa', Email:'#4ade80', LinkedIn:'#0A66C2', WhatsApp:'#25D366' };
 
-      const goBack = () => { setView('list'); setSelAcc(null); };
-
-      const execSummary = selAcc ? (localStorage.getItem(`oike_exec_${selAcc.id}`) || '') : '';
-      const newsRaw = selAcc ? localStorage.getItem(`oike_news_${selAcc.id}`) : null;
-      const newsAI = newsRaw ? (() => { try { return JSON.parse(newsRaw); } catch { return null; } })() : null;
-
-      const generateMessage = async () => {
-        if (!msgStk || !selAcc) return;
+      // ── Functions ──
+      const generateMessage = async (stk, acc) => {
+        if (!stk) return;
         setMsgLoading(true); setMsgText(''); setMsgCopied(false);
         try {
-          const stkName = [F(msgStk, 'Name'), F(msgStk, 'Lart name')].filter(Boolean).join(' ');
-          const pain = F(msgStk, 'Pain Points (Generated)') || F(msgStk, 'Pain points') || '';
-          const role = F(msgStk, 'Role') || '';
-          const accName = F(selAcc, 'Account Name') || '';
-          const prompt = `Write a short, personalized ${msgChannel} outreach message to ${stkName}, ${role} at ${accName}. Their known pain points: ${pain || 'not specified'}. Under 120 words. Be direct, no generic opener. Clear call to action.`;
-          const res = await fetch('/api/openai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
-            body: JSON.stringify({ prompt, max_tokens: 250 })
-          });
+          const sName = [F(stk,'Name'),F(stk,'Lart name')].filter(Boolean).join(' ');
+          const pain = F(stk,'Pain Points (Generated)')||F(stk,'Pain points')||'';
+          const role = F(stk,'Role')||'';
+          const accName = acc ? F(acc,'Account Name')||'' : '';
+          const prompt = `Write a short ${msgChannel} outreach to ${sName}, ${role}${accName?' at '+accName:''}. Pain points: ${pain||'unknown'}. Under 120 words. Direct opener, clear CTA.`;
+          const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}`}, body:JSON.stringify({ prompt, max_tokens:250 }) });
           const json = await res.json();
-          setMsgText(json.result || json.text || json.choices?.[0]?.message?.content || 'Could not generate message.');
+          setMsgText(json.result||json.text||json.choices?.[0]?.message?.content||'Error generating.');
         } catch { setMsgText('Error generating. Try again.'); }
         setMsgLoading(false);
       };
-
-      const copyMessage = () => {
-        navigator.clipboard.writeText(msgText).then(() => { setMsgCopied(true); setTimeout(() => setMsgCopied(false), 2000); });
+      const copyMessage = () => { navigator.clipboard.writeText(msgText).then(()=>{ setMsgCopied(true); setTimeout(()=>setMsgCopied(false),2000); }); };
+      const openGmail = (stk, acc) => {
+        const em = F(stk,'Email')||''; const accN = acc ? F(acc,'Account Name')||'' : '';
+        window.open(`https://mail.google.com/mail/?view=cm&to=${em}&su=${encodeURIComponent('Following up — '+accN)}&body=${encodeURIComponent(msgText)}`,'_blank');
       };
-
-      const openGmail = () => {
-        const email = F(msgStk, 'Email') || '';
-        const subject = encodeURIComponent(`Following up — ${F(selAcc, 'Account Name') || ''}`);
-        window.open(`https://mail.google.com/mail/?view=cm&to=${email}&su=${subject}&body=${encodeURIComponent(msgText)}`, '_blank');
+      const openWA = (stk) => {
+        const phone = (F(stk,'Phone number')||'').replace(/[^0-9+]/g,'');
+        if (!phone) return alert('No phone number.');
+        window.open(`https://wa.me/${phone}${msgText?'?text='+encodeURIComponent(msgText):'`+'`'+'`'+'}','_blank');
       };
-
-      const openWhatsApp = (stkOverride) => {
-        const stk = stkOverride || msgStk;
-        const phone = (F(stk, 'Phone number') || '').replace(/[^0-9+]/g, '');
-        if (!phone) return alert('No phone number for this contact.');
-        const text = msgText || '';
-        window.open(`https://wa.me/${phone}${text ? '?text=' + encodeURIComponent(text) : ''}`, '_blank');
+      const openLI = (stk) => { const li = F(stk,'LinkedIn')||''; if(!li) return alert('No LinkedIn.'); window.open(li,'_blank'); };
+      const openCalendar = (accId) => {
+        const acc = accounts.find(a=>a.id===accId);
+        const title = encodeURIComponent(`Meeting — ${acc?F(acc,'Account Name'):''}`);
+        const dateStr = logDate.replace(/-/g,'');
+        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateStr}/${dateStr}&details=${encodeURIComponent(logNotes)}`,'_blank');
       };
-
-      const openLinkedIn = (stkOverride) => {
-        const li = F(stkOverride || msgStk, 'LinkedIn') || '';
-        if (!li) return alert('No LinkedIn URL for this contact.');
-        window.open(li, '_blank');
+      const scanCard = (file) => {
+        setCardScanLoading(true);
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const base64 = e.target.result.split(',')[1];
+            const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}`}, body:JSON.stringify({ messages:[{ role:'user', content:[{ type:'image_url', image_url:{ url:`data:image/jpeg;base64,${base64}` }},{ type:'text', text:'Extract contact info from this business card. Return ONLY valid JSON: { name, lastName, role, email, phone, linkedin, company }. Empty string if not found.' }] }], model:'gpt-4o', max_tokens:300 }) });
+            const json = await res.json();
+            const txt = json.result||json.text||json.choices?.[0]?.message?.content||'{}';
+            const d = JSON.parse(txt.replace(/```json|```/g,'').trim());
+            setNewContact(p=>({ ...p, name:d.name||p.name, lastName:d.lastName||p.lastName, role:d.role||p.role, email:d.email||p.email, phone:d.phone||p.phone, linkedin:d.linkedin||p.linkedin }));
+          } catch { alert('Could not scan. Fill manually.'); }
+          setCardScanLoading(false);
+        };
+        reader.readAsDataURL(file);
       };
-
-      const openCalendar = () => {
-        const title = encodeURIComponent(`Meeting — ${F(selAcc, 'Account Name') || ''}`);
-        const dateStr = (logDate || new Date().toISOString().split('T')[0]).replace(/-/g, '');
-        const stkName = logStk ? [F(logStk, 'Name'), F(logStk, 'Lart name')].filter(Boolean).join(' ') : 'contact';
-        const notes = encodeURIComponent(logNotes || `Meeting with ${stkName} at ${F(selAcc, 'Account Name') || ''}`);
-        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateStr}/${dateStr}&details=${notes}`, '_blank');
+      const saveContact = async () => {
+        if (!newContact.name.trim()) return;
+        setSavingContact(true);
+        try {
+          const fields = { 'Name':newContact.name,'Lart name':newContact.lastName,'Role':newContact.role,'Email':newContact.email,'Phone number':newContact.phone,'LinkedIn':newContact.linkedin,...(newContact.accountId?{'Account':[newContact.accountId]}:{}) };
+          const rec = await api.createRecord(TABLE_IDS.stakeholders, fields);
+          if (rec && addToData) addToData('stakeholders',{...fields,id:rec.id});
+          setShowAddContact(false); setNewContact({ name:'',lastName:'',role:'',email:'',phone:'',linkedin:'',accountId:'' });
+        } catch { alert('Error saving contact.'); }
+        setSavingContact(false);
       };
-
-      const logActivity = async () => {
-        if (!logStk || !selAcc) return;
+      const logActivityNew = async () => {
+        if (!logAccId) return;
         setLogLoading(true);
         try {
-          const fields = {
-            'Channel': logMode === 'call' ? 'Call' : 'Meeting',
-            'Status': logMode === 'meeting' ? 'Meeting Scheduled' : 'Sent',
-            'Notes': logNotes || '',
-            'Date': logDate || new Date().toISOString().split('T')[0],
-            'Account': [selAcc.id],
-            'Stakeholder': [logStk.id],
-          };
-          const newRec = await api.createRecord(TABLE_IDS.outreach, fields);
-          if (newRec && addToData) addToData('outreach', { ...fields, id: newRec.id });
-          setLogDone(true); setLogMode(null); setLogNotes('');
-        } catch { alert('Error logging activity. Check connection.'); }
+          const fields = { 'Channel':logType==='call'?'Call':logType==='meeting'?'Meeting':'Email','Status':logType==='meeting'?'Meeting Scheduled':'Sent','Notes':logNotes||'','Date':logDate||new Date().toISOString().split('T')[0],'Account':[logAccId],...(logStkId?{'Stakeholder':[logStkId]}:{}) };
+          const rec = await api.createRecord(TABLE_IDS.outreach, fields);
+          if (rec && addToData) addToData('outreach',{...fields,id:rec.id});
+          setShowLogForm(false); setLogNotes(''); setLogStkId('');
+        } catch { alert('Error logging.'); }
         setLogLoading(false);
       };
 
-      // ── Shared mobile styles ──
-      const mS = {
-        wrap: { minHeight: '100vh', background: 'var(--globant-bg)', color: 'var(--globant-text)', fontFamily: 'Inter, sans-serif', paddingBottom: 80 },
-        topBar: { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--globant-card)', borderBottom: '1px solid var(--globant-border)', position: 'sticky', top: 0, zIndex: 100 },
-        bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--globant-card)', borderTop: '1px solid var(--globant-border)', zIndex: 100 },
-        tabBtn: (active) => ({ flex: 1, padding: '10px 4px 12px', border: 'none', background: 'transparent', color: active ? 'var(--globant-green)' : 'var(--globant-muted)', cursor: 'pointer', fontSize: 10, fontWeight: active ? 700 : 500, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }),
-        card: { background: 'var(--globant-card)', border: '1px solid var(--globant-border)', borderRadius: 12, padding: '14px 16px', marginBottom: 12 },
-        input: { width: '100%', background: 'var(--globant-darker)', border: '1px solid var(--globant-border)', borderRadius: 8, padding: '10px 14px', color: 'var(--globant-text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' },
-        primaryBtn: { background: 'linear-gradient(135deg, rgba(191,215,48,0.2), rgba(191,215,48,0.08))', border: '1px solid rgba(191,215,48,0.35)', borderRadius: 10, padding: '13px 16px', color: 'var(--globant-green)', fontWeight: 700, fontSize: 14, cursor: 'pointer', width: '100%', textAlign: 'center' },
+      // ── Shared styles ──
+      const G = {
+        wrap: { minHeight:'100vh', background:'var(--globant-bg)', color:'var(--globant-text)', fontFamily:'Inter, sans-serif', paddingBottom:72 },
+        topBar: { display:'flex', alignItems:'center', gap:12, padding:'14px 16px', background:'var(--globant-card)', borderBottom:'1px solid var(--globant-border)', position:'sticky', top:0, zIndex:100 },
+        botNav: { position:'fixed', bottom:0, left:0, right:0, display:'flex', background:'var(--globant-card)', borderTop:'1px solid var(--globant-border)', zIndex:100 },
+        navBtn: (a) => ({ flex:1, padding:'10px 4px 12px', border:'none', background:'transparent', color:a?'var(--globant-green)':'var(--globant-muted)', cursor:'pointer', fontSize:10, fontWeight:a?700:400, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }),
+        card: { background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:12, padding:'14px 16px', marginBottom:12 },
+        inp: { width:'100%', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:10, padding:'12px 14px', color:'var(--globant-text)', fontSize:14, outline:'none', boxSizing:'border-box' },
+        pbtn: { background:'linear-gradient(135deg, rgba(191,215,48,0.2), rgba(191,215,48,0.08))', border:'1px solid rgba(191,215,48,0.35)', borderRadius:10, padding:'13px 16px', color:'var(--globant-green)', fontWeight:700, fontSize:14, cursor:'pointer', width:'100%', textAlign:'center' },
       };
+      const BottomNav = () => (
+        <div style={G.botNav}>
+          {[['insights','🏠','Insights'],['contacts','👥','Contacts'],['accounts','🏢','Accounts'],['activity','📊','Activity']].map(([k,ico,lbl])=>(
+            <button key={k} onClick={()=>{ setSelContact(null); setTab(k); }} style={G.navBtn(tab===k)}>
+              <span style={{fontSize:20}}>{ico}</span><span>{lbl}</span>
+            </button>
+          ))}
+        </div>
+      );
 
-      // ── ACCOUNT LIST ──
-      if (view === 'list') return (
-        <div style={mS.wrap}>
-          <div style={mS.topBar}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #BFD730, #8fa824)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, color: '#1A1A2E', flexShrink: 0 }}>O</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>Oike</div>
-              <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{CURRENT_USER?.name || ''}</div>
+      // ── Contact detail ──
+      if (selContact) {
+        const sName = [F(selContact,'Name'),F(selContact,'Lart name')].filter(Boolean).join(' ');
+        const inf = F(selContact,'Level of Influence')||'';
+        const ic = iColor(inf);
+        const ini = sName.split(' ').filter(Boolean).map(n=>n[0]).slice(0,2).join('').toUpperCase();
+        const em = F(selContact,'Email'); const ph = F(selContact,'Phone number'); const li = F(selContact,'LinkedIn');
+        return (
+          <div style={G.wrap}>
+            <div style={G.topBar}>
+              <button onClick={()=>{ setSelContact(null); setMsgText(''); setShowMsgComposer(false); }} style={{background:'none',border:'none',color:'var(--globant-green)',fontSize:24,cursor:'pointer',padding:'0 4px',lineHeight:1}}>‹</button>
+              <div style={{flex:1,fontWeight:700,fontSize:15,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sName}</div>
             </div>
-            <button onClick={logoutUser} style={{ background: 'none', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '5px 10px', color: 'var(--globant-muted)', fontSize: 11, cursor: 'pointer' }}>↪</button>
-          </div>
-          <div style={{ padding: '14px 16px 8px' }}>
-            <input style={mS.input} placeholder="🔍 Search accounts..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <div style={{ padding: '0 16px' }}>
-            {filteredAccounts.map(a => {
-              const name = F(a, 'Account Name') || 'Unnamed';
-              const industry = F(a, 'Industry') || '';
-              const country = F(a, 'Country') || '';
-              const status = F(a, 'Status') || '';
-              const tier = F(a, 'Tier') || '';
-              const stkCount = stakeholders.filter(s => linkedIds(s, 'Account').includes(a.id)).length;
-              const touchCount = outreach.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
-              const hasReply = outreach.filter(o => linkedIds(o, 'Account').includes(a.id)).some(o => F(o, 'Status') === 'Replied');
-              const urgencyColor = hasReply ? '#4ade80' : touchCount > 0 ? '#fbbf24' : '#60a5fa';
-              const statusColor = status === 'Active' ? '#4ade80' : status === 'Won' ? '#BFD730' : status === 'Lost' ? '#ef4444' : '#60a5fa';
-              return (
-                <div key={a.id} onClick={() => openAccount(a)}
-                  style={{ background: 'var(--globant-card)', border: '1px solid var(--globant-border)', borderLeft: `3px solid ${urgencyColor}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
-                      {industry && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', fontWeight: 600 }}>{industry}</span>}
-                      {country && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(244,114,182,0.15)', color: '#f472b6', fontWeight: 600 }}>{country}</span>}
-                      {tier && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontWeight: 600 }}>{tier}</span>}
+            <div style={{padding:'16px'}}>
+              <div style={{...G.card,display:'flex',alignItems:'center',gap:14}}>
+                <div style={{width:52,height:52,borderRadius:'50%',background:`linear-gradient(135deg,${ic}30,${ic}10)`,border:`2px solid ${ic}50`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:ic,flexShrink:0}}>{ini||'?'}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:16}}>{sName}</div>
+                  <div style={{fontSize:13,color:'var(--globant-muted)',marginTop:2}}>{F(selContact,'Role')||'—'}</div>
+                  {contactAccount && <div style={{fontSize:12,color:'#60a5fa',marginTop:2}}>🏢 {F(contactAccount,'Account Name')}</div>}
+                </div>
+                {inf && <span style={{fontSize:10,padding:'3px 8px',borderRadius:10,background:ic+'18',color:ic,fontWeight:600}}>{inf}</span>}
+              </div>
+              {(em||ph||li) && (
+                <div style={G.card}>
+                  {em && <div style={{fontSize:13,marginBottom:8,display:'flex',gap:8}}><span>✉️</span><span style={{color:'var(--globant-muted)'}}>{em}</span></div>}
+                  {ph && <div style={{fontSize:13,marginBottom:8,display:'flex',gap:8}}><span>📞</span><span style={{color:'var(--globant-muted)'}}>{ph}</span></div>}
+                  {li && <div style={{fontSize:13,display:'flex',gap:8}}><span style={{fontWeight:700,color:'#0A66C2'}}>in</span><span style={{color:'#0A66C2',fontSize:12,cursor:'pointer'}} onClick={()=>openLI(selContact)}>LinkedIn Profile</span></div>}
+                </div>
+              )}
+              <div style={{display:'flex',gap:8,marginBottom:12}}>
+                <button onClick={()=>setShowMsgComposer(true)} style={{flex:1,background:'rgba(191,215,48,0.1)',border:'1px solid rgba(191,215,48,0.3)',borderRadius:10,padding:'12px 8px',color:'var(--globant-green)',fontWeight:700,fontSize:13,cursor:'pointer'}}>✨ Message</button>
+                {ph && <button onClick={()=>openWA(selContact)} style={{flex:1,background:'rgba(37,211,102,0.1)',border:'1px solid rgba(37,211,102,0.3)',borderRadius:10,padding:'12px 8px',color:'#25D366',fontWeight:700,fontSize:13,cursor:'pointer'}}>💬 WA</button>}
+                {li && <button onClick={()=>openLI(selContact)} style={{flex:1,background:'rgba(10,102,194,0.1)',border:'1px solid rgba(10,102,194,0.3)',borderRadius:10,padding:'12px 8px',color:'#0A66C2',fontWeight:700,fontSize:13,cursor:'pointer'}}>in</button>}
+              </div>
+              {showMsgComposer && (
+                <div style={G.card}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:8,textTransform:'uppercase'}}>Channel</div>
+                  <div style={{display:'flex',gap:6,marginBottom:12}}>
+                    {['Email','WhatsApp','LinkedIn'].map(ch=>(
+                      <button key={ch} onClick={()=>setMsgChannel(ch)} style={{flex:1,padding:'8px 4px',border:`1px solid ${msgChannel===ch?'rgba(191,215,48,0.4)':'var(--globant-border)'}`,borderRadius:8,background:msgChannel===ch?'rgba(191,215,48,0.12)':'transparent',color:msgChannel===ch?'var(--globant-green)':'var(--globant-muted)',fontWeight:msgChannel===ch?700:400,fontSize:12,cursor:'pointer'}}>
+                        {ch==='Email'?'✉️':ch==='WhatsApp'?'💬':'in'} {ch}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={()=>generateMessage(selContact,contactAccount)} disabled={msgLoading} style={{...G.pbtn,marginBottom:msgText?12:0,opacity:msgLoading?0.6:1}}>{msgLoading?'⏳ Generating...':'✨ Generate'}</button>
+                  {msgText && (
+                    <div>
+                      <div style={{fontSize:13,lineHeight:1.6,color:'var(--globant-text)',margin:'12px 0',padding:'10px 0',borderTop:'1px solid var(--globant-border)',whiteSpace:'pre-wrap'}}>{msgText}</div>
+                      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                        <button onClick={copyMessage} style={{flex:1,background:msgCopied?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.06)',border:`1px solid ${msgCopied?'#4ade80':'var(--globant-border)'}`,borderRadius:8,padding:'9px',color:msgCopied?'#4ade80':'var(--globant-text)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{msgCopied?'✅ Copied!':'📋 Copy'}</button>
+                        {em && <button onClick={()=>openGmail(selContact,contactAccount)} style={{flex:1,background:'rgba(96,165,250,0.12)',border:'1px solid rgba(96,165,250,0.3)',borderRadius:8,padding:'9px',color:'#60a5fa',fontSize:12,fontWeight:600,cursor:'pointer'}}>📧 Gmail</button>}
+                        {ph && <button onClick={()=>openWA(selContact)} style={{flex:1,background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.3)',borderRadius:8,padding:'9px',color:'#25D366',fontSize:12,fontWeight:600,cursor:'pointer'}}>💬 WA</button>}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--globant-muted)' }}>
-                      <span>👥 {stkCount}</span>
-                      <span>📨 {touchCount}</span>
-                      {status && <span style={{ color: statusColor, fontWeight: 600 }}>{status}</span>}
+                  )}
+                </div>
+              )}
+              <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.5px'}}>Activity History</div>
+              {contactOutreach.length===0 && <div style={{...G.card,textAlign:'center',color:'var(--globant-muted)',fontSize:13}}>No activity yet.</div>}
+              {contactOutreach.map((o,i)=>{
+                const ch=(F(o,'Channel')||'email').toLowerCase();
+                const clr=chColor[F(o,'Channel')]||'var(--globant-muted)';
+                const ico=chIcon[F(o,'Channel')]||'📨';
+                const st=F(o,'Status')||'';
+                const sc=st==='Replied'?'#4ade80':st==='Meeting Scheduled'?'#a78bfa':st==='Bounced'?'#ef4444':null;
+                return (
+                  <div key={o.id||i} style={{display:'flex',gap:12,padding:'12px 0',borderBottom:i<contactOutreach.length-1?'1px solid var(--globant-border)':'none'}}>
+                    <div style={{width:34,height:34,borderRadius:8,background:clr+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>{ico}</div>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                        <span style={{fontSize:13,fontWeight:600}}>{F(o,'Channel')}</span>
+                        <span style={{fontSize:11,color:'var(--globant-muted)'}}>{o.fields?.Date?new Date(o.fields.Date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—'}</span>
+                      </div>
+                      {sc && <span style={{fontSize:10,color:sc,fontWeight:600}}>{st}</span>}
+                      {F(o,'Notes') && <div style={{fontSize:12,color:'var(--globant-muted)',marginTop:3,lineHeight:1.4}}>{F(o,'Notes')}</div>}
                     </div>
                   </div>
-                  <span style={{ color: 'var(--globant-muted)', fontSize: 22, flexShrink: 0 }}>›</span>
-                </div>
-              );
-            })}
-            {filteredAccounts.length === 0 && <div style={{ textAlign: 'center', color: 'var(--globant-muted)', padding: '40px 0', fontSize: 13 }}>No accounts found</div>}
+                );
+              })}
+            </div>
+            <BottomNav />
+          </div>
+        );
+      }
+
+      // ── Add Contact form ──
+      if (showAddContact) return (
+        <div style={G.wrap}>
+          <div style={G.topBar}>
+            <button onClick={()=>setShowAddContact(false)} style={{background:'none',border:'none',color:'var(--globant-green)',fontSize:24,cursor:'pointer',padding:'0 4px',lineHeight:1}}>‹</button>
+            <div style={{flex:1,fontWeight:700,fontSize:15}}>New Contact</div>
+          </div>
+          <div style={{padding:'16px'}}>
+            <div style={{...G.card,borderColor:'rgba(191,215,48,0.3)',background:'rgba(191,215,48,0.04)'}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--globant-green)',marginBottom:10}}>📷 Scan Business Card</div>
+              <div style={{display:'flex',gap:8}}>
+                <label style={{flex:1,background:'rgba(191,215,48,0.1)',border:'1px solid rgba(191,215,48,0.3)',borderRadius:10,padding:'12px',color:'var(--globant-green)',fontWeight:600,fontSize:13,cursor:'pointer',textAlign:'center',display:'block'}}>
+                  {cardScanLoading?'⏳ Scanning...':'📷 Camera'}
+                  <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={e=>e.target.files[0]&&scanCard(e.target.files[0])} disabled={cardScanLoading} />
+                </label>
+                <label style={{flex:1,background:'rgba(255,255,255,0.04)',border:'1px solid var(--globant-border)',borderRadius:10,padding:'12px',color:'var(--globant-text)',fontWeight:600,fontSize:13,cursor:'pointer',textAlign:'center',display:'block'}}>
+                  {cardScanLoading?'⏳ Scanning...':'🖼️ Upload'}
+                  <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>e.target.files[0]&&scanCard(e.target.files[0])} disabled={cardScanLoading} />
+                </label>
+              </div>
+              <div style={{fontSize:11,color:'var(--globant-muted)',marginTop:8,textAlign:'center'}}>AI extracts info automatically — review before saving.</div>
+            </div>
+            {[{k:'name',l:'First Name *',p:'Ana'},{k:'lastName',l:'Last Name',p:'García'},{k:'role',l:'Role',p:'CTO'},{k:'email',l:'Email',p:'ana@company.com',t:'email'},{k:'phone',l:'Phone',p:'+34...'},{k:'linkedin',l:'LinkedIn URL',p:'https://linkedin.com/in/...'}].map(f=>(
+              <div key={f.k} style={{marginBottom:12}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>{f.l}</div>
+                <input type={f.t||'text'} style={G.inp} placeholder={f.p} value={newContact[f.k]} onChange={e=>setNewContact(p=>({...p,[f.k]:e.target.value}))} />
+              </div>
+            ))}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Account</div>
+              <select style={G.inp} value={newContact.accountId} onChange={e=>setNewContact(p=>({...p,accountId:e.target.value}))}>
+                <option value="">No account</option>
+                {[...accounts].sort((a,b)=>(F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a=>(<option key={a.id} value={a.id}>{F(a,'Account Name')}</option>))}
+              </select>
+            </div>
+            <button onClick={saveContact} disabled={!newContact.name.trim()||savingContact} style={{...G.pbtn,opacity:!newContact.name.trim()||savingContact?0.6:1}}>{savingContact?'⏳ Saving...':'💾 Save Contact'}</button>
           </div>
         </div>
       );
 
-      // ── ACCOUNT DETAIL ──
-      const accName = F(selAcc, 'Account Name') || 'Account';
-      const accWebsite = F(selAcc, 'Website') || '';
-
-      return (
-        <div style={mS.wrap}>
-          {/* Top bar */}
-          <div style={mS.topBar}>
-            <button onClick={goBack} style={{ background: 'none', border: 'none', color: 'var(--globant-green)', fontSize: 24, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>‹</button>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{accName}</div>
-              <div style={{ display: 'flex', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
-                {F(selAcc, 'Industry') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', fontWeight: 600 }}>{F(selAcc, 'Industry')}</span>}
-                {F(selAcc, 'Country') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(244,114,182,0.15)', color: '#f472b6', fontWeight: 600 }}>{F(selAcc, 'Country')}</span>}
-                {F(selAcc, 'Tier') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontWeight: 600 }}>{F(selAcc, 'Tier')}</span>}
-                {F(selAcc, 'Status') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(74,222,128,0.15)', color: '#4ade80', fontWeight: 600 }}>{F(selAcc, 'Status')}</span>}
-              </div>
+      // ── Main screens ──
+      const renderInsights = () => (
+        <div>
+          <div style={G.topBar}>
+            <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#BFD730,#8fa824)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:14,color:'#1A1A2E',flexShrink:0}}>O</div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:15}}>Good {new Date().getHours()<12?'morning':new Date().getHours()<18?'afternoon':'evening'}, {CURRENT_USER?.name?.split(' ')[0]||'there'} 👋</div>
+              <div style={{fontSize:11,color:'var(--globant-muted)'}}>{new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</div>
             </div>
-            {accWebsite && (
-              <button onClick={() => window.open(accWebsite.startsWith('http') ? accWebsite : `https://${accWebsite}`, '_blank')}
-                style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.25)', borderRadius: 7, padding: '5px 10px', color: 'var(--globant-green)', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>🌐</button>
-            )}
+            <button onClick={logoutUser} style={{background:'none',border:'1px solid var(--globant-border)',borderRadius:6,padding:'5px 10px',color:'var(--globant-muted)',fontSize:11,cursor:'pointer'}}>↪</button>
           </div>
-
-          {/* Tab content */}
-          <div style={{ padding: '16px 16px 0' }}>
-
-            {/* ── SUMMARY TAB ── */}
-            {tab === 'summary' && (
-              <div>
-                {execSummary ? (
-                  <div style={mS.card}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📋 Executive Summary</div>
-                    {execSummary.split('\n').filter(l => l.trim()).map((line, i) => {
-                      const isHeader = line.startsWith('#') || /^[A-Z\s]{4,}:/.test(line);
-                      const clean = line.replace(/^#+\s*/, '').replace(/\*\*/g, '');
-                      return <div key={i} style={{ fontSize: 13, color: isHeader ? 'var(--globant-green)' : 'var(--globant-text)', fontWeight: isHeader ? 700 : 400, marginBottom: 4, lineHeight: 1.55 }}>{clean}</div>;
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ ...mS.card, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>No executive summary yet.<br/><span style={{ fontSize: 11 }}>Generate it from desktop first.</span></div>
-                )}
-                {newsAI && newsAI.length > 0 ? (
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📰 Latest News</div>
-                    {newsAI.map((item, i) => {
-                      const tagColors = { Funding: '#4ade80', Hiring: '#60a5fa', Expansion: '#a78bfa', Risk: '#f87171', Technology: '#fbbf24' };
-                      const color = tagColors[item.tag] || '#94a3b8';
-                      return (
-                        <div key={i} style={{ ...mS.card, borderLeft: `3px solid ${color}`, padding: '12px 14px' }}>
-                          {item.tag && <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 8, background: color + '20', color, fontWeight: 700, marginBottom: 6, display: 'inline-block' }}>{item.tag}</span>}
-                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
-                          {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5 }}>{item.body}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ ...mS.card, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>No news loaded yet.<br/><span style={{ fontSize: 11 }}>Generate from desktop first.</span></div>
-                )}
+          <div style={{padding:'16px 16px 0'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:20}}>
+              {[{l:'Accounts',v:accounts.length,c:'#60a5fa'},{l:'Contacts',v:stakeholders.length,c:'#f472b6'},{l:'Activities',v:outreach.length,c:'var(--globant-green)'}].map(s=>(
+                <div key={s.l} style={{background:'var(--globant-card)',border:'1px solid var(--globant-border)',borderRadius:12,padding:'12px 10px',textAlign:'center'}}>
+                  <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:10,color:'var(--globant-muted)',marginTop:2}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.5px'}}>Recommendations</div>
+            {insights.length===0 && <div style={{...G.card,textAlign:'center',color:'var(--globant-muted)',fontSize:13,padding:'24px 16px'}}><div style={{fontSize:28,marginBottom:8}}>🎯</div>All caught up!</div>}
+            {insights.map((r,i)=>(
+              <div key={i} onClick={()=>setTab(r.dest)} style={{...G.card,borderLeft:`3px solid ${r.color}`,cursor:'pointer',display:'flex',alignItems:'flex-start',gap:12}}>
+                <span style={{fontSize:24,flexShrink:0}}>{r.icon}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:r.color,marginBottom:3}}>{r.title}</div>
+                  <div style={{fontSize:12,color:'var(--globant-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.sub}</div>
+                </div>
+                <span style={{color:'var(--globant-muted)',fontSize:18,flexShrink:0}}>›</span>
               </div>
-            )}
-
-            {/* ── PEOPLE TAB ── */}
-            {tab === 'people' && (
+            ))}
+            {outreach.length>0 && (
               <div>
-                {stkEngagement.length === 0 && <div style={{ ...mS.card, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>No contacts for this account.</div>}
-                {stkEngagement.map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
-                  const influence = F(s, 'Level of Influence') || '';
-                  const ic = influence === 'High' || influence === 'Decision Maker' ? '#ef4444' : influence === 'Influencer' || influence === 'Champion' ? '#f472b6' : influence === 'Medium' ? '#fbbf24' : '#94a3b8';
-                  const statusColor = hasMeeting ? '#a78bfa' : hasReplied ? '#4ade80' : totalTouches > 0 ? '#fbbf24' : '#ef4444';
-                  const statusLabel = hasMeeting ? '📅 Meeting' : hasReplied ? '✅ Replied' : totalTouches > 0 ? `⏳ ${totalTouches}x sent` : '⚠️ No contact';
-                  const initials = sName.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase();
-                  const email = F(s, 'Email'); const phone = F(s, 'Phone number'); const linkedin = F(s, 'LinkedIn');
+                <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:10,marginTop:8,textTransform:'uppercase',letterSpacing:'0.5px'}}>Recent Activity</div>
+                {[...outreach].sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0)).slice(0,3).map((o,i)=>{
+                  const clr=chColor[F(o,'Channel')]||'var(--globant-muted)'; const ico=chIcon[F(o,'Channel')]||'📨';
+                  const acc=accounts.find(a=>linkedIds(o,'Account').includes(a.id));
+                  const stk=stakeholders.find(s=>linkedIds(o,'Stakeholder').includes(s.id));
+                  const sn=stk?[F(stk,'Name'),F(stk,'Lart name')].filter(Boolean).join(' '):null;
                   return (
-                    <div key={s.id} style={mS.card}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                        <div style={{ width: 44, height: 44, borderRadius: '50%', background: `linear-gradient(135deg, ${ic}30, ${ic}10)`, border: `2px solid ${ic}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: ic, flexShrink: 0 }}>{initials || '?'}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>{sName}</div>
-                          <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{F(s, 'Role') || '—'}</div>
-                        </div>
-                        {influence && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: ic + '18', color: ic, fontWeight: 600 }}>{influence}</span>}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
-                        {daysSince !== null && <span style={{ fontSize: 11, color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : 'var(--globant-muted)' }}>Last: {daysSince}d ago</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {email && <button onClick={() => { setTab('message'); setMsgStk(s); setMsgChannel('Email'); }} style={{ flex: 1, minWidth: 80, background: 'rgba(191,215,48,0.1)', border: '1px solid rgba(191,215,48,0.25)', borderRadius: 8, padding: '8px', color: 'var(--globant-green)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✉️ Message</button>}
-                        {phone && <button onClick={() => openWhatsApp(s)} style={{ flex: 1, minWidth: 60, background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.25)', borderRadius: 8, padding: '8px', color: '#25D366', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>💬 WA</button>}
-                        {linkedin && <button onClick={() => openLinkedIn(s)} style={{ flex: 1, minWidth: 50, background: 'rgba(10,102,194,0.1)', border: '1px solid rgba(10,102,194,0.25)', borderRadius: 8, padding: '8px', color: '#0A66C2', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>in</button>}
-                        <button onClick={() => { setTab('log'); setLogStk(s); setLogMode('call'); }} style={{ flex: 1, minWidth: 60, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8, padding: '8px', color: '#fbbf24', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📞 Log</button>
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:i<2?'1px solid var(--globant-border)':'none'}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:clr+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>{ico}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sn||'—'}</div>
+                        <div style={{fontSize:11,color:'var(--globant-muted)'}}>{F(o,'Channel')} · {acc?F(acc,'Account Name'):''} · {o.fields?.Date?new Date(o.fields.Date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—'}</div>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-
-            {/* ── MESSAGE TAB ── */}
-            {tab === 'message' && (
-              <div>
-                <div style={mS.card}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Contact</div>
-                  <select style={mS.input} value={msgStk?.id || ''} onChange={e => setMsgStk(accStk.find(s => s.id === e.target.value) || null)}>
-                    <option value="">Select contact...</option>
-                    {accStk.map(s => { const sn = [F(s, 'Name'), F(s, 'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn} — {F(s, 'Role') || '?'}</option>; })}
-                  </select>
-                </div>
-                <div style={mS.card}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Channel</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {['Email', 'WhatsApp', 'LinkedIn'].map(ch => (
-                      <button key={ch} onClick={() => setMsgChannel(ch)}
-                        style={{ flex: 1, padding: '10px 4px', border: `1px solid ${msgChannel === ch ? 'rgba(191,215,48,0.4)' : 'var(--globant-border)'}`, borderRadius: 8, background: msgChannel === ch ? 'rgba(191,215,48,0.12)' : 'transparent', color: msgChannel === ch ? 'var(--globant-green)' : 'var(--globant-muted)', fontWeight: msgChannel === ch ? 700 : 400, fontSize: 12, cursor: 'pointer' }}>
-                        {ch === 'Email' ? '✉️' : ch === 'WhatsApp' ? '💬' : 'in'} {ch}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <button onClick={generateMessage} disabled={!msgStk || msgLoading}
-                  style={{ ...mS.primaryBtn, marginBottom: 14, opacity: !msgStk || msgLoading ? 0.6 : 1 }}>
-                  {msgLoading ? '⏳ Generating...' : '✨ Generate Message'}
-                </button>
-                {msgText && (
-                  <div style={mS.card}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Generated Message</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--globant-text)', marginBottom: 14, whiteSpace: 'pre-wrap' }}>{msgText}</div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button onClick={copyMessage} style={{ flex: 1, background: msgCopied ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)', border: `1px solid ${msgCopied ? '#4ade80' : 'var(--globant-border)'}`, borderRadius: 8, padding: '10px', color: msgCopied ? '#4ade80' : 'var(--globant-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                        {msgCopied ? '✅ Copied!' : '📋 Copy'}
-                      </button>
-                      {F(msgStk, 'Email') && <button onClick={openGmail} style={{ flex: 1, background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 8, padding: '10px', color: '#60a5fa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📧 Gmail</button>}
-                      {F(msgStk, 'Phone number') && <button onClick={() => openWhatsApp()} style={{ flex: 1, background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 8, padding: '10px', color: '#25D366', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>💬 WhatsApp</button>}
-                      {F(msgStk, 'LinkedIn') && <button onClick={() => openLinkedIn()} style={{ flex: 1, background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.3)', borderRadius: 8, padding: '10px', color: '#0A66C2', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>in LinkedIn</button>}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── LOG TAB ── */}
-            {tab === 'log' && (
-              <div>
-                {logDone && (
-                  <div style={{ ...mS.card, textAlign: 'center', background: 'rgba(74,222,128,0.08)', borderColor: '#4ade80' }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-                    <div style={{ fontWeight: 700, color: '#4ade80', marginBottom: 4 }}>Activity logged!</div>
-                    <button onClick={() => setLogDone(false)} style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}>Log another</button>
-                  </div>
-                )}
-                {!logDone && !logMode && (
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>What happened?</div>
-                    <button onClick={() => setLogMode('call')} style={{ ...mS.card, display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px', cursor: 'pointer', border: '1px solid rgba(251,191,36,0.25)', width: '100%', textAlign: 'left', marginBottom: 10 }}>
-                      <span style={{ fontSize: 30 }}>📞</span>
-                      <div><div style={{ fontWeight: 700, fontSize: 15, color: '#fbbf24' }}>Log a Call</div><div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 2 }}>Record a phone conversation</div></div>
-                    </button>
-                    <button onClick={() => setLogMode('meeting')} style={{ ...mS.card, display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px', cursor: 'pointer', border: '1px solid rgba(96,165,250,0.25)', width: '100%', textAlign: 'left' }}>
-                      <span style={{ fontSize: 30 }}>📅</span>
-                      <div><div style={{ fontWeight: 700, fontSize: 15, color: '#60a5fa' }}>Log a Meeting</div><div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 2 }}>Record a meeting or schedule one</div></div>
-                    </button>
-                  </div>
-                )}
-                {!logDone && logMode && (
-                  <div>
-                    <button onClick={() => setLogMode(null)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', fontSize: 13, cursor: 'pointer', marginBottom: 12, padding: 0 }}>‹ Back</button>
-                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: logMode === 'call' ? '#fbbf24' : '#60a5fa' }}>{logMode === 'call' ? '📞 Log Call' : '📅 Log Meeting'}</div>
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 5, textTransform: 'uppercase' }}>Contact *</div>
-                      <select style={mS.input} value={logStk?.id || ''} onChange={e => setLogStk(accStk.find(s => s.id === e.target.value) || null)}>
-                        <option value="">Select contact...</option>
-                        {accStk.map(s => { const sn = [F(s, 'Name'), F(s, 'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn} — {F(s, 'Role') || '?'}</option>; })}
-                      </select>
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 5, textTransform: 'uppercase' }}>Date</div>
-                      <input type="date" style={mS.input} value={logDate} onChange={e => setLogDate(e.target.value)} />
-                    </div>
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 5, textTransform: 'uppercase' }}>Notes</div>
-                      <textarea style={{ ...mS.input, minHeight: 90, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-                        placeholder={logMode === 'call' ? 'What did you discuss? Follow-ups?' : 'Agenda, outcomes, next steps...'}
-                        value={logNotes} onChange={e => setLogNotes(e.target.value)} />
-                    </div>
-                    <button onClick={logActivity} disabled={!logStk || logLoading} style={{ ...mS.primaryBtn, marginBottom: 10, opacity: !logStk || logLoading ? 0.6 : 1 }}>
-                      {logLoading ? '⏳ Saving...' : '💾 Save Activity'}
-                    </button>
-                    {logMode === 'meeting' && (
-                      <button onClick={openCalendar} style={{ width: '100%', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: 10, padding: '12px', color: '#60a5fa', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-                        📅 Add to Google Calendar
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Bottom nav */}
-          <div style={mS.bottomNav}>
-            {[['summary', '📊', 'Summary'], ['people', '👥', 'People'], ['message', '✉️', 'Message'], ['log', '📋', 'Log']].map(([key, icon, label]) => (
-              <button key={key} onClick={() => setTab(key)} style={mS.tabBtn(tab === key)}>
-                <span style={{ fontSize: 20 }}>{icon}</span>
-                <span>{label}</span>
-              </button>
-            ))}
           </div>
         </div>
       );
+
+      const renderContacts = () => (
+        <div>
+          <div style={G.topBar}>
+            <div style={{flex:1,fontWeight:700,fontSize:16}}>Contacts</div>
+            <button onClick={()=>setShowAddContact(true)} style={{background:'rgba(191,215,48,0.12)',border:'1px solid rgba(191,215,48,0.3)',borderRadius:8,padding:'6px 12px',color:'var(--globant-green)',fontWeight:700,fontSize:13,cursor:'pointer'}}>➕ Add</button>
+          </div>
+          <div style={{padding:'14px 16px 8px'}}>
+            <input style={G.inp} placeholder={`🔍 Search ${stakeholders.length} contacts...`} value={contactSearch} onChange={e=>setContactSearch(e.target.value)} />
+          </div>
+          <div style={{padding:'0 16px'}}>
+            {!contactSearch.trim() && <div style={{textAlign:'center',color:'var(--globant-muted)',padding:'40px 0',fontSize:13}}><div style={{fontSize:32,marginBottom:10}}>👥</div>Type to search</div>}
+            {filteredContacts.map(s=>{
+              const sn=[F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' ')||'Unknown';
+              const inf=F(s,'Level of Influence')||''; const ic=iColor(inf);
+              const ini=sn.split(' ').filter(Boolean).map(n=>n[0]).slice(0,2).join('').toUpperCase();
+              const acc=accounts.find(a=>linkedIds(s,'Account').includes(a.id));
+              const so=outreach.filter(o=>linkedIds(o,'Stakeholder').includes(s.id)).sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0));
+              const ds=so[0]?.fields?.Date?Math.floor((Date.now()-new Date(so[0].fields.Date))/86400000):null;
+              return (
+                <div key={s.id} onClick={()=>setSelContact(s)} style={{...G.card,display:'flex',alignItems:'center',gap:12,cursor:'pointer',padding:'12px 14px'}}>
+                  <div style={{width:40,height:40,borderRadius:'50%',background:`linear-gradient(135deg,${ic}30,${ic}10)`,border:`2px solid ${ic}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:ic,flexShrink:0}}>{ini||'?'}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:14}}>{sn}</div>
+                    <div style={{fontSize:12,color:'var(--globant-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{F(s,'Role')||'—'}{acc?` · ${F(acc,'Account Name')}`:''}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    {ds!==null && <div style={{fontSize:11,color:ds>14?'#ef4444':ds>7?'#fbbf24':'var(--globant-muted)'}}>{ds}d</div>}
+                    {inf && <div style={{fontSize:10,color:ic,fontWeight:600}}>{inf}</div>}
+                  </div>
+                </div>
+              );
+            })}
+            {contactSearch.trim()&&filteredContacts.length===0 && <div style={{textAlign:'center',color:'var(--globant-muted)',padding:'30px 0',fontSize:13}}>No contacts found</div>}
+          </div>
+        </div>
+      );
+
+      const renderAccounts = () => (
+        <div>
+          <div style={G.topBar}><div style={{flex:1,fontWeight:700,fontSize:16}}>Accounts</div></div>
+          <div style={{padding:'14px 16px 8px'}}>
+            <input style={G.inp} placeholder={`🔍 Search ${accounts.length} accounts...`} value={accSearch} onChange={e=>setAccSearch(e.target.value)} />
+          </div>
+          <div style={{padding:'0 16px'}}>
+            {!accSearch.trim() && <div style={{textAlign:'center',color:'var(--globant-muted)',padding:'40px 0',fontSize:13}}><div style={{fontSize:32,marginBottom:10}}>🏢</div>Type to search</div>}
+            {filteredAccounts.map(a=>{
+              const name=F(a,'Account Name')||'Unnamed'; const status=F(a,'Status')||''; const tier=F(a,'Tier')||''; const industry=F(a,'Industry')||'';
+              const sc=status==='Active'?'#4ade80':status==='Won'?'#BFD730':status==='Lost'?'#ef4444':'#60a5fa';
+              const ao=[...outreach].filter(o=>linkedIds(o,'Account').includes(a.id)).sort((x,y)=>new Date(y.fields?.Date||0)-new Date(x.fields?.Date||0));
+              const last=ao[0]; const ds=last?.fields?.Date?Math.floor((Date.now()-new Date(last.fields.Date))/86400000):null;
+              const sum=(localStorage.getItem(`oike_exec_${a.id}`)||'').split('
+').filter(l=>l.trim()&&!l.startsWith('#')).slice(0,2).join(' ').replace(/\*\*/g,'').slice(0,160);
+              const stkCnt=stakeholders.filter(s=>linkedIds(s,'Account').includes(a.id)).length;
+              return (
+                <div key={a.id} style={G.card}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                    <div style={{fontWeight:700,fontSize:15,flex:1,paddingRight:8}}>{name}</div>
+                    {status && <span style={{fontSize:10,padding:'3px 8px',borderRadius:10,background:sc+'18',color:sc,fontWeight:600,flexShrink:0}}>{status}</span>}
+                  </div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:sum?10:8}}>
+                    {industry && <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(96,165,250,0.15)',color:'#60a5fa',fontWeight:600}}>{industry}</span>}
+                    {tier && <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(251,191,36,0.15)',color:'#fbbf24',fontWeight:600}}>{tier}</span>}
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(244,114,182,0.12)',color:'#f472b6',fontWeight:600}}>👥 {stkCnt}</span>
+                  </div>
+                  {sum && <div style={{fontSize:12,color:'var(--globant-muted)',lineHeight:1.5,marginBottom:8}}>{sum}{sum.length>=160?'...':''}</div>}
+                  <div style={{fontSize:11,borderTop:'1px solid var(--globant-border)',paddingTop:8,color:ds!==null&&ds>14?'#ef4444':ds!==null&&ds>7?'#fbbf24':'var(--globant-muted)'}}>
+                    {last?`Last: ${F(last,'Channel')} · ${ds}d ago${F(last,'Notes')?' · '+F(last,'Notes').slice(0,40):'`+'`'+`}`:'No activity yet'}
+                  </div>
+                </div>
+              );
+            })}
+            {accSearch.trim()&&filteredAccounts.length===0 && <div style={{textAlign:'center',color:'var(--globant-muted)',padding:'30px 0',fontSize:13}}>No accounts found</div>}
+          </div>
+        </div>
+      );
+
+      const activityFeed = [...outreach].filter(o=>{
+        if(actFilter==='all') return true;
+        const ch=(F(o,'Channel')||'').toLowerCase();
+        if(actFilter==='calls') return ch==='call';
+        if(actFilter==='meetings') return ch==='meeting';
+        if(actFilter==='messages') return ['email','linkedin','whatsapp'].includes(ch);
+        return true;
+      }).sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0)).slice(0,40);
+
+      const renderActivity = () => (
+        <div>
+          <div style={G.topBar}>
+            <div style={{flex:1,fontWeight:700,fontSize:16}}>Activity</div>
+            <button onClick={()=>setShowLogForm(true)} style={{background:'rgba(191,215,48,0.12)',border:'1px solid rgba(191,215,48,0.3)',borderRadius:8,padding:'6px 12px',color:'var(--globant-green)',fontWeight:700,fontSize:13,cursor:'pointer'}}>➕ Log</button>
+          </div>
+          {showLogForm && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:200,display:'flex',alignItems:'flex-end'}}>
+              <div style={{background:'var(--globant-card)',borderRadius:'16px 16px 0 0',padding:'20px 16px',width:'100%',boxSizing:'border-box',maxHeight:'85vh',overflowY:'auto'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                  <div style={{fontWeight:700,fontSize:16}}>Log Activity</div>
+                  <button onClick={()=>setShowLogForm(false)} style={{background:'none',border:'none',color:'var(--globant-muted)',fontSize:20,cursor:'pointer'}}>✕</button>
+                </div>
+                <div style={{display:'flex',gap:8,marginBottom:14}}>
+                  {[['call','📞 Call','#fbbf24'],['meeting','📅 Meeting','#60a5fa'],['email','✉️ Email','#4ade80']].map(([t,lbl,c])=>(
+                    <button key={t} onClick={()=>setLogType(t)} style={{flex:1,padding:'10px 4px',border:`1px solid ${logType===t?c:'var(--globant-border)'}`,borderRadius:8,background:logType===t?c+'18':'transparent',color:logType===t?c:'var(--globant-muted)',fontWeight:logType===t?700:400,fontSize:12,cursor:'pointer'}}>{lbl}</button>
+                  ))}
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Account *</div>
+                  <select style={G.inp} value={logAccId} onChange={e=>{setLogAccId(e.target.value);setLogStkId('');}}>
+                    <option value="">Select account...</option>
+                    {[...accounts].sort((a,b)=>(F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a=>(<option key={a.id} value={a.id}>{F(a,'Account Name')}</option>))}
+                  </select>
+                </div>
+                {logAccId && (
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Contact</div>
+                    <select style={G.inp} value={logStkId} onChange={e=>setLogStkId(e.target.value)}>
+                      <option value="">No specific contact</option>
+                      {stakeholders.filter(s=>linkedIds(s,'Account').includes(logAccId)).map(s=>{ const sn=[F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn}</option>; })}
+                    </select>
+                  </div>
+                )}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Date</div>
+                  <input type="date" style={G.inp} value={logDate} onChange={e=>setLogDate(e.target.value)} />
+                </div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Notes</div>
+                  <textarea style={{...G.inp,minHeight:80,resize:'vertical',fontFamily:'inherit',lineHeight:1.5}} placeholder="What happened? Next steps?" value={logNotes} onChange={e=>setLogNotes(e.target.value)} />
+                </div>
+                <button onClick={logActivityNew} disabled={!logAccId||logLoading} style={{...G.pbtn,marginBottom:logType==='meeting'?10:0,opacity:!logAccId||logLoading?0.6:1}}>{logLoading?'⏳ Saving...':'💾 Save'}</button>
+                {logType==='meeting' && <button onClick={()=>openCalendar(logAccId)} style={{width:'100%',background:'rgba(96,165,250,0.1)',border:'1px solid rgba(96,165,250,0.25)',borderRadius:10,padding:'12px',color:'#60a5fa',fontWeight:600,fontSize:14,cursor:'pointer'}}>📅 Add to Google Calendar</button>}
+              </div>
+            </div>
+          )}
+          <div style={{padding:'12px 16px 0',display:'flex',gap:8,overflowX:'auto'}}>
+            {[['all','All'],['calls','📞 Calls'],['meetings','📅 Meetings'],['messages','✉️ Messages']].map(([k,lbl])=>(
+              <button key={k} onClick={()=>setActFilter(k)} style={{padding:'6px 14px',border:`1px solid ${actFilter===k?'rgba(191,215,48,0.4)':'var(--globant-border)'}`,borderRadius:20,background:actFilter===k?'rgba(191,215,48,0.12)':'transparent',color:actFilter===k?'var(--globant-green)':'var(--globant-muted)',fontWeight:actFilter===k?700:400,fontSize:12,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{padding:'12px 16px 0'}}>
+            {activityFeed.length===0 && <div style={{...G.card,textAlign:'center',color:'var(--globant-muted)',fontSize:13}}>No activity logged yet.</div>}
+            {activityFeed.map((o,i)=>{
+              const clr=chColor[F(o,'Channel')]||'var(--globant-muted)'; const ico=chIcon[F(o,'Channel')]||'📨';
+              const acc=accounts.find(a=>linkedIds(o,'Account').includes(a.id));
+              const stk=stakeholders.find(s=>linkedIds(o,'Stakeholder').includes(s.id));
+              const sn=stk?[F(stk,'Name'),F(stk,'Lart name')].filter(Boolean).join(' '):null;
+              const st=F(o,'Status')||''; const sc=st==='Replied'?'#4ade80':st==='Meeting Scheduled'?'#a78bfa':st==='Bounced'?'#ef4444':null;
+              return (
+                <div key={o.id||i} style={{display:'flex',gap:12,padding:'12px 0',borderBottom:i<activityFeed.length-1?'1px solid var(--globant-border)':'none'}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:clr+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,border:`1px solid ${clr}30`}}>{ico}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+                      <span style={{fontSize:13,fontWeight:700,color:clr}}>{F(o,'Channel')}</span>
+                      <span style={{fontSize:11,color:'var(--globant-muted)'}}>{o.fields?.Date?new Date(o.fields.Date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—'}</span>
+                    </div>
+                    <div style={{fontSize:12,color:'var(--globant-muted)',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sn&&<span style={{color:'var(--globant-text)'}}>{sn} · </span>}{acc?F(acc,'Account Name'):''}</div>
+                    {sc && <span style={{fontSize:10,color:sc,fontWeight:600}}>{st}</span>}
+                    {F(o,'Notes') && <div style={{fontSize:12,color:'var(--globant-muted)',marginTop:3,lineHeight:1.4}}>{F(o,'Notes').slice(0,80)}{F(o,'Notes').length>80?'...':''}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+
+      return (
+        <div style={G.wrap}>
+          {tab==='insights' && renderInsights()}
+          {tab==='contacts' && renderContacts()}
+          {tab==='accounts' && renderAccounts()}
+          {tab==='activity' && renderActivity()}
+          <BottomNav />
+        </div>
+      );
     }
+
 
     // ============ MAIN APP ============
     function App() {
