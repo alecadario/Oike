@@ -7652,7 +7652,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const openWA = (stk) => {
         const phone = (F(stk,'Phone number')||'').replace(/[^0-9+]/g,'');
         if (!phone) return alert('No phone number.');
-        window.open(`https://wa.me/${phone}${msgText?'?text='+encodeURIComponent(msgText):'`+'`'+'`'+'}','_blank');
+        const waUrl = 'https://wa.me/' + phone + (msgText ? '?text=' + encodeURIComponent(msgText) : ''); window.open(waUrl, '_blank');
       };
       const openLI = (stk) => { const li = F(stk,'LinkedIn')||''; if(!li) return alert('No LinkedIn.'); window.open(li,'_blank'); };
       const openCalendar = (accId) => {
@@ -7968,7 +7968,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   </div>
                   {sum && <div style={{fontSize:12,color:'var(--globant-muted)',lineHeight:1.5,marginBottom:8}}>{sum}{sum.length>=160?'...':''}</div>}
                   <div style={{fontSize:11,borderTop:'1px solid var(--globant-border)',paddingTop:8,color:ds!==null&&ds>14?'#ef4444':ds!==null&&ds>7?'#fbbf24':'var(--globant-muted)'}}>
-                    {last?`Last: ${F(last,'Channel')} · ${ds}d ago${F(last,'Notes')?' · '+F(last,'Notes').slice(0,40):'`+'`'+`}`:'No activity yet'}
+                    {last?(()=>{ const notes=F(last,'Notes'); return 'Last: '+F(last,'Channel')+' · '+ds+'d ago'+(notes?' · '+notes.slice(0,40):''); })():'No activity yet'}
                   </div>
                 </div>
               );
