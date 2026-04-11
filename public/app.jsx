@@ -6267,6 +6267,114 @@ Return ONLY the JSON array, nothing else.`;
       );
     }
 
+    // ============ ICP ============
+    function ICPSection({ data }) {
+      const { icp = [], solutions = [] } = data;
+      const [selected, setSelected] = React.useState(null);
+
+      const tagStyle = (bg, color) => ({ display:'inline-block', padding:'2px 10px', borderRadius:12, fontSize:11, fontWeight:600, background:bg, color:color, marginRight:4, marginBottom:4 });
+      const fieldBlock = (label, value) => value ? (
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>{label}</div>
+          <div style={{ fontSize:13, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{value}</div>
+        </div>
+      ) : null;
+
+      return (
+        <div>
+          <div className="page-header">
+            <div>
+              <h1>🎯 ICP — Ideal Customer Profiles</h1>
+              <p style={{ color:'var(--globant-muted)', marginTop:4 }}>{icp.length} profiles defined</p>
+            </div>
+          </div>
+
+          {icp.length === 0 && (
+            <div className="card" style={{ textAlign:'center', padding:40 }}>
+              <div style={{ fontSize:32, marginBottom:12 }}>🎯</div>
+              <div style={{ color:'var(--globant-muted)', fontSize:14 }}>No ICP records found. Add profiles in Airtable to get started.</div>
+            </div>
+          )}
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:16 }}>
+            {icp.map(profile => {
+              const name = F(profile, 'Name') || 'Unnamed';
+              const industry = F(profile, 'Industry') || '';
+              const size = F(profile, 'Company Size') || '';
+              const country = F(profile, 'Country') || '';
+              const b2b = F(profile, 'B2B / B2C') || '';
+              const deal = F(profile, 'Average deal size') || '';
+              const pains = F(profile, 'Pains') || '';
+              const triggers = F(profile, 'Triggers (why now)') || '';
+              const priorities = F(profile, 'Priorities') || '';
+              const exclusions = F(profile, 'Exclusions (Who is not a fit)') || '';
+              const solNames = F(profile, 'Name (from Solutions)') || '';
+              const solNamesText = Array.isArray(solNames) ? solNames.join(', ') : String(solNames || '');
+              const isSelected = selected === profile.id;
+
+              return (
+                <div key={profile.id} className="card"
+                  style={{ cursor:'pointer', border: isSelected ? '1.5px solid var(--globant-green)' : '1px solid var(--globant-border)', transition:'border-color 0.15s' }}
+                  onClick={() => setSelected(isSelected ? null : profile.id)}>
+
+                  {/* Header */}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+                    <div>
+                      <div style={{ fontSize:16, fontWeight:800, color:'var(--globant-text)', marginBottom:4 }}>{name}</div>
+                      <div style={{ fontSize:12, color:'var(--globant-muted)' }}>{industry}</div>
+                    </div>
+                    {b2b && <span style={tagStyle('rgba(191,215,48,0.15)', 'var(--globant-green)')}>{b2b}</span>}
+                  </div>
+
+                  {/* Quick tags */}
+                  <div style={{ marginBottom:12 }}>
+                    {size && <span style={tagStyle('rgba(96,165,250,0.12)', '#60a5fa')}>{size}</span>}
+                    {country && <span style={tagStyle('rgba(251,191,36,0.12)', '#fbbf24')}>{country}</span>}
+                    {deal && <span style={tagStyle('rgba(74,222,128,0.12)', '#4ade80')}>💰 {deal}</span>}
+                  </div>
+
+                  {/* Pains preview */}
+                  {pains && (
+                    <div style={{ fontSize:12, color:'var(--globant-muted)', lineHeight:1.5, marginBottom:8 }}>
+                      <span style={{ color:'#f87171', fontWeight:700 }}>Pain: </span>
+                      {pains.length > 100 ? pains.slice(0,100)+'...' : pains}
+                    </div>
+                  )}
+
+                  {/* Solutions linked */}
+                  {solNamesText && (
+                    <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:8 }}>
+                      <span style={{ fontWeight:600 }}>Solutions: </span>{solNamesText}
+                    </div>
+                  )}
+
+                  {/* Expand */}
+                  <div style={{ fontSize:11, color:'var(--globant-green)', fontWeight:600, marginTop:4 }}>
+                    {isSelected ? '▲ Show less' : '▼ Show full profile'}
+                  </div>
+
+                  {/* Expanded detail */}
+                  {isSelected && (
+                    <div style={{ marginTop:16, paddingTop:16, borderTop:'1px solid var(--globant-border)' }}>
+                      {fieldBlock('Triggers — Why now', triggers)}
+                      {fieldBlock('Priorities', priorities)}
+                      {fieldBlock('Full Pain Points', pains)}
+                      {exclusions && (
+                        <div style={{ marginBottom:14 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'#f87171', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>⛔ Exclusions — Who is NOT a fit</div>
+                          <div style={{ fontSize:13, color:'#f87171', lineHeight:1.6 }}>{exclusions}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     // ============ SOLUTIONS HUB ============
     function SolutionsHub({ data, api, onLogActivity, onAddRecord, onDeleteRecord, goToAccount }) {
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
@@ -7513,7 +7621,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       const [ready, setReady] = useState(false);
       const [page, setPage] = useState('overview');
-      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [] });
+      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
@@ -7558,8 +7666,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
@@ -7706,10 +7814,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         insights: <InsightsView data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} />,
+        icp: <ICPSection data={data} />,
       };
 
       const navItems = [
         { icon: '📊', label: 'Strategy Overview', key: 'overview' },
+        { icon: '🎯', label: 'ICP', key: 'icp' },
         { icon: '🛠️', label: 'Solutions Hub', key: 'solutionshub' },
         { icon: '🏢', label: 'Accounts', key: 'accounts' },
         { icon: '👤', label: 'Contacts', key: 'contacts' },
