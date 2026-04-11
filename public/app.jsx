@@ -3105,6 +3105,36 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           return next;
         });
       };
+      // ── MEDDPICC ──
+      const MEDDPICC_LS_KEY = 'oike_meddpicc';
+      const MEDDPICC_FIELDS = [
+        { key: 'metrics',         label: 'M — Metrics',          hint: 'What measurable value does the solution deliver? (ROI, cost savings, % improvement)' },
+        { key: 'economicBuyer',   label: 'E — Economic Buyer',   hint: 'Who has budget authority and can sign off?' },
+        { key: 'decisionCriteria',label: 'D — Decision Criteria', hint: 'How will they evaluate and compare options?' },
+        { key: 'decisionProcess', label: 'D — Decision Process',  hint: 'What is the internal approval process and timeline?' },
+        { key: 'identifyPain',    label: 'I — Identify Pain',    hint: 'What is the core problem they need to solve urgently?' },
+        { key: 'champion',        label: 'P — Champion',         hint: 'Who inside the account is advocating for you?' },
+        { key: 'competition',     label: 'C — Competition',      hint: 'Who else are they evaluating? What is your differentiator?' },
+        { key: 'compellingEvent', label: 'C — Compelling Event', hint: 'Is there a deadline, event, or trigger creating urgency?' },
+      ];
+      const [meddpiccData, setMeddpiccData] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(MEDDPICC_LS_KEY) || '{}'); } catch { return {}; }
+      });
+      const [loadingMeddpicc, setLoadingMeddpicc] = useState(false);
+      const [editingMeddpicc, setEditingMeddpicc] = useState(false);
+      const [meddpiccDraft, setMeddpiccDraft] = useState({});
+      const meddpiccEntry = selectedAccountId ? (meddpiccData[selectedAccountId] || null) : null;
+      const meddpiccValues = meddpiccEntry?.fields || {};
+      const meddpiccUpdatedAt = meddpiccEntry?.updatedAt || null;
+      const saveMeddpicc = (fields) => {
+        const updatedAt = new Date().toISOString();
+        setMeddpiccData(prev => {
+          const next = { ...prev, [selectedAccountId]: { fields, updatedAt } };
+          try { localStorage.setItem(MEDDPICC_LS_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      };
+
       const [historyStakeholder, setHistoryStakeholder] = useState(null);
       const [editingNotes, setEditingNotes] = useState(false);
       const [notesValue, setNotesValue] = useState('');
@@ -3360,6 +3390,52 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         setBulkPainLoading(false);
         setBulkPainProgress('');
         if (onLogActivity) onLogActivity();
+      };
+
+      // Generate MEDDPICC
+      const generateMeddpicc = async () => {
+        setLoadingMeddpicc(true);
+        try {
+          const newsStr = newsLines.slice(0, 5).join('\n') || 'No recent news';
+          const stksStr = accountStakeholders.map(s => `- ${F(s,'Name')} ${F(s,'Lart name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}`).join('\n') || 'No stakeholders mapped';
+          const oppsStr = opps.map(o => `- ${F(o,'Deal/Opp name')}: Stage=${F(o,'Stage')}, Value=${o.fields?.['Value']||'N/A'}`).join('\n') || 'No opportunities';
+          const prompt = `You are a senior B2B sales strategist. Based on the account context below, fill out a MEDDPICC qualification framework. Be specific and practical — use names, data, and signals from the context. If information is not available, write "Unknown — needs discovery" for that field.
+
+ACCOUNT: ${name}
+INDUSTRY: ${F(account,'Industry')||'N/A'}
+COUNTRY: ${F(account,'Country')||'N/A'}
+TIER: ${F(account,'Tier')||'N/A'}
+RECENT NEWS:
+${newsStr}
+STAKEHOLDERS:
+${stksStr}
+OPPORTUNITIES:
+${oppsStr}
+INTEL NOTES: ${intelNotes||'None'}
+SELLER COMPANY: ${COMPANY_PROFILE.companyName} — ${COMPANY_PROFILE.services}
+
+Return ONLY a valid JSON object with exactly these keys (no markdown, no explanation):
+{
+  "metrics": "...",
+  "economicBuyer": "...",
+  "decisionCriteria": "...",
+  "decisionProcess": "...",
+  "identifyPain": "...",
+  "champion": "...",
+  "competition": "...",
+  "compellingEvent": "..."
+}`;
+          const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 800 });
+          let parsed;
+          try {
+            const jsonMatch = raw.match(/\{[\s\S]*\}/);
+            parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+          } catch { parsed = {}; MEDDPICC_FIELDS.forEach(f => { parsed[f.key] = raw; }); }
+          saveMeddpicc(parsed);
+          setEditingMeddpicc(false);
+        } catch(e) {
+          console.error(e); alert('Failed to generate MEDDPICC: ' + (e.message||'unknown error'));
+        } finally { setLoadingMeddpicc(false); }
       };
 
       // Generate Executive Summary
@@ -4280,6 +4356,67 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       );
                     })()}
                   </div>
+                  {/* ── MEDDPICC CARD ── */}
+                  <div className="card" style={{ borderLeft: '3px solid #f472b6' }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h3>🎯 MEDDPICC</h3>
+                        {meddpiccUpdatedAt && (
+                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>
+                            Last updated: {new Date(meddpiccUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {Object.keys(meddpiccValues).length > 0 && !editingMeddpicc && (
+                          <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
+                            onClick={() => { setMeddpiccDraft({...meddpiccValues}); setEditingMeddpicc(true); }}>
+                            ✏️ Edit
+                          </button>
+                        )}
+                        {editingMeddpicc && (
+                          <>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingMeddpicc(false)}>Cancel</button>
+                            <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                              onClick={() => { saveMeddpicc(meddpiccDraft); setEditingMeddpicc(false); }}>
+                              💾 Save
+                            </button>
+                          </>
+                        )}
+                        <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(244,114,182,0.15)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.3)' }}
+                          onClick={generateMeddpicc} disabled={loadingMeddpicc}>
+                          {loadingMeddpicc ? '⏳ Generating...' : Object.keys(meddpiccValues).length > 0 ? '🔄 Regenerate' : '✨ Generate with AI'}
+                        </button>
+                      </div>
+                    </div>
+                    {Object.keys(meddpiccValues).length === 0 && !loadingMeddpicc && (
+                      <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '8px 0' }}>
+                        Generate a MEDDPICC qualification using account context — news, stakeholders, opportunities, and intel notes.
+                      </p>
+                    )}
+                    {Object.keys(meddpiccValues).length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                        {MEDDPICC_FIELDS.map(f => (
+                          <div key={f.key} style={{ borderLeft: '2px solid rgba(244,114,182,0.25)', paddingLeft: 10 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: '#f472b6', marginBottom: 3 }}>{f.label}</div>
+                            {editingMeddpicc ? (
+                              <textarea
+                                style={{ width: '100%', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '6px 8px', resize: 'vertical', minHeight: 60, lineHeight: 1.5 }}
+                                value={meddpiccDraft[f.key] || ''}
+                                onChange={e => setMeddpiccDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                placeholder={f.hint}
+                              />
+                            ) : (
+                              <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                                {meddpiccValues[f.key] || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Not defined</span>}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
                     <div className="card-header">
                       <h3>📝 Intel Notes</h3>
