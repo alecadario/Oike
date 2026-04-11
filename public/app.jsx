@@ -7545,9 +7545,432 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
     }
 
+    // ============ MOBILE APP ============
+    function MobileApp({ data, api, addToData }) {
+      const [view, setView] = useState('list');
+      const [selAcc, setSelAcc] = useState(null);
+      const [tab, setTab] = useState('summary');
+      const [search, setSearch] = useState('');
+
+      // Message tab state
+      const [msgStk, setMsgStk] = useState(null);
+      const [msgChannel, setMsgChannel] = useState('Email');
+      const [msgText, setMsgText] = useState('');
+      const [msgLoading, setMsgLoading] = useState(false);
+      const [msgCopied, setMsgCopied] = useState(false);
+
+      // Log tab state
+      const [logMode, setLogMode] = useState(null);
+      const [logStk, setLogStk] = useState(null);
+      const [logNotes, setLogNotes] = useState('');
+      const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+      const [logLoading, setLogLoading] = useState(false);
+      const [logDone, setLogDone] = useState(false);
+
+      const { accounts, stakeholders, outreach } = data;
+
+      const filteredAccounts = useMemo(() =>
+        accounts
+          .filter(a => !search || (F(a, 'Account Name') || '').toLowerCase().includes(search.toLowerCase()))
+          .sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || '')),
+        [accounts, search]
+      );
+
+      const accStk = useMemo(() =>
+        selAcc ? stakeholders.filter(s => linkedIds(s, 'Account').includes(selAcc.id)) : [],
+        [selAcc, stakeholders]
+      );
+
+      const accOutreach = useMemo(() =>
+        selAcc ? outreach.filter(o =>
+          linkedIds(o, 'Account').includes(selAcc.id) ||
+          accStk.some(s => linkedIds(o, 'Stakeholder').includes(s.id))
+        ) : [],
+        [selAcc, outreach, accStk]
+      );
+
+      const stkEngagement = useMemo(() => accStk.map(s => {
+        const touches = accOutreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id));
+        const hasReplied = touches.some(o => F(o, 'Status') === 'Replied');
+        const hasMeeting = touches.some(o => F(o, 'Status') === 'Meeting Scheduled');
+        const sorted = [...touches].sort((a, b) => new Date(b.fields?.Date || 0) - new Date(a.fields?.Date || 0));
+        const lastTouch = sorted[0];
+        const daysSince = lastTouch?.fields?.Date ? Math.floor((Date.now() - new Date(lastTouch.fields.Date)) / 86400000) : null;
+        const sName = [F(s, 'Name'), F(s, 'Lart name')].filter(Boolean).join(' ') || 'Unknown';
+        return { s, sName, hasReplied, hasMeeting, totalTouches: touches.length, lastTouch, daysSince };
+      }), [accStk, accOutreach]);
+
+      const openAccount = (acc) => {
+        setSelAcc(acc);
+        setView('detail');
+        setTab('summary');
+        setMsgStk(null);
+        setMsgText('');
+        setLogMode(null);
+        setLogDone(false);
+      };
+
+      const goBack = () => { setView('list'); setSelAcc(null); };
+
+      const execSummary = selAcc ? (localStorage.getItem(`oike_exec_${selAcc.id}`) || '') : '';
+      const newsRaw = selAcc ? localStorage.getItem(`oike_news_${selAcc.id}`) : null;
+      const newsAI = newsRaw ? (() => { try { return JSON.parse(newsRaw); } catch { return null; } })() : null;
+
+      const generateMessage = async () => {
+        if (!msgStk || !selAcc) return;
+        setMsgLoading(true); setMsgText(''); setMsgCopied(false);
+        try {
+          const stkName = [F(msgStk, 'Name'), F(msgStk, 'Lart name')].filter(Boolean).join(' ');
+          const pain = F(msgStk, 'Pain Points (Generated)') || F(msgStk, 'Pain points') || '';
+          const role = F(msgStk, 'Role') || '';
+          const accName = F(selAcc, 'Account Name') || '';
+          const prompt = `Write a short, personalized ${msgChannel} outreach message to ${stkName}, ${role} at ${accName}. Their known pain points: ${pain || 'not specified'}. Under 120 words. Be direct, no generic opener. Clear call to action.`;
+          const res = await fetch('/api/openai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+            body: JSON.stringify({ prompt, max_tokens: 250 })
+          });
+          const json = await res.json();
+          setMsgText(json.result || json.text || json.choices?.[0]?.message?.content || 'Could not generate message.');
+        } catch { setMsgText('Error generating. Try again.'); }
+        setMsgLoading(false);
+      };
+
+      const copyMessage = () => {
+        navigator.clipboard.writeText(msgText).then(() => { setMsgCopied(true); setTimeout(() => setMsgCopied(false), 2000); });
+      };
+
+      const openGmail = () => {
+        const email = F(msgStk, 'Email') || '';
+        const subject = encodeURIComponent(`Following up — ${F(selAcc, 'Account Name') || ''}`);
+        window.open(`https://mail.google.com/mail/?view=cm&to=${email}&su=${subject}&body=${encodeURIComponent(msgText)}`, '_blank');
+      };
+
+      const openWhatsApp = (stkOverride) => {
+        const stk = stkOverride || msgStk;
+        const phone = (F(stk, 'Phone number') || '').replace(/[^0-9+]/g, '');
+        if (!phone) return alert('No phone number for this contact.');
+        const text = msgText || '';
+        window.open(`https://wa.me/${phone}${text ? '?text=' + encodeURIComponent(text) : ''}`, '_blank');
+      };
+
+      const openLinkedIn = (stkOverride) => {
+        const li = F(stkOverride || msgStk, 'LinkedIn') || '';
+        if (!li) return alert('No LinkedIn URL for this contact.');
+        window.open(li, '_blank');
+      };
+
+      const openCalendar = () => {
+        const title = encodeURIComponent(`Meeting — ${F(selAcc, 'Account Name') || ''}`);
+        const dateStr = (logDate || new Date().toISOString().split('T')[0]).replace(/-/g, '');
+        const stkName = logStk ? [F(logStk, 'Name'), F(logStk, 'Lart name')].filter(Boolean).join(' ') : 'contact';
+        const notes = encodeURIComponent(logNotes || `Meeting with ${stkName} at ${F(selAcc, 'Account Name') || ''}`);
+        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateStr}/${dateStr}&details=${notes}`, '_blank');
+      };
+
+      const logActivity = async () => {
+        if (!logStk || !selAcc) return;
+        setLogLoading(true);
+        try {
+          const fields = {
+            'Channel': logMode === 'call' ? 'Call' : 'Meeting',
+            'Status': logMode === 'meeting' ? 'Meeting Scheduled' : 'Sent',
+            'Notes': logNotes || '',
+            'Date': logDate || new Date().toISOString().split('T')[0],
+            'Account': [selAcc.id],
+            'Stakeholder': [logStk.id],
+          };
+          const newRec = await api.createRecord(TABLE_IDS.outreach, fields);
+          if (newRec && addToData) addToData('outreach', { ...fields, id: newRec.id });
+          setLogDone(true); setLogMode(null); setLogNotes('');
+        } catch { alert('Error logging activity. Check connection.'); }
+        setLogLoading(false);
+      };
+
+      // ── Shared mobile styles ──
+      const mS = {
+        wrap: { minHeight: '100vh', background: 'var(--globant-bg)', color: 'var(--globant-text)', fontFamily: 'Inter, sans-serif', paddingBottom: 80 },
+        topBar: { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--globant-card)', borderBottom: '1px solid var(--globant-border)', position: 'sticky', top: 0, zIndex: 100 },
+        bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--globant-card)', borderTop: '1px solid var(--globant-border)', zIndex: 100 },
+        tabBtn: (active) => ({ flex: 1, padding: '10px 4px 12px', border: 'none', background: 'transparent', color: active ? 'var(--globant-green)' : 'var(--globant-muted)', cursor: 'pointer', fontSize: 10, fontWeight: active ? 700 : 500, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }),
+        card: { background: 'var(--globant-card)', border: '1px solid var(--globant-border)', borderRadius: 12, padding: '14px 16px', marginBottom: 12 },
+        input: { width: '100%', background: 'var(--globant-darker)', border: '1px solid var(--globant-border)', borderRadius: 8, padding: '10px 14px', color: 'var(--globant-text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' },
+        primaryBtn: { background: 'linear-gradient(135deg, rgba(191,215,48,0.2), rgba(191,215,48,0.08))', border: '1px solid rgba(191,215,48,0.35)', borderRadius: 10, padding: '13px 16px', color: 'var(--globant-green)', fontWeight: 700, fontSize: 14, cursor: 'pointer', width: '100%', textAlign: 'center' },
+      };
+
+      // ── ACCOUNT LIST ──
+      if (view === 'list') return (
+        <div style={mS.wrap}>
+          <div style={mS.topBar}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #BFD730, #8fa824)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, color: '#1A1A2E', flexShrink: 0 }}>O</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Oike</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{CURRENT_USER?.name || ''}</div>
+            </div>
+            <button onClick={logoutUser} style={{ background: 'none', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '5px 10px', color: 'var(--globant-muted)', fontSize: 11, cursor: 'pointer' }}>↪</button>
+          </div>
+          <div style={{ padding: '14px 16px 8px' }}>
+            <input style={mS.input} placeholder="🔍 Search accounts..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <div style={{ padding: '0 16px' }}>
+            {filteredAccounts.map(a => {
+              const name = F(a, 'Account Name') || 'Unnamed';
+              const industry = F(a, 'Industry') || '';
+              const country = F(a, 'Country') || '';
+              const status = F(a, 'Status') || '';
+              const tier = F(a, 'Tier') || '';
+              const stkCount = stakeholders.filter(s => linkedIds(s, 'Account').includes(a.id)).length;
+              const touchCount = outreach.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
+              const hasReply = outreach.filter(o => linkedIds(o, 'Account').includes(a.id)).some(o => F(o, 'Status') === 'Replied');
+              const urgencyColor = hasReply ? '#4ade80' : touchCount > 0 ? '#fbbf24' : '#60a5fa';
+              const statusColor = status === 'Active' ? '#4ade80' : status === 'Won' ? '#BFD730' : status === 'Lost' ? '#ef4444' : '#60a5fa';
+              return (
+                <div key={a.id} onClick={() => openAccount(a)}
+                  style={{ background: 'var(--globant-card)', border: '1px solid var(--globant-border)', borderLeft: `3px solid ${urgencyColor}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                      {industry && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', fontWeight: 600 }}>{industry}</span>}
+                      {country && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(244,114,182,0.15)', color: '#f472b6', fontWeight: 600 }}>{country}</span>}
+                      {tier && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontWeight: 600 }}>{tier}</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--globant-muted)' }}>
+                      <span>👥 {stkCount}</span>
+                      <span>📨 {touchCount}</span>
+                      {status && <span style={{ color: statusColor, fontWeight: 600 }}>{status}</span>}
+                    </div>
+                  </div>
+                  <span style={{ color: 'var(--globant-muted)', fontSize: 22, flexShrink: 0 }}>›</span>
+                </div>
+              );
+            })}
+            {filteredAccounts.length === 0 && <div style={{ textAlign: 'center', color: 'var(--globant-muted)', padding: '40px 0', fontSize: 13 }}>No accounts found</div>}
+          </div>
+        </div>
+      );
+
+      // ── ACCOUNT DETAIL ──
+      const accName = F(selAcc, 'Account Name') || 'Account';
+      const accWebsite = F(selAcc, 'Website') || '';
+
+      return (
+        <div style={mS.wrap}>
+          {/* Top bar */}
+          <div style={mS.topBar}>
+            <button onClick={goBack} style={{ background: 'none', border: 'none', color: 'var(--globant-green)', fontSize: 24, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>‹</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{accName}</div>
+              <div style={{ display: 'flex', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+                {F(selAcc, 'Industry') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', fontWeight: 600 }}>{F(selAcc, 'Industry')}</span>}
+                {F(selAcc, 'Country') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(244,114,182,0.15)', color: '#f472b6', fontWeight: 600 }}>{F(selAcc, 'Country')}</span>}
+                {F(selAcc, 'Tier') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontWeight: 600 }}>{F(selAcc, 'Tier')}</span>}
+                {F(selAcc, 'Status') && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(74,222,128,0.15)', color: '#4ade80', fontWeight: 600 }}>{F(selAcc, 'Status')}</span>}
+              </div>
+            </div>
+            {accWebsite && (
+              <button onClick={() => window.open(accWebsite.startsWith('http') ? accWebsite : `https://${accWebsite}`, '_blank')}
+                style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.25)', borderRadius: 7, padding: '5px 10px', color: 'var(--globant-green)', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>🌐</button>
+            )}
+          </div>
+
+          {/* Tab content */}
+          <div style={{ padding: '16px 16px 0' }}>
+
+            {/* ── SUMMARY TAB ── */}
+            {tab === 'summary' && (
+              <div>
+                {execSummary ? (
+                  <div style={mS.card}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📋 Executive Summary</div>
+                    {execSummary.split('\n').filter(l => l.trim()).map((line, i) => {
+                      const isHeader = line.startsWith('#') || /^[A-Z\s]{4,}:/.test(line);
+                      const clean = line.replace(/^#+\s*/, '').replace(/\*\*/g, '');
+                      return <div key={i} style={{ fontSize: 13, color: isHeader ? 'var(--globant-green)' : 'var(--globant-text)', fontWeight: isHeader ? 700 : 400, marginBottom: 4, lineHeight: 1.55 }}>{clean}</div>;
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ ...mS.card, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>No executive summary yet.<br/><span style={{ fontSize: 11 }}>Generate it from desktop first.</span></div>
+                )}
+                {newsAI && newsAI.length > 0 ? (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📰 Latest News</div>
+                    {newsAI.map((item, i) => {
+                      const tagColors = { Funding: '#4ade80', Hiring: '#60a5fa', Expansion: '#a78bfa', Risk: '#f87171', Technology: '#fbbf24' };
+                      const color = tagColors[item.tag] || '#94a3b8';
+                      return (
+                        <div key={i} style={{ ...mS.card, borderLeft: `3px solid ${color}`, padding: '12px 14px' }}>
+                          {item.tag && <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 8, background: color + '20', color, fontWeight: 700, marginBottom: 6, display: 'inline-block' }}>{item.tag}</span>}
+                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
+                          {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5 }}>{item.body}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ ...mS.card, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>No news loaded yet.<br/><span style={{ fontSize: 11 }}>Generate from desktop first.</span></div>
+                )}
+              </div>
+            )}
+
+            {/* ── PEOPLE TAB ── */}
+            {tab === 'people' && (
+              <div>
+                {stkEngagement.length === 0 && <div style={{ ...mS.card, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>No contacts for this account.</div>}
+                {stkEngagement.map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
+                  const influence = F(s, 'Level of Influence') || '';
+                  const ic = influence === 'High' || influence === 'Decision Maker' ? '#ef4444' : influence === 'Influencer' || influence === 'Champion' ? '#f472b6' : influence === 'Medium' ? '#fbbf24' : '#94a3b8';
+                  const statusColor = hasMeeting ? '#a78bfa' : hasReplied ? '#4ade80' : totalTouches > 0 ? '#fbbf24' : '#ef4444';
+                  const statusLabel = hasMeeting ? '📅 Meeting' : hasReplied ? '✅ Replied' : totalTouches > 0 ? `⏳ ${totalTouches}x sent` : '⚠️ No contact';
+                  const initials = sName.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase();
+                  const email = F(s, 'Email'); const phone = F(s, 'Phone number'); const linkedin = F(s, 'LinkedIn');
+                  return (
+                    <div key={s.id} style={mS.card}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: '50%', background: `linear-gradient(135deg, ${ic}30, ${ic}10)`, border: `2px solid ${ic}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: ic, flexShrink: 0 }}>{initials || '?'}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{sName}</div>
+                          <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{F(s, 'Role') || '—'}</div>
+                        </div>
+                        {influence && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: ic + '18', color: ic, fontWeight: 600 }}>{influence}</span>}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
+                        {daysSince !== null && <span style={{ fontSize: 11, color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : 'var(--globant-muted)' }}>Last: {daysSince}d ago</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {email && <button onClick={() => { setTab('message'); setMsgStk(s); setMsgChannel('Email'); }} style={{ flex: 1, minWidth: 80, background: 'rgba(191,215,48,0.1)', border: '1px solid rgba(191,215,48,0.25)', borderRadius: 8, padding: '8px', color: 'var(--globant-green)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✉️ Message</button>}
+                        {phone && <button onClick={() => openWhatsApp(s)} style={{ flex: 1, minWidth: 60, background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.25)', borderRadius: 8, padding: '8px', color: '#25D366', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>💬 WA</button>}
+                        {linkedin && <button onClick={() => openLinkedIn(s)} style={{ flex: 1, minWidth: 50, background: 'rgba(10,102,194,0.1)', border: '1px solid rgba(10,102,194,0.25)', borderRadius: 8, padding: '8px', color: '#0A66C2', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>in</button>}
+                        <button onClick={() => { setTab('log'); setLogStk(s); setLogMode('call'); }} style={{ flex: 1, minWidth: 60, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8, padding: '8px', color: '#fbbf24', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📞 Log</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── MESSAGE TAB ── */}
+            {tab === 'message' && (
+              <div>
+                <div style={mS.card}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Contact</div>
+                  <select style={mS.input} value={msgStk?.id || ''} onChange={e => setMsgStk(accStk.find(s => s.id === e.target.value) || null)}>
+                    <option value="">Select contact...</option>
+                    {accStk.map(s => { const sn = [F(s, 'Name'), F(s, 'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn} — {F(s, 'Role') || '?'}</option>; })}
+                  </select>
+                </div>
+                <div style={mS.card}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Channel</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {['Email', 'WhatsApp', 'LinkedIn'].map(ch => (
+                      <button key={ch} onClick={() => setMsgChannel(ch)}
+                        style={{ flex: 1, padding: '10px 4px', border: `1px solid ${msgChannel === ch ? 'rgba(191,215,48,0.4)' : 'var(--globant-border)'}`, borderRadius: 8, background: msgChannel === ch ? 'rgba(191,215,48,0.12)' : 'transparent', color: msgChannel === ch ? 'var(--globant-green)' : 'var(--globant-muted)', fontWeight: msgChannel === ch ? 700 : 400, fontSize: 12, cursor: 'pointer' }}>
+                        {ch === 'Email' ? '✉️' : ch === 'WhatsApp' ? '💬' : 'in'} {ch}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={generateMessage} disabled={!msgStk || msgLoading}
+                  style={{ ...mS.primaryBtn, marginBottom: 14, opacity: !msgStk || msgLoading ? 0.6 : 1 }}>
+                  {msgLoading ? '⏳ Generating...' : '✨ Generate Message'}
+                </button>
+                {msgText && (
+                  <div style={mS.card}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Generated Message</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--globant-text)', marginBottom: 14, whiteSpace: 'pre-wrap' }}>{msgText}</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={copyMessage} style={{ flex: 1, background: msgCopied ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)', border: `1px solid ${msgCopied ? '#4ade80' : 'var(--globant-border)'}`, borderRadius: 8, padding: '10px', color: msgCopied ? '#4ade80' : 'var(--globant-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        {msgCopied ? '✅ Copied!' : '📋 Copy'}
+                      </button>
+                      {F(msgStk, 'Email') && <button onClick={openGmail} style={{ flex: 1, background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 8, padding: '10px', color: '#60a5fa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📧 Gmail</button>}
+                      {F(msgStk, 'Phone number') && <button onClick={() => openWhatsApp()} style={{ flex: 1, background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 8, padding: '10px', color: '#25D366', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>💬 WhatsApp</button>}
+                      {F(msgStk, 'LinkedIn') && <button onClick={() => openLinkedIn()} style={{ flex: 1, background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.3)', borderRadius: 8, padding: '10px', color: '#0A66C2', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>in LinkedIn</button>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── LOG TAB ── */}
+            {tab === 'log' && (
+              <div>
+                {logDone && (
+                  <div style={{ ...mS.card, textAlign: 'center', background: 'rgba(74,222,128,0.08)', borderColor: '#4ade80' }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                    <div style={{ fontWeight: 700, color: '#4ade80', marginBottom: 4 }}>Activity logged!</div>
+                    <button onClick={() => setLogDone(false)} style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}>Log another</button>
+                  </div>
+                )}
+                {!logDone && !logMode && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>What happened?</div>
+                    <button onClick={() => setLogMode('call')} style={{ ...mS.card, display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px', cursor: 'pointer', border: '1px solid rgba(251,191,36,0.25)', width: '100%', textAlign: 'left', marginBottom: 10 }}>
+                      <span style={{ fontSize: 30 }}>📞</span>
+                      <div><div style={{ fontWeight: 700, fontSize: 15, color: '#fbbf24' }}>Log a Call</div><div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 2 }}>Record a phone conversation</div></div>
+                    </button>
+                    <button onClick={() => setLogMode('meeting')} style={{ ...mS.card, display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px', cursor: 'pointer', border: '1px solid rgba(96,165,250,0.25)', width: '100%', textAlign: 'left' }}>
+                      <span style={{ fontSize: 30 }}>📅</span>
+                      <div><div style={{ fontWeight: 700, fontSize: 15, color: '#60a5fa' }}>Log a Meeting</div><div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 2 }}>Record a meeting or schedule one</div></div>
+                    </button>
+                  </div>
+                )}
+                {!logDone && logMode && (
+                  <div>
+                    <button onClick={() => setLogMode(null)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', fontSize: 13, cursor: 'pointer', marginBottom: 12, padding: 0 }}>‹ Back</button>
+                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: logMode === 'call' ? '#fbbf24' : '#60a5fa' }}>{logMode === 'call' ? '📞 Log Call' : '📅 Log Meeting'}</div>
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 5, textTransform: 'uppercase' }}>Contact *</div>
+                      <select style={mS.input} value={logStk?.id || ''} onChange={e => setLogStk(accStk.find(s => s.id === e.target.value) || null)}>
+                        <option value="">Select contact...</option>
+                        {accStk.map(s => { const sn = [F(s, 'Name'), F(s, 'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn} — {F(s, 'Role') || '?'}</option>; })}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 5, textTransform: 'uppercase' }}>Date</div>
+                      <input type="date" style={mS.input} value={logDate} onChange={e => setLogDate(e.target.value)} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 5, textTransform: 'uppercase' }}>Notes</div>
+                      <textarea style={{ ...mS.input, minHeight: 90, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                        placeholder={logMode === 'call' ? 'What did you discuss? Follow-ups?' : 'Agenda, outcomes, next steps...'}
+                        value={logNotes} onChange={e => setLogNotes(e.target.value)} />
+                    </div>
+                    <button onClick={logActivity} disabled={!logStk || logLoading} style={{ ...mS.primaryBtn, marginBottom: 10, opacity: !logStk || logLoading ? 0.6 : 1 }}>
+                      {logLoading ? '⏳ Saving...' : '💾 Save Activity'}
+                    </button>
+                    {logMode === 'meeting' && (
+                      <button onClick={openCalendar} style={{ width: '100%', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: 10, padding: '12px', color: '#60a5fa', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                        📅 Add to Google Calendar
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom nav */}
+          <div style={mS.bottomNav}>
+            {[['summary', '📊', 'Summary'], ['people', '👥', 'People'], ['message', '✉️', 'Message'], ['log', '📋', 'Log']].map(([key, icon, label]) => (
+              <button key={key} onClick={() => setTab(key)} style={mS.tabBtn(tab === key)}>
+                <span style={{ fontSize: 20 }}>{icon}</span>
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     // ============ MAIN APP ============
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
+      const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+      useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, []);
       const [ready, setReady] = useState(false);
       const [page, setPage] = useState('overview');
       const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [] });
@@ -7730,6 +8153,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         </div>
       );
       if (loading) return <div className="loading"><div className="spinner" /></div>;
+
+      if (isMobile) return <MobileApp data={data} api={api} addToData={addToData} />;
 
       const bgSync = () => api && loadData(api, true);
       const pages = {
