@@ -4685,63 +4685,8 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       </div>
                     )}
 
-                    {/* Avatar cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
-                      {stakeholderEngagement
-                        .filter(({ s, sName }) => {
-                          if (!stakeholderSearch) return true;
-                          const term = stakeholderSearch.toLowerCase();
-                          return sName.toLowerCase().includes(term) || (F(s, 'Role') || '').toLowerCase().includes(term);
-                        })
-                        .map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
-                          const initials = sName.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase();
-                          const influence = F(s, 'Level of Influence') || '';
-                          const influenceColor = influence === 'High' || influence === 'Decision Maker' ? '#ef4444' : influence === 'Influencer' || influence === 'Champion' ? '#f472b6' : influence === 'Medium' ? '#fbbf24' : influence === 'Low' ? '#94a3b8' : '#60a5fa';
-                          const statusColor = hasMeeting ? '#a78bfa' : hasReplied ? '#4ade80' : totalTouches > 0 ? '#fbbf24' : '#ef4444';
-                          const statusLabel = hasMeeting ? '📅 Meeting' : hasReplied ? '✅ Replied' : totalTouches > 0 ? `⏳ ${totalTouches}x sent` : '⚠️ No contact';
-                          const phone = F(s, 'Phone number');
-                          const email = F(s, 'Email');
-                          const linkedin = F(s, 'LinkedIn');
-                          return (
-                            <div key={s.id} style={{ background: 'var(--globant-darker)', border: '1px solid var(--globant-border)', borderRadius: 12, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer', transition: 'border-color 0.15s' }}
-                              onMouseEnter={e => e.currentTarget.style.borderColor = influenceColor + '55'}
-                              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--globant-border)'}
-                              onClick={() => setHistoryStakeholder(s)}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{ width: 42, height: 42, borderRadius: '50%', background: `linear-gradient(135deg, ${influenceColor}30, ${influenceColor}10)`, border: `2px solid ${influenceColor}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: influenceColor, flexShrink: 0 }}>
-                                  {initials || '?'}
-                                </div>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sName}</div>
-                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{F(s, 'Role') || '—'}</div>
-                                </div>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: 10, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
-                                {influence && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: influenceColor + '18', color: influenceColor, fontWeight: 600 }}>{influence}</span>}
-                              </div>
-                              {lastTouch && (
-                                <div style={{ fontSize: 10, color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : 'var(--globant-muted)' }}>
-                                  Last: {new Date(lastTouch.fields?.['Date']).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {daysSince}d ago
-                                </div>
-                              )}
-                              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-                                {email && <button title="AI Message" style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => setCpSelectedStakeholder(s)}>✉️</button>}
-                                <button title="Schedule Meeting" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => { setCpMeetingModal({ stakeholder: s }); setCpMeetingNotes(''); setCpMeetingDate(''); setCpMeetingTime(''); }}>📅</button>
-                                {phone && <button title="Log Call" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => { setCpCallModal(s); setCpCallNotes(''); }}>📞</button>}
-                                {phone && <button title="WhatsApp" style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}`, '_blank')}>💬</button>}
-                                {linkedin && <button title="LinkedIn" style={{ background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#0A66C2' }} onClick={() => window.open(linkedin, '_blank')}>in</button>}
-                                <button title="Edit" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12, color: 'var(--globant-muted)' }} onClick={() => setCpEditingContact(s)}>✏️</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-
-                    {/* Detail table */}
-                    <div style={{ borderTop: '1px solid var(--globant-border)', paddingTop: 16 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Details</div>
-                      <div style={{ overflowX: 'auto' }}>
+                    {/* Contacts list table */}
+                    <div style={{ overflowX: 'auto' }}>
                         <table className="data-table">
                           <thead><tr><th>Name</th><th>Role</th><th>Influence</th><th>Last Contact</th><th>Pain Points</th><th>Status</th><th style={{ textAlign: 'center' }}>Actions</th></tr></thead>
                           <tbody>
@@ -4793,7 +4738,6 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           </tbody>
                         </table>
                       </div>
-                    </div>
                   </div>
                 </div>
               )}
