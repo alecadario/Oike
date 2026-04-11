@@ -7660,7 +7660,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       };
       const openGmail = (stk, acc) => {
         const em = F(stk,'Email')||''; const accN = acc ? F(acc,'Account Name')||'' : '';
-        window.open('https://mail.google.com/mail/?view=cm&to='+em+'&su='+encodeURIComponent('Following up — '+accN)+'&body='+encodeURIComponent(msgText),'_blank');
+        window.location.href = 'mailto:'+em+'?subject='+encodeURIComponent('Following up — '+accN)+'&body='+encodeURIComponent(msgText);
         logOutreach(stk, acc, 'Email');
       };
       const openWA = (stk, acc) => {
@@ -7806,7 +7806,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <div style={{fontSize:13,lineHeight:1.6,color:'var(--globant-text)',margin:'12px 0',padding:'10px 0',borderTop:'1px solid var(--globant-border)',whiteSpace:'pre-wrap'}}>{msgText}</div>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                         <button onClick={copyMessage} style={{flex:1,background:msgCopied?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.06)',border:`1px solid ${msgCopied?'#4ade80':'var(--globant-border)'}`,borderRadius:8,padding:'9px',color:msgCopied?'#4ade80':'var(--globant-text)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{msgCopied?'✅ Copied!':'📋 Copy'}</button>
-                        {em && <button onClick={()=>openGmail(selContact,contactAccount)} style={{flex:1,background:'rgba(96,165,250,0.12)',border:'1px solid rgba(96,165,250,0.3)',borderRadius:8,padding:'9px',color:'#60a5fa',fontSize:12,fontWeight:600,cursor:'pointer'}}>📧 Gmail</button>}
+                        {em && <button onClick={()=>openGmail(selContact,contactAccount)} style={{flex:1,background:'rgba(96,165,250,0.12)',border:'1px solid rgba(96,165,250,0.3)',borderRadius:8,padding:'9px',color:'#60a5fa',fontSize:12,fontWeight:600,cursor:'pointer'}}>📧 Email</button>}
                         {ph && <button onClick={()=>openWA(selContact)} style={{flex:1,background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.3)',borderRadius:8,padding:'9px',color:'#25D366',fontSize:12,fontWeight:600,cursor:'pointer'}}>💬 WA</button>}
                       </div>
                     </div>
