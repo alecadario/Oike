@@ -3106,14 +3106,14 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       // ── MEDDPICC ──
       const MEDDPICC_LS_KEY = 'oike_meddpicc';
       const MEDDPICC_FIELDS = [
-        { key: 'metrics',         label: 'M — Metrics',          hint: 'What measurable value does the solution deliver? (ROI, cost savings, % improvement)' },
-        { key: 'economicBuyer',   label: 'E — Economic Buyer',   hint: 'Who has budget authority and can sign off?' },
-        { key: 'decisionCriteria',label: 'D — Decision Criteria', hint: 'How will they evaluate and compare options?' },
-        { key: 'decisionProcess', label: 'D — Decision Process',  hint: 'What is the internal approval process and timeline?' },
-        { key: 'identifyPain',    label: 'I — Identify Pain',    hint: 'What is the core problem they need to solve urgently?' },
-        { key: 'champion',        label: 'P — Champion',         hint: 'Who inside the account is advocating for you?' },
-        { key: 'competition',     label: 'C — Competition',      hint: 'Who else are they evaluating? What is your differentiator?' },
-        { key: 'compellingEvent', label: 'C — Compelling Event', hint: 'Is there a deadline, event, or trigger creating urgency?' },
+        { key: 'metrics',         label: 'M — Metrics',           hint: 'What measurable value does the solution deliver? (ROI, cost savings, % improvement)' },
+        { key: 'economicBuyer',   label: 'E — Economic Buyer',    hint: 'Who has budget authority and can sign off?' },
+        { key: 'decisionCriteria',label: 'D — Decision Criteria',  hint: 'How will they evaluate and compare options?' },
+        { key: 'decisionProcess', label: 'D — Decision Process',   hint: 'What is the internal approval process and timeline?' },
+        { key: 'paperProcess',    label: 'P — Paper Process',      hint: 'What is the contracting, legal, and procurement process?' },
+        { key: 'identifyPain',    label: 'I — Identify Pain',      hint: 'What is the core problem they need to solve urgently?' },
+        { key: 'champion',        label: 'C — Champion',           hint: 'Who inside the account is advocating for you?' },
+        { key: 'competition',     label: 'C — Competition',        hint: 'Who else are they evaluating? What is your differentiator?' },
       ];
       const [meddpiccData, setMeddpiccData] = useState(() => {
         try { return JSON.parse(localStorage.getItem(MEDDPICC_LS_KEY) || '{}'); } catch { return {}; }
