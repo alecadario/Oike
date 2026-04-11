@@ -7546,7 +7546,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
     }
 
     // ============ MOBILE APP ============
-    function MobileApp({ data, api, addToData }) {
+    function MobileApp({ data, api, addToData, onRefresh }) {
       const [tab, setTab] = useState('insights');
       // Contacts state
       const [contactSearch, setContactSearch] = useState('');
@@ -7672,7 +7672,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         const accIds = linkedIds(stk,'Account');
         const accId = acc ? acc.id : (accIds[0]||null);
         const fields = { 'Channel':channel, 'Status':'Sent', 'Notes':msgText?msgText.slice(0,300):'', 'Date':new Date().toISOString().split('T')[0], 'Stakeholder':[stk.id], ...(accId?{'Account':[accId]}:{}) };
-        api.createRecord(TABLE_IDS.outreach, fields).then(rec=>{ if(rec&&addToData) addToData('outreach',fields); }).catch(()=>{});
+        api.createRecord(TABLE_IDS.outreach, fields).then(rec=>{ if(rec&&addToData) addToData('outreach',fields); if(onRefresh) onRefresh(); }).catch(()=>{});
       };
       const openGmail = (stk, acc) => {
         const em = F(stk,'Email')||''; const accN = acc ? F(acc,'Account Name')||'' : '';
@@ -7752,6 +7752,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const fields = { 'Channel':logType==='call'?'Call':logType==='meeting'?'Meeting':'Email','Status':logType==='meeting'?'Meeting Scheduled':'Sent','Notes':(logNotes||'')+timeNote,'Date':logDate||new Date().toISOString().split('T')[0],'Account':[logAccId],...(logStkId?{'Stakeholder':[logStkId]}:{}) };
           const rec = await api.createRecord(TABLE_IDS.outreach, fields);
           if (rec && addToData) addToData('outreach', fields);
+          if (onRefresh) onRefresh();
           setLogSaved(true);
           if (logType !== 'meeting') { setShowLogForm(false); setLogNotes(''); setLogStkId(''); setLogTime(''); setLogSaved(false); }
         } catch { alert('Error logging.'); }
@@ -7770,7 +7771,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       };
       const BottomNav = () => (
         <div style={G.botNav}>
-          {[['insights','🏠','Insights'],['contacts','👥','Contacts'],['accounts','🏢','Accounts'],['activity','📊','Activity']].map(([k,ico,lbl])=>(
+          {[['insights','🏠','Insights'],['contacts','👥','Contacts'],['accounts','🏢','Accounts']].map(([k,ico,lbl])=>(
             <button key={k} onClick={()=>{ setSelContact(null); setTab(k); }} style={G.navBtn(tab===k)}>
               <span style={{fontSize:20}}>{ico}</span><span>{lbl}</span>
             </button>
@@ -7925,7 +7926,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               <div style={{fontWeight:700,fontSize:15}}>Good {new Date().getHours()<12?'morning':new Date().getHours()<18?'afternoon':'evening'}, {CURRENT_USER?.name?.split(' ')[0]||'there'} 👋</div>
               <div style={{fontSize:11,color:'var(--globant-muted)'}}>{new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</div>
             </div>
-            <button onClick={logoutUser} style={{background:'none',border:'1px solid var(--globant-border)',borderRadius:6,padding:'5px 10px',color:'var(--globant-muted)',fontSize:11,cursor:'pointer'}}>↪</button>
+            <button onClick={()=>setShowLogForm(true)} style={{background:'rgba(191,215,48,0.12)',border:'1px solid rgba(191,215,48,0.3)',borderRadius:6,padding:'5px 10px',color:'var(--globant-green)',fontWeight:700,fontSize:12,cursor:'pointer'}}>➕ Log</button>
+            <button onClick={logoutUser} style={{background:'none',border:'1px solid var(--globant-border)',borderRadius:6,padding:'5px 10px',color:'var(--globant-muted)',fontSize:11,cursor:'pointer',marginLeft:4}}>↪</button>
           </div>
           <div style={{padding:'16px 16px 0'}}>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:20}}>
@@ -8056,98 +8058,61 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         return true;
       }).sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0)).slice(0,40);
 
-      const renderActivity = () => (
-        <div>
-          <div style={G.topBar}>
-            <div style={{flex:1,fontWeight:700,fontSize:16}}>Activity</div>
-            <button onClick={()=>setShowLogForm(true)} style={{background:'rgba(191,215,48,0.12)',border:'1px solid rgba(191,215,48,0.3)',borderRadius:8,padding:'6px 12px',color:'var(--globant-green)',fontWeight:700,fontSize:13,cursor:'pointer'}}>➕ Log</button>
-          </div>
-          {showLogForm && (
-            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:200,display:'flex',alignItems:'flex-end'}}>
-              <div style={{background:'var(--globant-card)',borderRadius:'16px 16px 0 0',padding:'20px 16px',width:'100%',boxSizing:'border-box',maxHeight:'85vh',overflowY:'auto'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-                  <div style={{fontWeight:700,fontSize:16}}>Log Activity</div>
-                  <button onClick={()=>setShowLogForm(false)} style={{background:'none',border:'none',color:'var(--globant-muted)',fontSize:20,cursor:'pointer'}}>✕</button>
-                </div>
-                <div style={{display:'flex',gap:8,marginBottom:14}}>
-                  {[['call','📞 Call','#fbbf24'],['meeting','📅 Meeting','#60a5fa'],['email','✉️ Email','#4ade80']].map(([t,lbl,c])=>(
-                    <button key={t} onClick={()=>{setLogType(t);setLogSaved(false);}} style={{flex:1,padding:'10px 4px',border:'1px solid '+(logType===t?c:'var(--globant-border)'),borderRadius:8,background:logType===t?c+'18':'transparent',color:logType===t?c:'var(--globant-muted)',fontWeight:logType===t?700:400,fontSize:12,cursor:'pointer'}}>{lbl}</button>
-                  ))}
-                </div>
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Account *</div>
-                  <select style={G.inp} value={logAccId} onChange={e=>{setLogAccId(e.target.value);setLogStkId('');}}>
-                    <option value="">Select account...</option>
-                    {[...accounts].sort((a,b)=>(F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a=>(<option key={a.id} value={a.id}>{F(a,'Account Name')}</option>))}
-                  </select>
-                </div>
-                {logAccId && (
-                  <div style={{marginBottom:12}}>
-                    <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Contact</div>
-                    <select style={G.inp} value={logStkId} onChange={e=>setLogStkId(e.target.value)}>
-                      <option value="">No specific contact</option>
-                      {stakeholders.filter(s=>linkedIds(s,'Account').includes(logAccId)).map(s=>{ const sn=[F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn}</option>; })}
-                    </select>
-                  </div>
-                )}
-                <div style={{display:'flex',gap:8,marginBottom:12}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Date</div>
-                    <input type="date" style={G.inp} value={logDate} onChange={e=>setLogDate(e.target.value)} />
-                  </div>
-                  {logType==='meeting' && (
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Time</div>
-                      <input type="time" style={G.inp} value={logTime} onChange={e=>setLogTime(e.target.value)} />
-                    </div>
-                  )}
-                </div>
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Notes</div>
-                  <textarea style={{...G.inp,minHeight:80,resize:'vertical',fontFamily:'inherit',lineHeight:1.5}} placeholder="What happened? Next steps?" value={logNotes} onChange={e=>setLogNotes(e.target.value)} />
-                </div>
-                {!logSaved
-                  ? <button onClick={logActivityNew} disabled={!logAccId||logLoading} style={{...G.pbtn,opacity:!logAccId||logLoading?0.6:1}}>{logLoading?'⏳ Saving...':'💾 Save Activity'}</button>
-                  : <div>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'10px 14px',background:'rgba(74,222,128,0.08)',border:'1px solid rgba(74,222,128,0.25)',borderRadius:10}}>
-                        <span style={{color:'#4ade80',fontSize:18}}>✅</span>
-                        <span style={{fontSize:13,color:'#4ade80',fontWeight:600}}>Activity saved!</span>
-                      </div>
-                      {logType==='meeting' && <button onClick={()=>openCalendar(logAccId)} style={{width:'100%',background:'rgba(96,165,250,0.1)',border:'1px solid rgba(96,165,250,0.25)',borderRadius:10,padding:'13px',color:'#60a5fa',fontWeight:700,fontSize:14,cursor:'pointer'}}>📅 Add to Google Calendar</button>}
-                      <button onClick={()=>{setShowLogForm(false);setLogNotes('');setLogStkId('');setLogTime('');setLogSaved(false);}} style={{width:'100%',marginTop:8,background:'transparent',border:'1px solid var(--globant-border)',borderRadius:10,padding:'11px',color:'var(--globant-muted)',fontSize:13,cursor:'pointer'}}>Close</button>
-                    </div>
-                }
-              </div>
+      const renderLogModal = () => !showLogForm ? null : (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:200,display:'flex',alignItems:'flex-end'}}>
+          <div style={{background:'var(--globant-card)',borderRadius:'16px 16px 0 0',padding:'20px 16px',width:'100%',boxSizing:'border-box',maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontWeight:700,fontSize:16}}>Log Activity</div>
+              <button onClick={()=>setShowLogForm(false)} style={{background:'none',border:'none',color:'var(--globant-muted)',fontSize:20,cursor:'pointer'}}>✕</button>
             </div>
-          )}
-          <div style={{padding:'12px 16px 0',display:'flex',gap:8,overflowX:'auto'}}>
-            {[['all','All'],['calls','📞 Calls'],['meetings','📅 Meetings'],['messages','✉️ Messages']].map(([k,lbl])=>(
-              <button key={k} onClick={()=>setActFilter(k)} style={{padding:'6px 14px',border:`1px solid ${actFilter===k?'rgba(191,215,48,0.4)':'var(--globant-border)'}`,borderRadius:20,background:actFilter===k?'rgba(191,215,48,0.12)':'transparent',color:actFilter===k?'var(--globant-green)':'var(--globant-muted)',fontWeight:actFilter===k?700:400,fontSize:12,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{lbl}</button>
-            ))}
-          </div>
-          <div style={{padding:'12px 16px 0'}}>
-            {activityFeed.length===0 && <div style={{...G.card,textAlign:'center',color:'var(--globant-muted)',fontSize:13}}>No activity logged yet.</div>}
-            {activityFeed.map((o,i)=>{
-              const clr=chColor[F(o,'Channel')]||'var(--globant-muted)'; const ico=chIcon[F(o,'Channel')]||'📨';
-              const acc=accounts.find(a=>linkedIds(o,'Account').includes(a.id));
-              const stk=stakeholders.find(s=>linkedIds(o,'Stakeholder').includes(s.id));
-              const sn=stk?[F(stk,'Name'),F(stk,'Lart name')].filter(Boolean).join(' '):null;
-              const st=F(o,'Status')||''; const sc=st==='Replied'?'#4ade80':st==='Meeting Scheduled'?'#a78bfa':st==='Bounced'?'#ef4444':null;
-              return (
-                <div key={o.id||i} style={{display:'flex',gap:12,padding:'12px 0',borderBottom:i<activityFeed.length-1?'1px solid var(--globant-border)':'none'}}>
-                  <div style={{width:36,height:36,borderRadius:10,background:clr+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,border:`1px solid ${clr}30`}}>{ico}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-                      <span style={{fontSize:13,fontWeight:700,color:clr}}>{F(o,'Channel')}</span>
-                      <span style={{fontSize:11,color:'var(--globant-muted)'}}>{o.fields?.Date?new Date(o.fields.Date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—'}</span>
-                    </div>
-                    <div style={{fontSize:12,color:'var(--globant-muted)',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sn&&<span style={{color:'var(--globant-text)'}}>{sn} · </span>}{acc?F(acc,'Account Name'):''}</div>
-                    {sc && <span style={{fontSize:10,color:sc,fontWeight:600}}>{st}</span>}
-                    {F(o,'Notes') && <div style={{fontSize:12,color:'var(--globant-muted)',marginTop:3,lineHeight:1.4}}>{F(o,'Notes').slice(0,80)}{F(o,'Notes').length>80?'...':''}</div>}
-                  </div>
+            <div style={{display:'flex',gap:8,marginBottom:14}}>
+              {[['call','📞 Call','#fbbf24'],['meeting','📅 Meeting','#60a5fa'],['email','✉️ Email','#4ade80']].map(([t,lbl,c])=>(
+                <button key={t} onClick={()=>{setLogType(t);setLogSaved(false);}} style={{flex:1,padding:'10px 4px',border:'1px solid '+(logType===t?c:'var(--globant-border)'),borderRadius:8,background:logType===t?c+'18':'transparent',color:logType===t?c:'var(--globant-muted)',fontWeight:logType===t?700:400,fontSize:12,cursor:'pointer'}}>{lbl}</button>
+              ))}
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Account *</div>
+              <select style={G.inp} value={logAccId} onChange={e=>{setLogAccId(e.target.value);setLogStkId('');}}>
+                <option value="">Select account...</option>
+                {[...accounts].sort((a,b)=>(F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a=>(<option key={a.id} value={a.id}>{F(a,'Account Name')}</option>))}
+              </select>
+            </div>
+            {logAccId && (
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Contact</div>
+                <select style={G.inp} value={logStkId} onChange={e=>setLogStkId(e.target.value)}>
+                  <option value="">No specific contact</option>
+                  {stakeholders.filter(s=>linkedIds(s,'Account').includes(logAccId)).map(s=>{ const sn=[F(s,'Name'),F(s,'Lart name')].filter(Boolean).join(' '); return <option key={s.id} value={s.id}>{sn}</option>; })}
+                </select>
+              </div>
+            )}
+            <div style={{display:'flex',gap:8,marginBottom:12}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Date</div>
+                <input type="date" style={G.inp} value={logDate} onChange={e=>setLogDate(e.target.value)} />
+              </div>
+              {logType==='meeting' && (
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Time</div>
+                  <input type="time" style={G.inp} value={logTime} onChange={e=>setLogTime(e.target.value)} />
                 </div>
-              );
-            })}
+              )}
+            </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Notes</div>
+              <textarea style={{...G.inp,minHeight:80,resize:'vertical',fontFamily:'inherit',lineHeight:1.5}} placeholder="What happened? Next steps?" value={logNotes} onChange={e=>setLogNotes(e.target.value)} />
+            </div>
+            {!logSaved
+              ? <button onClick={logActivityNew} disabled={!logAccId||logLoading} style={{...G.pbtn,opacity:!logAccId||logLoading?0.6:1}}>{logLoading?'⏳ Saving...':'💾 Save Activity'}</button>
+              : <div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'10px 14px',background:'rgba(74,222,128,0.08)',border:'1px solid rgba(74,222,128,0.25)',borderRadius:10}}>
+                    <span style={{color:'#4ade80',fontSize:18}}>✅</span>
+                    <span style={{fontSize:13,color:'#4ade80',fontWeight:600}}>Activity saved!</span>
+                  </div>
+                  {logType==='meeting' && <button onClick={()=>openCalendar(logAccId)} style={{width:'100%',background:'rgba(96,165,250,0.1)',border:'1px solid rgba(96,165,250,0.25)',borderRadius:10,padding:'13px',color:'#60a5fa',fontWeight:700,fontSize:14,cursor:'pointer'}}>📅 Add to Google Calendar</button>}
+                  <button onClick={()=>{setShowLogForm(false);setLogNotes('');setLogStkId('');setLogTime('');setLogSaved(false);}} style={{width:'100%',marginTop:8,background:'transparent',border:'1px solid var(--globant-border)',borderRadius:10,padding:'11px',color:'var(--globant-muted)',fontSize:13,cursor:'pointer'}}>Close</button>
+                </div>
+            }
           </div>
         </div>
       );
@@ -8157,7 +8122,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           {tab==='insights' && renderInsights()}
           {tab==='contacts' && renderContacts()}
           {tab==='accounts' && renderAccounts()}
-          {tab==='activity' && renderActivity()}
+          {renderLogModal()}
           <BottomNav />
         </div>
       );
@@ -8356,7 +8321,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
       if (loading) return <div className="loading"><div className="spinner" /></div>;
 
-      if (isMobile) return <MobileApp data={data} api={api} addToData={addToData} />;
+      if (isMobile) return <MobileApp data={data} api={api} addToData={addToData} onRefresh={()=>api&&loadData(api,true)} />;
 
       const bgSync = () => api && loadData(api, true);
       const pages = {
