@@ -3279,8 +3279,10 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       };
 
       const newsItems = useMemo(() => {
-        if (!recentNews || typeof recentNews !== 'string') return [];
-        const raw = recentNews.split(/\n+/).map(l => l.trim()).filter(l => l.length > 3);
+        const newsAIEntry_ = selectedAccountId ? (newsAIData[selectedAccountId] || null) : null;
+        const sourceText = newsAIEntry_?.text || recentNews;
+        if (!sourceText || typeof sourceText !== 'string') return [];
+        const raw = sourceText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 3);
         // Parse into structured news items: { title, body, source }
         const items = [];
         let current = null;
@@ -3319,9 +3321,54 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           return true;
         });
         return unique.slice(0, 5);
-      }, [recentNews]);
+      }, [recentNews, newsAIData, selectedAccountId]);
       // Keep newsLines for backward compat with talking points prompt
       const newsLines = newsItems.map(n => `${n.title}${n.body ? ': ' + n.body : ''}`);
+
+      // ── AI-GENERATED NEWS ──
+      const NEWS_AI_LS_KEY = 'oike_news_ai';
+      const [newsAIData, setNewsAIData] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(NEWS_AI_LS_KEY) || '{}'); } catch { return {}; }
+      });
+      const [loadingNewsAI, setLoadingNewsAI] = useState(false);
+      const newsAIEntry = selectedAccountId ? (newsAIData[selectedAccountId] || null) : null;
+      const newsAIUpdatedAt = newsAIEntry?.updatedAt || null;
+
+      const generateNewsAI = async () => {
+        setLoadingNewsAI(true);
+        try {
+          const website = F(account, 'Website') || '';
+          const country = F(account, 'Country') || '';
+          const industry = F(account, 'Industry') || '';
+          const prompt = `You are a B2B sales research analyst. Generate 4-5 recent and relevant news items about this company to help a salesperson open a conversation.
+
+COMPANY: ${name}
+WEBSITE: ${website || 'Not provided'}
+INDUSTRY: ${industry || 'Not specified'}
+COUNTRY: ${country || 'Not specified'}
+
+INSTRUCTIONS:
+${website ? `- First, focus on news SPECIFIC to this company (${name}) — use your knowledge about their recent announcements, expansions, partnerships, leadership changes, technology investments, or strategic moves.` : ''}
+- If you don't have enough specific company news, supplement with 1-2 relevant INDUSTRY trends in ${country || 'their market'} that would be relevant to a sales conversation.
+- Each news item must be actionable — something a salesperson can reference to open a conversation or identify a pain point.
+
+FORMAT each item exactly like this (include the ** for titles):
+**[News headline here]**
+[1-2 sentence description with context and sales relevance]
+
+Generate 4-5 items. No intro, no outro, just the formatted items.`;
+
+          const generated = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 800 });
+          const updatedAt = new Date().toISOString();
+          setNewsAIData(prev => {
+            const next = { ...prev, [selectedAccountId]: { text: generated, updatedAt } };
+            try { localStorage.setItem(NEWS_AI_LS_KEY, JSON.stringify(next)); } catch {}
+            return next;
+          });
+        } catch(e) {
+          console.error(e); alert('Failed to generate news: ' + (e.message || 'unknown error'));
+        } finally { setLoadingNewsAI(false); }
+      };
 
       // Upcoming events for this account
       const accEvents = useMemo(() => {
@@ -3416,7 +3463,11 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         setLoadingMeddpicc(true);
         try {
           const newsStr = newsLines.slice(0, 5).join('\n') || 'No recent news';
-          const stksStr = accStakeholders.map(s => `- ${F(s,'Name')} ${F(s,'Lart name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}`).join('\n') || 'No stakeholders mapped';
+          const stksStr = accStakeholders.map(s => {
+            const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
+            const painStr = pain ? ` | Pain Points: ${pain.slice(0, 200)}` : '';
+            return `- ${F(s,'Name')} ${F(s,'Lart name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}${painStr}`;
+          }).join('\n') || 'No stakeholders mapped';
           const oppsStr = opps.map(o => `- ${F(o,'Deal/Opp name')}: Stage=${F(o,'Stage')}, Value=${o.fields?.['Value']||'N/A'}`).join('\n') || 'No opportunities';
           const prompt = `You are a senior B2B sales strategist. Based on the account context below, fill out a MEDDPICC qualification framework. Be specific and practical — use names, data, and signals from the context. If information is not available, write "Unknown — needs discovery" for that field.
 
@@ -4277,15 +4328,26 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 {/* Left: News + Plan */}
                 <div>
-                  {newsItems.length > 0 && (() => {
+                  {(() => {
                     const lastUpd = account?.fields?.['Last Updated'];
-                    const lastUpdStr = lastUpd ? new Date(lastUpd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+                    const lastUpdStr = newsAIUpdatedAt
+                      ? new Date(newsAIUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      : lastUpd ? new Date(lastUpd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
                     return (
                     <div className="card">
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3>📰 Recent News</h3>
-                        {lastUpdStr && <span style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 400 }}>🕐 Updated: {lastUpdStr}</span>}
+                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                        <div>
+                          <h3>📰 Recent News</h3>
+                          {lastUpdStr && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{newsAIUpdatedAt ? '🤖 AI Generated · ' : '🕐 '}Updated: {lastUpdStr}</div>}
+                        </div>
+                        <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+                          onClick={generateNewsAI} disabled={loadingNewsAI}>
+                          {loadingNewsAI ? '⏳ Searching...' : newsAIUpdatedAt ? '🔄 Refresh News' : '✨ Generate with AI'}
+                        </button>
                       </div>
+                      {newsItems.length === 0 && !loadingNewsAI && (
+                        <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0' }}>No news yet — click Generate to pull recent intel about this account.</p>
+                      )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {newsItems.map((item, i) => {
                           const lc = (item.title + ' ' + item.body).toLowerCase();
