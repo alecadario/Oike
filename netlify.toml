@@ -6,20 +6,14 @@
 [functions]
   node_bundler = "esbuild"
 
-# Landing page at root
-[[redirects]]
-  from = "/"
-  to = "/landing.html"
-  status = 200
-
 # App at /app
 [[redirects]]
   from = "/app"
-  to = "/index.html"
+  to = "/app.html"
   status = 200
 
-# SPA fallback for app routes
+# SPA fallback for app routes (keeps /app/* working)
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/app/*"
+  to = "/app.html"
   status = 200
