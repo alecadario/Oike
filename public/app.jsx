@@ -6708,12 +6708,32 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   {solType && <span style={{ background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}50`, borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{solType}</span>}
                   {solPrice && <span style={{ background: 'rgba(191,215,48,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 6, padding: '3px 12px', fontSize: 13, fontWeight: 700 }}>💰 {solPrice}</span>}
                 </div>
-                <p style={{ marginTop: 6 }}>{F(selectedSol, 'Service | Solution Detail') ? (typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail').slice(0, 180) : '') : 'No detail available'}</p>
+                {F(selectedSol, 'Service | Solution Detail') && (
+                  <p style={{ marginTop: 6, color: 'var(--globant-muted)', fontSize: 13, lineHeight: 1.5 }}>{typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail') : ''}</p>
+                )}
               </div>
               <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateRecs} disabled={loadingRecs}>
                 {loadingRecs ? '⏳ Analyzing...' : '✨ AI Recommendations'}
               </button>
             </div>
+
+            {/* About — description + key message */}
+            {(F(selectedSol, 'Service | Solution Detail') || F(selectedSol, 'Stakeholder Key Message')) && (
+              <div className="card" style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: F(selectedSol, 'Service | Solution Detail') && F(selectedSol, 'Stakeholder Key Message') ? '1fr 1fr' : '1fr', gap: 20 }}>
+                {F(selectedSol, 'Service | Solution Detail') && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>📋 Description</div>
+                    <div style={{ fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail') : ''}</div>
+                  </div>
+                )}
+                {F(selectedSol, 'Stakeholder Key Message') && (
+                  <div style={{ background: 'rgba(191,215,48,0.06)', borderRadius: 8, padding: '14px 16px', border: '1px solid rgba(191,215,48,0.2)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>💬 Key Message for Stakeholders</div>
+                    <div style={{ fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{typeof F(selectedSol, 'Stakeholder Key Message') === 'string' ? F(selectedSol, 'Stakeholder Key Message') : ''}</div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
