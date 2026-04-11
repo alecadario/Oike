@@ -73,6 +73,7 @@
 
     // ============ COMPANY PROFILE (configurable per client) ============
     const COMPANY_PROFILE_KEY = 'oike_company_profile';
+    const SOURCE_OPTIONS = ['Outbound', 'Inbound - Events', 'Inbound - Paid Media', 'Inbound - Referral', 'Inbound - Website', 'Inbound - Direct'];
     let COMPANY_PROFILE = (() => {
       const defaults = {
         companyName: 'Your Company',
@@ -2367,7 +2368,6 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const [contactImporting, setContactImporting] = useState(false);
       const [contactImportResult, setContactImportResult] = useState(null);
 
-      const SOURCE_OPTIONS = ['Outbound', 'Inbound - Events', 'Inbound - Paid Media', 'Inbound - Referral', 'Inbound - Website', 'Inbound - Direct'];
       const isInbound = (src) => src && src.startsWith('Inbound');
 
       const createInlineAccount = async () => {
