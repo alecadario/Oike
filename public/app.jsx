@@ -3416,7 +3416,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         setLoadingMeddpicc(true);
         try {
           const newsStr = newsLines.slice(0, 5).join('\n') || 'No recent news';
-          const stksStr = accountStakeholders.map(s => `- ${F(s,'Name')} ${F(s,'Lart name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}`).join('\n') || 'No stakeholders mapped';
+          const stksStr = accStakeholders.map(s => `- ${F(s,'Name')} ${F(s,'Lart name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}`).join('\n') || 'No stakeholders mapped';
           const oppsStr = opps.map(o => `- ${F(o,'Deal/Opp name')}: Stage=${F(o,'Stage')}, Value=${o.fields?.['Value']||'N/A'}`).join('\n') || 'No opportunities';
           const prompt = `You are a senior B2B sales strategist. Based on the account context below, fill out a MEDDPICC qualification framework. Be specific and practical — use names, data, and signals from the context. If information is not available, write "Unknown — needs discovery" for that field.
 
