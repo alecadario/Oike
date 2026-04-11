@@ -3278,6 +3278,15 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         setSavingNotes(false);
       };
 
+      // ── AI-GENERATED NEWS state (must be before newsItems useMemo) ──
+      const NEWS_AI_LS_KEY = 'oike_news_ai';
+      const [newsAIData, setNewsAIData] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(NEWS_AI_LS_KEY) || '{}'); } catch { return {}; }
+      });
+      const [loadingNewsAI, setLoadingNewsAI] = useState(false);
+      const newsAIEntry = selectedAccountId ? (newsAIData[selectedAccountId] || null) : null;
+      const newsAIUpdatedAt = newsAIEntry?.updatedAt || null;
+
       const newsItems = useMemo(() => {
         const newsAIEntry_ = selectedAccountId ? (newsAIData[selectedAccountId] || null) : null;
         const sourceText = newsAIEntry_?.text || recentNews;
@@ -3324,15 +3333,6 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       }, [recentNews, newsAIData, selectedAccountId]);
       // Keep newsLines for backward compat with talking points prompt
       const newsLines = newsItems.map(n => `${n.title}${n.body ? ': ' + n.body : ''}`);
-
-      // ── AI-GENERATED NEWS ──
-      const NEWS_AI_LS_KEY = 'oike_news_ai';
-      const [newsAIData, setNewsAIData] = useState(() => {
-        try { return JSON.parse(localStorage.getItem(NEWS_AI_LS_KEY) || '{}'); } catch { return {}; }
-      });
-      const [loadingNewsAI, setLoadingNewsAI] = useState(false);
-      const newsAIEntry = selectedAccountId ? (newsAIData[selectedAccountId] || null) : null;
-      const newsAIUpdatedAt = newsAIEntry?.updatedAt || null;
 
       const generateNewsAI = async () => {
         setLoadingNewsAI(true);
