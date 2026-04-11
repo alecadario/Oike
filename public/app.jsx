@@ -3211,6 +3211,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const [bulkPainLoading, setBulkPainLoading] = useState(false);
       const [bulkPainProgress, setBulkPainProgress] = useState('');
       const [editingAccount, setEditingAccount] = useState(null);
+      const [accDetailTab, setAccDetailTab] = useState('intel');
       const now = new Date();
 
       const saveAccountEdit = async (updatedFields) => {
@@ -4109,7 +4110,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       };
 
       // Reset talking points and recs when account changes
-      useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); }, [selectedAccountId]);
+      useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('intel'); }, [selectedAccountId]);
 
       return (
         <div>
@@ -4294,210 +4295,200 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           {/* Account Briefing */}
           {account && (
             <div>
-              {/* Header */}
-              <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', background: 'linear-gradient(135deg, rgba(191,215,48,0.08) 0%, transparent 100%)' }}>
-                <button className="action-btn btn-ghost" style={{ marginBottom: 12, fontSize: 11 }} onClick={() => setSelectedAccountId('')}>← Back</button>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                      <h2 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{name}</h2>
-                      <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => setEditingAccount(account)}>✏️ Edit</button>
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--globant-muted)' }}>
-                      {F(account, 'Industry')}{F(account, 'Tier') ? ` · ${F(account, 'Tier')}` : ''}{F(account, 'Inside Sales Status') ? ` · ${F(account, 'Inside Sales Status')}` : ''}
-                    </div>
+              {/* ── HERO HEADER ── */}
+              <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0, border: '1px solid rgba(191,215,48,0.2)', borderRadius: 12 }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(191,215,48,0.12) 0%, rgba(96,165,250,0.06) 55%, rgba(167,139,250,0.07) 100%)', padding: '18px 24px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                    <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setSelectedAccountId('')}>← Back</button>
+                    <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setEditingAccount(account)}>✏️ Edit</button>
+                    {F(account, 'Website') && (
+                      <a href={String(F(account, 'Website')).startsWith('http') ? F(account, 'Website') : `https://${F(account, 'Website')}`} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: 'var(--globant-green)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'rgba(191,215,48,0.1)', borderRadius: 6, border: '1px solid rgba(191,215,48,0.2)' }}>
+                        🔗 Website
+                      </a>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 12, textAlign: 'center' }}>
-                    <div style={{ padding: '10px 18px', background: 'var(--globant-darker)', borderRadius: 10 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--globant-green)' }}>{accStakeholders.length}</div>
-                      <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Stakeholders</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <h2 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 12px', letterSpacing: '-0.5px', color: 'var(--globant-text)' }}>{name}</h2>
+                      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {F(account, 'Industry') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(96,165,250,0.14)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.22)', fontWeight: 600 }}>🏭 {F(account, 'Industry')}</span>}
+                        {F(account, 'Country') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(244,114,182,0.12)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.2)', fontWeight: 600 }}>📍 {F(account, 'Country')}</span>}
+                        {F(account, 'Tier') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)', fontWeight: 600 }}>⭐ {F(account, 'Tier')}</span>}
+                        {F(account, 'Inside Sales Status') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(191,215,48,0.14)', color: 'var(--globant-green)', border: '1px solid rgba(191,215,48,0.22)', fontWeight: 600 }}>{F(account, 'Inside Sales Status')}</span>}
+                        {solNames.map((sn, i) => <span key={i} style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.18)' }}>🛠️ {sn}</span>)}
+                      </div>
                     </div>
-                    <div style={{ padding: '10px 18px', background: 'var(--globant-darker)', borderRadius: 10 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--globant-info)' }}>{accOutreach.length}</div>
-                      <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Touches</div>
-                    </div>
-                    <div style={{ padding: '10px 18px', background: 'var(--globant-darker)', borderRadius: 10 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--globant-warning)' }}>{opps.length}</div>
-                      <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Opps</div>
+                    <div style={{ display: 'flex', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
+                      {[
+                        { val: accStakeholders.length, label: 'Contacts', color: 'var(--globant-green)', tab: 'stakeholders' },
+                        { val: accOutreach.length, label: 'Touches', color: '#60a5fa', tab: null },
+                        { val: opps.length, label: 'Opps', color: '#fbbf24', tab: 'pipeline' },
+                        { val: stakeholderEngagement.filter(e => e.hasMeeting).length, label: 'Meetings', color: '#a78bfa', tab: null },
+                      ].map(({ val, label, color, tab: targetTab }) => (
+                        <div key={label} onClick={() => targetTab && setAccDetailTab(targetTab)}
+                          style={{ textAlign: 'center', padding: '10px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', cursor: targetTab ? 'pointer' : 'default', minWidth: 64 }}>
+                          <div style={{ fontSize: 24, fontWeight: 800, color, lineHeight: 1 }}>{val}</div>
+                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3, fontWeight: 600 }}>{label}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* What We Know */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                {/* Left: News + Plan */}
+              {/* ── TAB NAVIGATION ── */}
+              <div style={{ display: 'flex', gap: 4, padding: '4px', background: 'var(--globant-darker)', borderRadius: 12, marginTop: 12, marginBottom: 16, border: '1px solid var(--globant-border)' }}>
+                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline']].map(([tab, label]) => (
+                  <button key={tab} onClick={() => setAccDetailTab(tab)}
+                    style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
+                      background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(191,215,48,0.2) 0%, rgba(191,215,48,0.08) 100%)' : 'transparent',
+                      color: accDetailTab === tab ? 'var(--globant-green)' : 'var(--globant-muted)',
+                      boxShadow: accDetailTab === tab ? '0 1px 4px rgba(0,0,0,0.25), inset 0 1px 0 rgba(191,215,48,0.12)' : 'none',
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ══════════ INTEL TAB ══════════ */}
+              {accDetailTab === 'intel' && (
                 <div>
+                  {/* Recent News — 2-column grid */}
                   {(() => {
-                    const lastUpd = account?.fields?.['Last Updated'];
                     const lastUpdStr = newsAIUpdatedAt
                       ? new Date(newsAIUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                      : lastUpd ? new Date(lastUpd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+                      : account?.fields?.['Last Updated'] ? new Date(account.fields['Last Updated']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
                     return (
-                    <div className="card">
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                        <div>
-                          <h3>📰 Recent News</h3>
-                          {lastUpdStr && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{newsAIUpdatedAt ? '🤖 AI Generated · ' : '🕐 '}Updated: {lastUpdStr}</div>}
-                        </div>
-                        <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-                          onClick={generateNewsAI} disabled={loadingNewsAI}>
-                          {loadingNewsAI ? '⏳ Searching...' : newsAIUpdatedAt ? '🔄 Refresh News' : '✨ Generate with AI'}
-                        </button>
-                      </div>
-                      {newsItems.length === 0 && !loadingNewsAI && (
-                        <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0' }}>No news yet — click Generate to pull recent intel about this account.</p>
-                      )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {newsItems.map((item, i) => {
-                          const lc = (item.title + ' ' + item.body).toLowerCase();
-                          const tag = lc.includes('ai') || lc.includes('artificial') ? { label: 'AI', color: '#bfd730' }
-                                    : lc.includes('digital') ? { label: 'Digital', color: '#60a5fa' }
-                                    : lc.includes('partner') || lc.includes('deal') || lc.includes('agreement') ? { label: 'Partnership', color: '#a78bfa' }
-                                    : lc.includes('financ') || lc.includes('revenue') || lc.includes('invest') || lc.includes('dividend') || lc.includes('earning') || lc.includes('billion') ? { label: 'Finance', color: '#4ade80' }
-                                    : lc.includes('hire') || lc.includes('appoint') || lc.includes('ceo') || lc.includes('cto') || lc.includes('leader') ? { label: 'Leadership', color: '#fb923c' }
-                                    : lc.includes('customer') || lc.includes('cx') || lc.includes('experience') ? { label: 'CX', color: '#f472b6' }
-                                    : lc.includes('expand') || lc.includes('launch') || lc.includes('open') || lc.includes('new office') ? { label: 'Expansion', color: '#38bdf8' }
-                                    : lc.includes('incident') || lc.includes('fire') || lc.includes('shutdown') || lc.includes('crisis') ? { label: 'Incident', color: '#ef4444' }
-                                    : { label: 'News', color: '#94a3b8' };
-                          const fullText = `${item.title}${item.body ? ' — ' + item.body : ''}`;
-                          return (
-                            <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px', borderLeft: `3px solid ${tag.color}` }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(191,215,48,0.05)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.4, marginBottom: item.body ? 4 : 0 }}>{item.title}</div>
-                                  {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5 }}>{item.body}</div>}
-                                </div>
-                                <span style={{ fontSize: 9, fontWeight: 600, padding: '3px 8px', borderRadius: 5, background: tag.color + '22', color: tag.color, whiteSpace: 'nowrap', flexShrink: 0 }}>{tag.label}</span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                                {item.source && (
-                                  <a href={item.source} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--globant-green)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                    🔗 Source
-                                  </a>
-                                )}
-                                <button onClick={() => navigator.clipboard.writeText(fullText)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--globant-muted)', cursor: 'pointer' }}>📋 Copy</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ); })()}
-                  <div className="card" style={{ borderLeft: '3px solid #60a5fa' }}>
-                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <h3>🧠 Executive Summary</h3>
-                        {execSummaryUpdatedAt && (
-                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>
-                            Last updated: {new Date(execSummaryUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      <div className="card">
+                        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                          <div>
+                            <h3>📰 Recent News</h3>
+                            {lastUpdStr && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{newsAIUpdatedAt ? '🤖 AI · ' : '🕐 '}Updated: {lastUpdStr}</div>}
                           </div>
+                          <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+                            onClick={generateNewsAI} disabled={loadingNewsAI}>
+                            {loadingNewsAI ? '⏳ Searching...' : newsAIUpdatedAt ? '🔄 Refresh' : '✨ Generate with AI'}
+                          </button>
+                        </div>
+                        {newsItems.length === 0 && !loadingNewsAI && (
+                          <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '4px 0' }}>No news yet — click Generate to pull recent intel about this account.</p>
                         )}
-                      </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                        onClick={generateExecSummary} disabled={loadingSummary}>
-                        {loadingSummary ? '⏳ Generating...' : execSummary ? '🔄 Regenerate' : '✨ Generate with AI'}
-                      </button>
-                    </div>
-                    {!execSummary && !loadingSummary && (
-                      <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '8px 0' }}>
-                        Generate an executive summary combining recent news, intel notes, solutions, opportunities, and stakeholder status into one strategic briefing.
-                      </p>
-                    )}
-                    {execSummary && (() => {
-                      const lines = execSummary.split('\n').filter(l => l.trim());
-                      return (
-                        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                          {lines.map((line, i) => {
-                            const isHeader = line.match(/^#{1,3}\s/);
-                            const clean = line.replace(/^#{1,3}\s+/, '').replace(/\*\*/g, '').trim();
-                            if (!clean) return null;
-                            if (isHeader) {
-                              return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', marginTop: i > 0 ? 14 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(96,165,250,0.15)' }}>{clean}</div>;
-                            }
-                            const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
-                            const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
-                            const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                          {newsItems.map((item, i) => {
+                            const lc = (item.title + ' ' + item.body).toLowerCase();
+                            const tag = lc.includes('ai') || lc.includes('artificial') ? { label: 'AI', color: '#bfd730' }
+                                      : lc.includes('digital') ? { label: 'Digital', color: '#60a5fa' }
+                                      : lc.includes('partner') || lc.includes('deal') || lc.includes('agreement') ? { label: 'Partnership', color: '#a78bfa' }
+                                      : lc.includes('financ') || lc.includes('revenue') || lc.includes('invest') || lc.includes('dividend') || lc.includes('earning') || lc.includes('billion') ? { label: 'Finance', color: '#4ade80' }
+                                      : lc.includes('hire') || lc.includes('appoint') || lc.includes('ceo') || lc.includes('cto') || lc.includes('leader') ? { label: 'Leadership', color: '#fb923c' }
+                                      : lc.includes('customer') || lc.includes('cx') || lc.includes('experience') ? { label: 'CX', color: '#f472b6' }
+                                      : lc.includes('expand') || lc.includes('launch') || lc.includes('open') || lc.includes('new office') ? { label: 'Expansion', color: '#38bdf8' }
+                                      : lc.includes('incident') || lc.includes('fire') || lc.includes('shutdown') || lc.includes('crisis') ? { label: 'Incident', color: '#ef4444' }
+                                      : { label: 'News', color: '#94a3b8' };
+                            const fullText = `${item.title}${item.body ? ' — ' + item.body : ''}`;
                             return (
-                              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '3px 0' }}>
-                                {isBullet && <span style={{ color: '#60a5fa', fontSize: 8, marginTop: 6 }}>●</span>}
-                                <span style={{ fontSize: 12, lineHeight: 1.6 }}>
-                                  {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**')
-                                    ? <strong key={pi} style={{ color: '#60a5fa' }}>{p.slice(2, -2)}</strong>
-                                    : <span key={pi}>{p}</span>
-                                  )}
-                                </span>
+                              <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px', borderLeft: `3px solid ${tag.color}` }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(191,215,48,0.05)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: item.body ? 5 : 0 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.4 }}>{item.title}</div>
+                                  <span style={{ fontSize: 9, fontWeight: 600, padding: '3px 8px', borderRadius: 5, background: tag.color + '22', color: tag.color, whiteSpace: 'nowrap', flexShrink: 0 }}>{tag.label}</span>
+                                </div>
+                                {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5, marginBottom: 7 }}>{item.body}</div>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {item.source && <a href={item.source} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--globant-green)', textDecoration: 'none' }}>🔗 Source</a>}
+                                  <button onClick={() => navigator.clipboard.writeText(fullText)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--globant-muted)', cursor: 'pointer' }}>📋 Copy</button>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
-                      );
-                    })()}
-                  </div>
-                  {/* ── MEDDPICC CARD ── */}
-                  <div className="card" style={{ borderLeft: '3px solid #f472b6' }}>
-                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <h3>🎯 MEDDPICC</h3>
-                        {meddpiccUpdatedAt && (
-                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>
-                            Last updated: {new Date(meddpiccUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        )}
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        {Object.keys(meddpiccValues).length > 0 && !editingMeddpicc && (
-                          <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
-                            onClick={() => { setMeddpiccDraft({...meddpiccValues}); setEditingMeddpicc(true); }}>
-                            ✏️ Edit
-                          </button>
-                        )}
-                        {editingMeddpicc && (
-                          <>
-                            <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingMeddpicc(false)}>Cancel</button>
-                            <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                              onClick={() => { saveMeddpicc(meddpiccDraft); setEditingMeddpicc(false); }}>
-                              💾 Save
-                            </button>
-                          </>
-                        )}
-                        <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(244,114,182,0.15)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.3)' }}
-                          onClick={generateMeddpicc} disabled={loadingMeddpicc}>
-                          {loadingMeddpicc ? '⏳ Generating...' : Object.keys(meddpiccValues).length > 0 ? '🔄 Regenerate' : '✨ Generate with AI'}
+                    );
+                  })()}
+
+                  {/* ── Exec Summary + MEDDPICC side by side ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    {/* Exec Summary */}
+                    <div className="card" style={{ borderLeft: '3px solid #60a5fa' }}>
+                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h3>🧠 Executive Summary</h3>
+                          {execSummaryUpdatedAt && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>Updated: {new Date(execSummaryUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
+                        </div>
+                        <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateExecSummary} disabled={loadingSummary}>
+                          {loadingSummary ? '⏳...' : execSummary ? '🔄 Regen' : '✨ Generate'}
                         </button>
                       </div>
-                    </div>
-                    {Object.keys(meddpiccValues).length === 0 && !loadingMeddpicc && (
-                      <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '8px 0' }}>
-                        Generate a MEDDPICC qualification using account context — news, stakeholders, opportunities, and intel notes.
-                      </p>
-                    )}
-                    {Object.keys(meddpiccValues).length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-                        {MEDDPICC_FIELDS.map(f => (
-                          <div key={f.key} style={{ borderLeft: '2px solid rgba(244,114,182,0.25)', paddingLeft: 10 }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: '#f472b6', marginBottom: 3 }}>{f.label}</div>
-                            {editingMeddpicc ? (
-                              <textarea
-                                style={{ width: '100%', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '6px 8px', resize: 'vertical', minHeight: 60, lineHeight: 1.5 }}
-                                value={meddpiccDraft[f.key] || ''}
-                                onChange={e => setMeddpiccDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
-                                placeholder={f.hint}
-                              />
-                            ) : (
-                              <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                                {meddpiccValues[f.key] || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Not defined</span>}
-                              </div>
-                            )}
+                      {!execSummary && !loadingSummary && <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '6px 0' }}>Generate a strategic briefing combining news, stakeholders, opportunities, and intel.</p>}
+                      {execSummary && (() => {
+                        const lines = execSummary.split('\n').filter(l => l.trim());
+                        return (
+                          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                            {lines.map((line, i) => {
+                              const isHeader = line.match(/^#{1,3}\s/);
+                              const clean = line.replace(/^#{1,3}\s+/, '').replace(/\*\*/g, '').trim();
+                              if (!clean) return null;
+                              if (isHeader) return <div key={i} style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', marginTop: i > 0 ? 12 : 0, paddingBottom: 3, borderBottom: '1px solid rgba(96,165,250,0.15)' }}>{clean}</div>;
+                              const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
+                              const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
+                              const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
+                              return <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '2px 0' }}>
+                                {isBullet && <span style={{ color: '#60a5fa', fontSize: 8, marginTop: 6 }}>●</span>}
+                                <span style={{ fontSize: 12, lineHeight: 1.6 }}>
+                                  {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**') ? <strong key={pi} style={{ color: '#60a5fa' }}>{p.slice(2,-2)}</strong> : <span key={pi}>{p}</span>)}
+                                </span>
+                              </div>;
+                            })}
                           </div>
-                        ))}
+                        );
+                      })()}
+                    </div>
+
+                    {/* MEDDPICC */}
+                    <div className="card" style={{ borderLeft: '3px solid #f472b6' }}>
+                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h3>🎯 MEDDPICC</h3>
+                          {meddpiccUpdatedAt && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>Updated: {new Date(meddpiccUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          {Object.keys(meddpiccValues).length > 0 && !editingMeddpicc && (
+                            <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setMeddpiccDraft({...meddpiccValues}); setEditingMeddpicc(true); }}>✏️</button>
+                          )}
+                          {editingMeddpicc && (
+                            <>
+                              <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingMeddpicc(false)}>Cancel</button>
+                              <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => { saveMeddpicc(meddpiccDraft); setEditingMeddpicc(false); }}>💾</button>
+                            </>
+                          )}
+                          <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(244,114,182,0.15)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.3)' }}
+                            onClick={generateMeddpicc} disabled={loadingMeddpicc}>
+                            {loadingMeddpicc ? '⏳' : Object.keys(meddpiccValues).length > 0 ? '🔄' : '✨ Generate'}
+                          </button>
+                        </div>
                       </div>
-                    )}
+                      {Object.keys(meddpiccValues).length === 0 && !loadingMeddpicc && <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '6px 0' }}>Generate MEDDPICC qualification using account context — news, stakeholders, opportunities, and intel notes.</p>}
+                      {Object.keys(meddpiccValues).length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 400, overflowY: 'auto' }}>
+                          {MEDDPICC_FIELDS.map(f => (
+                            <div key={f.key} style={{ borderLeft: '2px solid rgba(244,114,182,0.25)', paddingLeft: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: '#f472b6', marginBottom: 2 }}>{f.label}</div>
+                              {editingMeddpicc ? (
+                                <textarea style={{ width: '100%', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '5px 7px', resize: 'vertical', minHeight: 50, lineHeight: 1.5, boxSizing: 'border-box' }}
+                                  value={meddpiccDraft[f.key] || ''} onChange={e => setMeddpiccDraft(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.hint} />
+                              ) : (
+                                <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{meddpiccValues[f.key] || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Not defined</span>}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
+                  {/* Intel Notes */}
                   <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
                     <div className="card-header">
                       <h3>📝 Intel Notes</h3>
@@ -4526,13 +4517,9 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       </div>
                     </div>
                     {editingNotes ? (
-                      <textarea
-                        className="input-field"
-                        value={notesValue}
-                        onChange={e => setNotesValue(e.target.value)}
+                      <textarea className="input-field" value={notesValue} onChange={e => setNotesValue(e.target.value)}
                         placeholder="Add your intel notes here... meeting insights, context, observations, next steps..."
-                        style={{ width: '100%', minHeight: 120, fontSize: 12, lineHeight: 1.6, resize: 'vertical' }}
-                      />
+                        style={{ width: '100%', minHeight: 120, fontSize: 12, lineHeight: 1.6, resize: 'vertical' }} />
                     ) : intelNotes ? (
                       <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto' }}>
                         {intelNotes.split(/(\n📎 FILE:)/g).map((block, i) => {
@@ -4555,10 +4542,268 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No notes yet — click "Add Notes" to write, or "Upload File" to add intel from documents</div>
                     )}
                   </div>
-                </div>
 
-                {/* Right: Solutions + Opps + Events */}
+                  {/* AI Talking Points */}
+                  <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3>🎤 Recommended Talking Points</h3>
+                      <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateTalkingPoints} disabled={loadingTP}>
+                        {loadingTP ? '⏳ Generating...' : talkingPoints ? '🔄 Regenerate' : '✨ Generate with AI'}
+                      </button>
+                    </div>
+                    {!talkingPoints && !loadingTP && (
+                      <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '8px 0' }}>
+                        Generate personalized talking points based on stakeholder pain points, recent news, and mapped solutions.
+                      </p>
+                    )}
+                    {talkingPoints && (() => {
+                      const tpLines = talkingPoints.split('\n').filter(l => l.trim());
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {tpLines.map((line, i) => {
+                            const isHeader = line.match(/^#{1,3}\s/) || line.match(/^\*\*[A-Z]/);
+                            const clean = line.replace(/^#{1,3}\s+/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
+                            if (!clean) return null;
+                            if (isHeader) {
+                              return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)', marginTop: i > 0 ? 10 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(191,215,48,0.15)' }}>{clean.replace(/\*\*/g, '')}</div>;
+                            }
+                            const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
+                            const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
+                            const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
+                            return (
+                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
+                                {isBullet && <span style={{ color: 'var(--globant-green)', fontSize: 8, marginTop: 6 }}>●</span>}
+                                <span style={{ fontSize: 12, lineHeight: 1.6 }}>
+                                  {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**')
+                                    ? <strong key={pi} style={{ color: 'var(--globant-green)' }}>{p.slice(2, -2)}</strong>
+                                    : <span key={pi}>{p}</span>
+                                  )}
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Who to Contact */}
+                  <div className="card" style={{ borderLeft: '3px solid var(--globant-info)' }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3>🎯 Who to Contact Next</h3>
+                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: 'var(--globant-info)', border: '1px solid rgba(96,165,250,0.3)' }}
+                        onClick={generateContactRecs} disabled={loadingRecs}>
+                        {loadingRecs ? '⏳ Analyzing...' : contactRecs ? '🔄 Refresh' : '🤖 Get AI Recommendations'}
+                      </button>
+                    </div>
+                    {!contactRecs && !loadingRecs && (
+                      <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '8px 0' }}>
+                        AI analyzes stakeholders, outreach history, pipeline, news, and gaps to recommend who to contact, missing roles to find, and re-engagement tactics.
+                      </p>
+                    )}
+                    {contactRecs && (() => {
+                      const sectionIcons = { 'PRIORITY CONTACTS': '🔥', 'MISSING ROLES': '🔍', 'RE-ENGAGEMENT': '♻️', 'TIMING & TRIGGERS': '⏰', 'TIMING': '⏰', 'TRIGGERS': '⏰' };
+                      const sectionColors = { 'PRIORITY CONTACTS': '#4ade80', 'MISSING ROLES': '#60a5fa', 'RE-ENGAGEMENT': '#fbbf24', 'TIMING & TRIGGERS': '#f87171', 'TIMING': '#f87171', 'TRIGGERS': '#f87171' };
+                      const sections = contactRecs.split(/#{2,3}\s+/).filter(Boolean);
+                      return (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                          {sections.map((sec, i) => {
+                            const lines = sec.trim().split('\n');
+                            const titleLine = lines[0].replace(/\*+/g, '').trim();
+                            const titleKey = Object.keys(sectionIcons).find(k => titleLine.toUpperCase().includes(k)) || '';
+                            const icon = sectionIcons[titleKey] || '📋';
+                            const color = sectionColors[titleKey] || 'var(--globant-info)';
+                            const body = lines.slice(1).join('\n').trim();
+                            const renderLine = (line, li) => {
+                              const clean = line.replace(/^[\s-]*\d*\.?\s*/, '').trim();
+                              if (!clean) return null;
+                              const parts = clean.split(/(\*\*[^*]+\*\*)/g);
+                              return (
+                                <div key={li} style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                  <span style={{ color, fontSize: 8, marginTop: 6 }}>●</span>
+                                  <span style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)' }}>
+                                    {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**') ? <strong key={pi} style={{ color }}>{p.slice(2, -2)}</strong> : <span key={pi}>{p}</span>)}
+                                  </span>
+                                </div>
+                              );
+                            };
+                            return (
+                              <div key={i} style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: `1px solid ${color}22` }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                                  <span style={{ fontSize: 18 }}>{icon}</span>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{titleLine}</span>
+                                </div>
+                                {body.split('\n').map((line, li) => renderLine(line, li))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════ STAKEHOLDERS TAB ══════════ */}
+              {accDetailTab === 'stakeholders' && (
                 <div>
+                  {/* Avatar cards grid */}
+                  <div className="card" style={{ marginBottom: 0 }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <h3>👥 Contacts ({stakeholderEngagement.length})</h3>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input className="input-field" style={{ maxWidth: 200, fontSize: 12, padding: '6px 12px' }}
+                          placeholder="Search name or role..."
+                          value={stakeholderSearch} onChange={e => setStakeholderSearch(e.target.value)} />
+                        <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                          onClick={bulkGeneratePainPoints} disabled={bulkPainLoading}>
+                          {bulkPainLoading ? `⏳ ${bulkPainProgress}` : '🧠 Bulk Pain'}
+                        </button>
+                        <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                          onClick={() => setShowNewStakeholder(!showNewStakeholder)}>
+                          {showNewStakeholder ? '✕ Close' : '➕ Add Contact'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* New Stakeholder Form */}
+                    {showNewStakeholder && (
+                      <div style={{ padding: '14px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 12, border: '1px solid var(--globant-border)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10 }}>New Contact for {name}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>FIRST NAME *</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. Ana" value={newStkName} onChange={e => setNewStkName(e.target.value)} /></div>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LAST NAME</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. García" value={newStkLastName} onChange={e => setNewStkLastName(e.target.value)} /></div>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ROLE</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. CTO" value={newStkRole} onChange={e => setNewStkRole(e.target.value)} /></div>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EMAIL</label><input className="input-field" type="email" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="ana@company.com" value={newStkEmail} onChange={e => setNewStkEmail(e.target.value)} /></div>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>PHONE</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="+34..." value={newStkPhone} onChange={e => setNewStkPhone(e.target.value)} /></div>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LINKEDIN URL</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://linkedin.com/in/..." value={newStkLinkedin} onChange={e => setNewStkLinkedin(e.target.value)} /></div>
+                          <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>INFLUENCE</label><select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={newStkInfluence} onChange={e => setNewStkInfluence(e.target.value)}><option value="">Select...</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></div>
+                        </div>
+                        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                          <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={createStakeholder} disabled={!newStkName.trim() || creatingStk}>{creatingStk ? '⏳ Creating...' : '🚀 Create Contact'}</button>
+                          <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowNewStakeholder(false)}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Avatar cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
+                      {stakeholderEngagement
+                        .filter(({ s, sName }) => {
+                          if (!stakeholderSearch) return true;
+                          const term = stakeholderSearch.toLowerCase();
+                          return sName.toLowerCase().includes(term) || (F(s, 'Role') || '').toLowerCase().includes(term);
+                        })
+                        .map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
+                          const initials = sName.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase();
+                          const influence = F(s, 'Level of Influence') || '';
+                          const influenceColor = influence === 'High' || influence === 'Decision Maker' ? '#ef4444' : influence === 'Influencer' || influence === 'Champion' ? '#f472b6' : influence === 'Medium' ? '#fbbf24' : influence === 'Low' ? '#94a3b8' : '#60a5fa';
+                          const statusColor = hasMeeting ? '#a78bfa' : hasReplied ? '#4ade80' : totalTouches > 0 ? '#fbbf24' : '#ef4444';
+                          const statusLabel = hasMeeting ? '📅 Meeting' : hasReplied ? '✅ Replied' : totalTouches > 0 ? `⏳ ${totalTouches}x sent` : '⚠️ No contact';
+                          const phone = F(s, 'Phone number');
+                          const email = F(s, 'Email');
+                          const linkedin = F(s, 'LinkedIn');
+                          return (
+                            <div key={s.id} style={{ background: 'var(--globant-darker)', border: '1px solid var(--globant-border)', borderRadius: 12, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer', transition: 'border-color 0.15s' }}
+                              onMouseEnter={e => e.currentTarget.style.borderColor = influenceColor + '55'}
+                              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--globant-border)'}
+                              onClick={() => setHistoryStakeholder(s)}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 42, height: 42, borderRadius: '50%', background: `linear-gradient(135deg, ${influenceColor}30, ${influenceColor}10)`, border: `2px solid ${influenceColor}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: influenceColor, flexShrink: 0 }}>
+                                  {initials || '?'}
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sName}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{F(s, 'Role') || '—'}</div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: 10, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
+                                {influence && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: influenceColor + '18', color: influenceColor, fontWeight: 600 }}>{influence}</span>}
+                              </div>
+                              {lastTouch && (
+                                <div style={{ fontSize: 10, color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : 'var(--globant-muted)' }}>
+                                  Last: {new Date(lastTouch.fields?.['Date']).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {daysSince}d ago
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                                <button title="AI Message" style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => setCpSelectedStakeholder(s)}>✉️</button>
+                                <button title="Schedule Meeting" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => { setCpMeetingModal({ stakeholder: s }); setCpMeetingNotes(''); setCpMeetingDate(''); setCpMeetingTime(''); }}>📅</button>
+                                <button title="Log Call" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => { setCpCallModal(s); setCpCallNotes(''); }}>📞</button>
+                                {phone && <button title="WhatsApp" style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12 }} onClick={() => window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}`, '_blank')}>💬</button>}
+                                {linkedin && <button title="LinkedIn" style={{ background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.25)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#0A66C2' }} onClick={() => window.open(linkedin, '_blank')}>in</button>}
+                                <button title="Edit" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 12, color: 'var(--globant-muted)' }} onClick={() => setCpEditingContact(s)}>✏️</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Detail table */}
+                    <div style={{ borderTop: '1px solid var(--globant-border)', paddingTop: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Details</div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="data-table">
+                          <thead><tr><th>Name</th><th>Role</th><th>Influence</th><th>Last Contact</th><th>Pain Points</th><th>Status</th><th style={{ textAlign: 'center' }}>Actions</th></tr></thead>
+                          <tbody>
+                            {stakeholderEngagement
+                              .filter(({ s, sName }) => {
+                                if (!stakeholderSearch) return true;
+                                const term = stakeholderSearch.toLowerCase();
+                                return sName.toLowerCase().includes(term) || (F(s, 'Role') || '').toLowerCase().includes(term);
+                              })
+                              .map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
+                                const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
+                                const painText = typeof pain === 'string' ? pain : String(pain);
+                                const phone = F(s, 'Phone number');
+                                const email = F(s, 'Email');
+                                const linkedin = F(s, 'LinkedIn');
+                                return (
+                                  <tr key={s.id}>
+                                    <td style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{sName}</td>
+                                    <td style={{ fontSize: 12 }}>{F(s, 'Role')}</td>
+                                    <td>{F(s, 'Level of Influence') ? <span className="badge badge-accent">{F(s, 'Level of Influence')}</span> : '—'}</td>
+                                    <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                                      {lastTouch ? (
+                                        <span style={{ color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : '#60a5fa', fontWeight: 600 }}>
+                                          {new Date(lastTouch.fields?.['Date']).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                          <span style={{ fontSize: 10, opacity: 0.8, marginLeft: 4 }}>({daysSince}d)</span>
+                                        </span>
+                                      ) : <span className="badge" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 10 }}>Never</span>}
+                                    </td>
+                                    <td style={{ fontSize: 12, maxWidth: 200, lineHeight: 1.4 }}>{painText.length > 100 ? painText.slice(0, 100) + '...' : painText || <span style={{ color: 'var(--globant-muted)' }}>—</span>}</td>
+                                    <td>
+                                      {hasMeeting ? <span className="badge badge-blue">Meeting</span> :
+                                       hasReplied ? <span className="badge badge-green">Replied</span> :
+                                       totalTouches > 0 ? <span className="badge badge-yellow">Waiting</span> :
+                                       <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>No contact</span>}
+                                    </td>
+                                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                                        <button title="AI Message" style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => setCpSelectedStakeholder(s)}>✉️</button>
+                                        <button title="Schedule Meeting" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => { setCpMeetingModal({ stakeholder: s }); setCpMeetingNotes(''); setCpMeetingDate(''); setCpMeetingTime(''); }}>📅</button>
+                                        <button title="Log Call" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => { setCpCallModal(s); setCpCallNotes(''); }}>📞</button>
+                                        {phone && <button title="WhatsApp" style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}`, '_blank')}>💬</button>}
+                                        {linkedin && <button title="LinkedIn" style={{ background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#0A66C2' }} onClick={() => window.open(linkedin, '_blank')}>in</button>}
+                                        <button title="Edit" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: 'var(--globant-muted)' }} onClick={() => setCpEditingContact(s)}>✏️</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════ PIPELINE TAB ══════════ */}
+              {accDetailTab === 'pipeline' && (
+                <div>
+                  {/* Solutions */}
                   <div className="card">
                     <div className="card-header">
                       <h3>🛠️ Solutions & Approach</h3>
@@ -4566,8 +4811,6 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                         {showSolPicker ? '✕ Close' : '➕ Add Solution'}
                       </button>
                     </div>
-
-                    {/* Current solutions with remove */}
                     {currentSolIds.length > 0 ? (
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: showSolPicker ? 12 : 0 }}>
                         {currentSolIds.map(sid => {
@@ -4576,9 +4819,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           return (
                             <span key={sid} className="badge badge-accent" style={{ fontSize: 12, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
                               {solName}
-                              <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 10 }}
-                                onClick={() => removeSolutionFromAccount(sid)}
-                                title="Remove from account">
+                              <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 10 }} onClick={() => removeSolutionFromAccount(sid)} title="Remove">
                                 {removingSol === sid ? '⏳' : '✕'}
                               </span>
                             </span>
@@ -4586,41 +4827,27 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                         })}
                       </div>
                     ) : <p style={{ color: 'var(--globant-warning)', fontSize: 12, marginBottom: showSolPicker ? 12 : 0 }}>No solutions mapped yet</p>}
-
-                    {/* Solution picker */}
                     {showSolPicker && (
                       <div style={{ padding: '12px', background: 'var(--globant-darker)', borderRadius: 8 }}>
-                        {/* Existing solutions */}
                         {availableSolutions.length > 0 && (
                           <div style={{ marginBottom: 12 }}>
                             <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6 }}>SELECT EXISTING</div>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               {availableSolutions.map(s => (
-                                <button key={s.id} className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}
-                                  onClick={() => addSolutionToAccount(s.id)}>
-                                  + {F(s, 'Name')}
-                                </button>
+                                <button key={s.id} className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => addSolutionToAccount(s.id)}>+ {F(s, 'Name')}</button>
                               ))}
                             </div>
                           </div>
                         )}
-                        {/* Create new */}
                         <div>
                           <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6 }}>OR CREATE NEW</div>
                           <div style={{ display: 'flex', gap: 8 }}>
-                            <input className="input-field" style={{ flex: 1, fontSize: 12, padding: '6px 10px' }}
-                              placeholder="New solution name..."
-                              value={newSolName} onChange={e => setNewSolName(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && createNewSolution()} />
-                            <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                              onClick={createNewSolution} disabled={!newSolName.trim() || creatingSol}>
-                              {creatingSol ? '⏳' : '✨ Create & Add'}
-                            </button>
+                            <input className="input-field" style={{ flex: 1, fontSize: 12, padding: '6px 10px' }} placeholder="New solution name..." value={newSolName} onChange={e => setNewSolName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createNewSolution()} />
+                            <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={createNewSolution} disabled={!newSolName.trim() || creatingSol}>{creatingSol ? '⏳' : '✨ Create & Add'}</button>
                           </div>
                         </div>
                       </div>
                     )}
-
                     {F(account, 'Service / Focus') && (
                       <div style={{ marginTop: 10 }}>
                         <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Focus: </span>
@@ -4631,249 +4858,127 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                     )}
                   </div>
 
+                  {/* Pipeline / Opportunities */}
                   <div className="card">
                     <div className="card-header">
                       <h3>🚀 Pipeline ({opps.length})</h3>
-                      <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={openNewOpp}>
-                        ➕ New Opp
-                      </button>
+                      <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={openNewOpp}>➕ New Opp</button>
                     </div>
-                    {opps.length === 0 && (
-                      <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No opportunities yet. Click "New Opp" to create one.</p>
-                    )}
-                    {opps.length > 0 && opps.map(o => {
-                        const stage = F(o, 'Stage');
-                        const value = o.fields?.['Value'];
-                        const stageColor = (stage||'').toLowerCase().includes('won') ? 'badge-green' : (stage||'').toLowerCase().includes('lost') || (stage||'').toLowerCase().includes('cancel') ? 'badge-red' : 'badge-blue';
-                        const isOpen = selectedOppId === o.id;
-                        return (
-                          <div key={o.id} style={{ borderBottom: '1px solid var(--globant-border)' }}>
-                            <div style={{ padding: '10px 0', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1 }}
-                                onClick={() => {
-                                  if (isOpen) { setSelectedOppId(''); }
-                                  else {
-                                    setSelectedOppId(o.id);
-                                    setOppNotes(F(o, 'Reason') || '');
-                                    setOppNextStep(F(o, 'Next step') || '');
-                                    setOppStakeholder(F(o, 'Stakeholders') || '');
-                                    setOppSolutionIds(linkedIds(o, 'Solutions'));
-                                    setEditingOppNotes(false);
-                                    setShowAddOppStk(false);
-                                  }
-                                }}>
-                                <span style={{ color: 'var(--globant-green)', fontSize: 10 }}>{isOpen ? '▼' : '▶'}</span>
-                                <span style={{ fontWeight: 600 }}>{F(o, 'Deal/Opp name')}</span>
-                              </div>
-                              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                <span className={`badge ${stageColor}`}>{stage}</span>
-                                {value ? <span className="badge badge-green">{formatCurrency(value)}</span> : null}
-                                <button
-                                  className="action-btn btn-ghost"
-                                  style={{ fontSize: 10, padding: '2px 8px', marginLeft: 4 }}
-                                  onClick={e => { e.stopPropagation(); openEditOpp(o); }}
-                                  title="Edit opportunity"
-                                >✏️</button>
-                                <button
-                                  style={{ fontSize: 10, padding: '2px 8px', marginLeft: 2, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', cursor: 'pointer' }}
-                                  onClick={e => { e.stopPropagation(); deleteOpp(o); }}
-                                  title="Delete opportunity"
-                                >🗑</button>
-                              </div>
+                    {opps.length === 0 && <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No opportunities yet. Click "New Opp" to create one.</p>}
+                    {opps.map(o => {
+                      const stage = F(o, 'Stage');
+                      const value = o.fields?.['Value'];
+                      const stageColor = (stage||'').toLowerCase().includes('won') ? 'badge-green' : (stage||'').toLowerCase().includes('lost') || (stage||'').toLowerCase().includes('cancel') ? 'badge-red' : 'badge-blue';
+                      const isOpen = selectedOppId === o.id;
+                      return (
+                        <div key={o.id} style={{ borderBottom: '1px solid var(--globant-border)' }}>
+                          <div style={{ padding: '10px 0', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1 }}
+                              onClick={() => { if (isOpen) { setSelectedOppId(''); } else { setSelectedOppId(o.id); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); setOppStakeholder(F(o, 'Stakeholders') || ''); setOppSolutionIds(linkedIds(o, 'Solutions')); setEditingOppNotes(false); setShowAddOppStk(false); } }}>
+                              <span style={{ color: 'var(--globant-green)', fontSize: 10 }}>{isOpen ? '▼' : '▶'}</span>
+                              <span style={{ fontWeight: 600 }}>{F(o, 'Deal/Opp name')}</span>
                             </div>
-                            {isOpen && (
-                              <div style={{ padding: '0 0 14px 20px', fontSize: 12 }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12, padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-                                  {F(o, 'Opp Owner') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Owner:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Opp Owner')}</span></div>}
-                                  {F(o, 'Inside sale Rep') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Inside Sales:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Inside sale Rep')}</span></div>}
-                                  {o.fields?.['close date'] && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Close Date:</span> <span style={{ fontWeight: 600 }}>{formatDate(o.fields['close date'])}</span></div>}
-                                  {o.fields?.['Close probability (%)'] != null && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Probability:</span> <span style={{ fontWeight: 600 }}>{Math.round(o.fields['Close probability (%)'] * 100)}%</span></div>}
-                                  {F(o, 'Opp origin') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Origin:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Opp origin')}</span></div>}
-                                  {F(o, 'Tech / Ecosystem') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Tech:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Tech / Ecosystem')}</span></div>}
-                                  {F(o, 'Confidence') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Confidence:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Confidence')}</span></div>}
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <span className={`badge ${stageColor}`}>{stage}</span>
+                              {value ? <span className="badge badge-green">{formatCurrency(value)}</span> : null}
+                              <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px', marginLeft: 4 }} onClick={e => { e.stopPropagation(); openEditOpp(o); }} title="Edit">✏️</button>
+                              <button style={{ fontSize: 10, padding: '2px 8px', marginLeft: 2, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); deleteOpp(o); }} title="Delete">🗑</button>
+                            </div>
+                          </div>
+                          {isOpen && (
+                            <div style={{ padding: '0 0 14px 20px', fontSize: 12 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12, padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+                                {F(o, 'Opp Owner') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Owner:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Opp Owner')}</span></div>}
+                                {F(o, 'Inside sale Rep') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Inside Sales:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Inside sale Rep')}</span></div>}
+                                {o.fields?.['close date'] && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Close Date:</span> <span style={{ fontWeight: 600 }}>{formatDate(o.fields['close date'])}</span></div>}
+                                {o.fields?.['Close probability (%)'] != null && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Probability:</span> <span style={{ fontWeight: 600 }}>{Math.round(o.fields['Close probability (%)'] * 100)}%</span></div>}
+                                {F(o, 'Opp origin') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Origin:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Opp origin')}</span></div>}
+                                {F(o, 'Tech / Ecosystem') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Tech:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Tech / Ecosystem')}</span></div>}
+                                {F(o, 'Confidence') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Confidence:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Confidence')}</span></div>}
+                              </div>
+                              {/* Stakeholder */}
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>👤 Stakeholder</span>
+                                  {!editingOppNotes && <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => setEditingOppNotes(true)}>✏️ Edit</button>}
                                 </div>
-                                {/* Stakeholder assigned to this opp */}
-                                <div style={{ marginBottom: 12 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>👤 Stakeholder</span>
-                                    {!editingOppNotes && (
-                                      <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }}
-                                        onClick={() => setEditingOppNotes(true)}>✏️ Edit</button>
+                                {editingOppNotes ? (
+                                  <div>
+                                    <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 6 }} value={oppStakeholder} onChange={e => { setOppStakeholder(e.target.value); setShowAddOppStk(false); }}>
+                                      <option value="">— Select stakeholder —</option>
+                                      {accStakeholders.map(s => { const sFullName = F(s, 'Name') + (F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''); const sRole = F(s, 'Role') || ''; return <option key={s.id} value={sFullName}>{sFullName}{sRole ? ` — ${sRole}` : ''}</option>; })}
+                                    </select>
+                                    <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 8px', marginBottom: 6 }} onClick={() => setShowAddOppStk(!showAddOppStk)}>{showAddOppStk ? '✕ Cancel' : '➕ New Contact'}</button>
+                                    {showAddOppStk && (
+                                      <div style={{ display: 'flex', gap: 6, marginBottom: 6, padding: '8px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 8 }}>
+                                        <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
+                                        <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
+                                        <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }} disabled={!newOppStkName.trim() || creatingOppStk}
+                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; await api.createRecord(TABLE_IDS.stakeholders, { 'Name': firstName, ...(lastName ? { 'Lart name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [{ id: account.id }] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to create stakeholder'); } setCreatingOppStk(false); }}>
+                                          {creatingOppStk ? '⏳' : '✨ Create'}
+                                        </button>
+                                      </div>
                                     )}
                                   </div>
-                                  {editingOppNotes ? (
-                                    <div>
-                                      <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 6 }}
-                                        value={oppStakeholder}
-                                        onChange={e => { setOppStakeholder(e.target.value); setShowAddOppStk(false); }}>
-                                        <option value="">— Select stakeholder —</option>
-                                        {accStakeholders.map(s => {
-                                          const sFullName = F(s, 'Name') + (F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : '');
-                                          const sRole = F(s, 'Role') || '';
-                                          return <option key={s.id} value={sFullName}>{sFullName}{sRole ? ` — ${sRole}` : ''}</option>;
-                                        })}
-                                      </select>
-                                      <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 8px', marginBottom: 6 }}
-                                        onClick={() => setShowAddOppStk(!showAddOppStk)}>
-                                        {showAddOppStk ? '✕ Cancel' : '➕ New Contact'}
-                                      </button>
-                                      {showAddOppStk && (
-                                        <div style={{ display: 'flex', gap: 6, marginBottom: 6, padding: '8px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 8 }}>
-                                          <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }}
-                                            placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
-                                          <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }}
-                                            placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
-                                          <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }}
-                                            disabled={!newOppStkName.trim() || creatingOppStk}
-                                            onClick={async () => {
-                                              setCreatingOppStk(true);
-                                              try {
-                                                const parts = newOppStkName.trim().split(/\s+/);
-                                                const firstName = parts[0] || '';
-                                                const lastName = parts.slice(1).join(' ') || '';
-                                                await api.createRecord(TABLE_IDS.stakeholders, {
-                                                  'Name': firstName,
-                                                  ...(lastName ? { 'Lart name': lastName } : {}),
-                                                  ...(newOppStkRole ? { 'Role': newOppStkRole } : {}),
-                                                  'Account': account ? [{ id: account.id }] : [],
-                                                  'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-                                                  'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
-                                                });
-                                                setOppStakeholder(newOppStkName.trim());
-                                                setNewOppStkName('');
-                                                setNewOppStkRole('');
-                                                setShowAddOppStk(false);
-                                                if (onLogActivity) onLogActivity();
-                                              } catch (e) { console.error(e); alert('Failed to create stakeholder'); }
-                                              setCreatingOppStk(false);
-                                            }}>
-                                            {creatingOppStk ? '⏳' : '✨ Create'}
-                                          </button>
-                                        </div>
-                                      )}
+                                ) : <div style={{ fontSize: 12, color: oppStakeholder ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppStakeholder ? 'normal' : 'italic' }}>{oppStakeholder || 'No stakeholder assigned'}</div>}
+                              </div>
+                              {/* Solution */}
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>🛠️ Solution</span></div>
+                                {editingOppNotes ? (
+                                  <div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                                      {oppSolutionIds.map(sid => { const sol = solutions.find(s => s.id === sid); if (!sol) return null; return <span key={sid} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 }}>{F(sol, 'Name')}<span style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13 }} onClick={() => setOppSolutionIds(prev => prev.filter(id => id !== sid))}>×</span></span>; })}
                                     </div>
-                                  ) : (
-                                    <div style={{ fontSize: 12, color: oppStakeholder ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppStakeholder ? 'normal' : 'italic' }}>
-                                      {oppStakeholder || 'No stakeholder assigned'}
-                                    </div>
-                                  )}
-                                </div>
-                                {/* Solution linked to this opp */}
-                                <div style={{ marginBottom: 12 }}>
-                                  <div style={{ marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>🛠️ Solution</span>
+                                    <select className="input-field" style={{ width: '100%', fontSize: 12 }} value="" onChange={e => { if (e.target.value && !oppSolutionIds.includes(e.target.value)) setOppSolutionIds(prev => [...prev, e.target.value]); }}>
+                                      <option value="">+ Add solution...</option>
+                                      {solutions.filter(s => !oppSolutionIds.includes(s.id)).map(s => <option key={s.id} value={s.id}>{F(s, 'Name')}</option>)}
+                                    </select>
                                   </div>
-                                  {editingOppNotes ? (
-                                    <div>
-                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                                        {oppSolutionIds.map(sid => {
-                                          const sol = solutions.find(s => s.id === sid);
-                                          if (!sol) return null;
-                                          return (
-                                            <span key={sid} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                              {F(sol, 'Name')}
-                                              <span style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
-                                                onClick={() => setOppSolutionIds(prev => prev.filter(id => id !== sid))}>×</span>
-                                            </span>
-                                          );
-                                        })}
-                                      </div>
-                                      <select className="input-field" style={{ width: '100%', fontSize: 12 }}
-                                        value="" onChange={e => {
-                                          if (e.target.value && !oppSolutionIds.includes(e.target.value)) {
-                                            setOppSolutionIds(prev => [...prev, e.target.value]);
-                                          }
-                                        }}>
-                                        <option value="">+ Add solution...</option>
-                                        {solutions.filter(s => !oppSolutionIds.includes(s.id)).map(s => (
-                                          <option key={s.id} value={s.id}>{F(s, 'Name')}</option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                      {oppSolutionIds.length > 0 ? oppSolutionIds.map(sid => {
-                                        const sol = solutions.find(s => s.id === sid);
-                                        return sol ? (
-                                          <span key={sid} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>
-                                            {F(sol, 'Name')}
-                                          </span>
-                                        ) : null;
-                                      }) : (
-                                        <span style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No solution assigned</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                {(F(o, 'Suggested Angle') || F(o, 'Suggested Solution Theme') || F(o, 'Potential Interest') || F(o, 'Role-Based Pain Point')) && (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                                    {F(o, 'Suggested Angle') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(191,215,48,0.12)', color: 'var(--globant-green)' }}>🎯 {F(o, 'Suggested Angle')}</span>}
-                                    {F(o, 'Suggested Solution Theme') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>🛠️ {F(o, 'Suggested Solution Theme')}</span>}
-                                    {F(o, 'Potential Interest') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(96,165,250,0.12)', color: '#60a5fa' }}>💡 {F(o, 'Potential Interest')}</span>}
-                                    {F(o, 'Role-Based Pain Point') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(244,114,182,0.12)', color: '#f472b6' }}>⚡ {F(o, 'Role-Based Pain Point')}</span>}
-                                  </div>
-                                )}
-                                {/* Next Step */}
-                                <div style={{ marginBottom: 10 }}>
-                                  <div style={{ marginBottom: 4 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>Next Step</span>
-                                  </div>
-                                  {editingOppNotes ? (
-                                    <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px', marginBottom: 6 }}
-                                      value={oppNextStep} onChange={e => setOppNextStep(e.target.value)}
-                                      placeholder="What's the next step for this opp?" />
-                                  ) : (
-                                    <div style={{ fontSize: 12, color: oppNextStep ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppNextStep ? 'normal' : 'italic' }}>
-                                      {oppNextStep || 'No next step defined'}
-                                    </div>
-                                  )}
-                                </div>
-                                {/* Notes / Reason */}
-                                <div style={{ marginBottom: 10 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', display: 'block', marginBottom: 4 }}>Notes</span>
-                                  {editingOppNotes ? (
-                                    <textarea className="input-field" style={{ width: '100%', minHeight: 80, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
-                                      value={oppNotes} onChange={e => setOppNotes(e.target.value)}
-                                      placeholder="Add notes about this opportunity — context, blockers, updates..." />
-                                  ) : (
-                                    <div style={{ fontSize: 12, color: oppNotes ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppNotes ? 'normal' : 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                      {oppNotes || 'No notes yet. Click Edit to add context.'}
-                                    </div>
-                                  )}
-                                </div>
-                                {editingOppNotes && (
-                                  <div style={{ display: 'flex', gap: 8 }}>
-                                    <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                                      disabled={savingOppNotes}
-                                      onClick={async () => {
-                                        setSavingOppNotes(true);
-                                        try {
-                                          await api.updateRecord(TABLE_IDS.opportunities, o.id, {
-                                            'Reason': oppNotes,
-                                            'Next step': oppNextStep,
-                                            'Stakeholders': oppStakeholder,
-                                            'Solutions': oppSolutionIds.map(id => ({ id })),
-                                          });
-                                          setEditingOppNotes(false);
-                                          if (onLogActivity) onLogActivity();
-                                        } catch (e) { console.error(e); alert('Failed to save'); }
-                                        setSavingOppNotes(false);
-                                      }}>
-                                      {savingOppNotes ? '⏳ Saving...' : '💾 Save'}
-                                    </button>
-                                    <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
-                                      onClick={() => { setEditingOppNotes(false); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); }}>
-                                      Cancel
-                                    </button>
+                                ) : (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                    {oppSolutionIds.length > 0 ? oppSolutionIds.map(sid => { const sol = solutions.find(s => s.id === sid); return sol ? <span key={sid} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>{F(sol, 'Name')}</span> : null; }) : <span style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No solution assigned</span>}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                              {/* AI tags */}
+                              {(F(o, 'Suggested Angle') || F(o, 'Suggested Solution Theme') || F(o, 'Potential Interest') || F(o, 'Role-Based Pain Point')) && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                                  {F(o, 'Suggested Angle') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(191,215,48,0.12)', color: 'var(--globant-green)' }}>🎯 {F(o, 'Suggested Angle')}</span>}
+                                  {F(o, 'Suggested Solution Theme') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>🛠️ {F(o, 'Suggested Solution Theme')}</span>}
+                                  {F(o, 'Potential Interest') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(96,165,250,0.12)', color: '#60a5fa' }}>💡 {F(o, 'Potential Interest')}</span>}
+                                  {F(o, 'Role-Based Pain Point') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(244,114,182,0.12)', color: '#f472b6' }}>⚡ {F(o, 'Role-Based Pain Point')}</span>}
+                                </div>
+                              )}
+                              {/* Next Step */}
+                              <div style={{ marginBottom: 10 }}>
+                                <div style={{ marginBottom: 4 }}><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>Next Step</span></div>
+                                {editingOppNotes ? <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px', marginBottom: 6 }} value={oppNextStep} onChange={e => setOppNextStep(e.target.value)} placeholder="What's the next step for this opp?" />
+                                  : <div style={{ fontSize: 12, color: oppNextStep ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppNextStep ? 'normal' : 'italic' }}>{oppNextStep || 'No next step defined'}</div>}
+                              </div>
+                              {/* Notes */}
+                              <div style={{ marginBottom: 10 }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', display: 'block', marginBottom: 4 }}>Notes</span>
+                                {editingOppNotes ? <textarea className="input-field" style={{ width: '100%', minHeight: 80, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }} value={oppNotes} onChange={e => setOppNotes(e.target.value)} placeholder="Add notes about this opportunity..." />
+                                  : <div style={{ fontSize: 12, color: oppNotes ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppNotes ? 'normal' : 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{oppNotes || 'No notes yet. Click Edit to add context.'}</div>}
+                              </div>
+                              {editingOppNotes && (
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <button className="action-btn btn-primary" style={{ fontSize: 11 }} disabled={savingOppNotes}
+                                    onClick={async () => { setSavingOppNotes(true); try { await api.updateRecord(TABLE_IDS.opportunities, o.id, { 'Reason': oppNotes, 'Next step': oppNextStep, 'Stakeholders': oppStakeholder, 'Solutions': oppSolutionIds.map(id => ({ id })) }); setEditingOppNotes(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to save'); } setSavingOppNotes(false); }}>
+                                    {savingOppNotes ? '⏳ Saving...' : '💾 Save'}
+                                  </button>
+                                  <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setEditingOppNotes(false); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); }}>Cancel</button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
+                  {/* Upcoming Events */}
                   {accEvents.length > 0 && (
                     <div className="card">
                       <div className="card-header"><h3>📅 Upcoming Events</h3></div>
@@ -4886,50 +4991,33 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                     </div>
                   )}
 
+                  {/* Company Events Intel (AI) */}
                   {upcomingEventsText && upcomingEventsText.length > 5 && (() => {
                     const evLines = upcomingEventsText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 5);
                     const cleanMd = (s) => s.replace(/^\.\s*/, '').replace(/\*\*/g, '').replace(/^[-•*\d.]+\s*/, '').trim();
                     const isLink = (s) => /^\[.*\]\(http/i.test(s) || /^https?:\/\//i.test(s);
-                    // Group into items: title + body pairs
-                    const items = [];
-                    let cur = null;
+                    const items = []; let cur = null;
                     for (const line of evLines) {
                       const c = cleanMd(line);
                       if (!c || c.length < 4) continue;
-                      if (isLink(c)) {
-                        if (cur) { const m = line.match(/\((https?:\/\/[^)]+)\)/); if (m) cur.url = m[1]; }
-                        continue;
-                      }
-                      if (c.length < 120 && /\*\*/.test(line)) {
-                        if (cur) items.push(cur);
-                        cur = { title: c, body: '', url: '' };
-                      } else if (cur && !cur.body) {
-                        cur.body = c;
-                      } else if (!cur) {
-                        cur = { title: c, body: '', url: '' };
-                      }
+                      if (isLink(c)) { if (cur) { const m = line.match(/\((https?:\/\/[^)]+)\)/); if (m) cur.url = m[1]; } continue; }
+                      if (c.length < 120 && /\*\*/.test(line)) { if (cur) items.push(cur); cur = { title: c, body: '', url: '' }; }
+                      else if (cur && !cur.body) { cur.body = c; }
+                      else if (!cur) { cur = { title: c, body: '', url: '' }; }
                     }
                     if (cur) items.push(cur);
-                    // Deduplicate
                     const seen = new Set();
-                    const unique = items.filter(it => {
-                      const k = it.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
-                      if (seen.has(k)) return false;
-                      seen.add(k);
-                      return true;
-                    }).slice(0, 5);
+                    const unique = items.filter(it => { const k = it.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
                     if (unique.length === 0) return null;
                     return (
                       <div className="card" style={{ borderLeft: '3px solid #38bdf8' }}>
                         <div className="card-header"><h3>🎪 Company Events Intel</h3></div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
                           {unique.map((item, i) => (
                             <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '10px 12px' }}>
                               <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.4, marginBottom: item.body ? 4 : 0 }}>{item.title}</div>
                               {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5 }}>{item.body}</div>}
-                              {item.url && (
-                                <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--globant-green)', textDecoration: 'none', marginTop: 4, display: 'inline-block' }}>🔗 Event link</a>
-                              )}
+                              {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--globant-green)', textDecoration: 'none', marginTop: 4, display: 'inline-block' }}>🔗 Event link</a>}
                             </div>
                           ))}
                         </div>
@@ -4937,252 +5025,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                     );
                   })()}
                 </div>
-              </div>
-
-              {/* AI Talking Points */}
-              <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>🎤 Recommended Talking Points</h3>
-                  <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateTalkingPoints} disabled={loadingTP}>
-                    {loadingTP ? '⏳ Generating...' : talkingPoints ? '🔄 Regenerate' : '✨ Generate with AI'}
-                  </button>
-                </div>
-                {!talkingPoints && !loadingTP && (
-                  <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '12px 0' }}>
-                    Click "Generate with AI" to create personalized talking points based on stakeholder pain points, recent news, and mapped solutions. The CP arrives prepared.
-                  </p>
-                )}
-                {talkingPoints && (() => {
-                  const tpLines = talkingPoints.split('\n').filter(l => l.trim());
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {tpLines.map((line, i) => {
-                        const isHeader = line.match(/^#{1,3}\s/) || line.match(/^\*\*[A-Z]/);
-                        const clean = line.replace(/^#{1,3}\s+/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
-                        if (!clean) return null;
-                        if (isHeader) {
-                          return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)', marginTop: i > 0 ? 10 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(191,215,48,0.15)' }}>{clean.replace(/\*\*/g, '')}</div>;
-                        }
-                        const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
-                        const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
-                        const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
-                        return (
-                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
-                            {isBullet && <span style={{ color: 'var(--globant-green)', fontSize: 8, marginTop: 6 }}>●</span>}
-                            <span style={{ fontSize: 12, lineHeight: 1.6 }}>
-                              {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**')
-                                ? <strong key={pi} style={{ color: 'var(--globant-green)' }}>{p.slice(2, -2)}</strong>
-                                : <span key={pi}>{p}</span>
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Who to Contact - AI Recommendations */}
-              <div className="card" style={{ borderLeft: '3px solid var(--globant-info)' }}>
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>🎯 Who to Contact Next</h3>
-                  <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: 'var(--globant-info)', border: '1px solid rgba(96,165,250,0.3)' }}
-                    onClick={generateContactRecs} disabled={loadingRecs}>
-                    {loadingRecs ? '⏳ Analyzing...' : contactRecs ? '🔄 Refresh' : '🤖 Get AI Recommendations'}
-                  </button>
-                </div>
-                {!contactRecs && !loadingRecs && (
-                  <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '12px 0' }}>
-                    AI will analyze all stakeholders, outreach history, pipeline, news, and gaps to recommend who to contact, missing roles to find, and re-engagement tactics.
-                  </p>
-                )}
-                {contactRecs && (() => {
-                  const sectionIcons = { 'PRIORITY CONTACTS': '🔥', 'MISSING ROLES': '🔍', 'RE-ENGAGEMENT': '♻️', 'TIMING & TRIGGERS': '⏰', 'TIMING': '⏰', 'TRIGGERS': '⏰' };
-                  const sectionColors = { 'PRIORITY CONTACTS': '#4ade80', 'MISSING ROLES': '#60a5fa', 'RE-ENGAGEMENT': '#fbbf24', 'TIMING & TRIGGERS': '#f87171', 'TIMING': '#f87171', 'TRIGGERS': '#f87171' };
-                  const sections = contactRecs.split(/#{2,3}\s+/).filter(Boolean);
-                  return (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-                      {sections.map((sec, i) => {
-                        const lines = sec.trim().split('\n');
-                        const titleLine = lines[0].replace(/\*+/g, '').trim();
-                        const titleKey = Object.keys(sectionIcons).find(k => titleLine.toUpperCase().includes(k)) || '';
-                        const icon = sectionIcons[titleKey] || '📋';
-                        const color = sectionColors[titleKey] || 'var(--globant-info)';
-                        const body = lines.slice(1).join('\n').trim();
-
-                        const renderLine = (line, li) => {
-                          const clean = line.replace(/^[\s-]*\d*\.?\s*/, '').trim();
-                          if (!clean) return null;
-                          // Parse **bold** segments
-                          const parts = clean.split(/(\*\*[^*]+\*\*)/g);
-                          return (
-                            <div key={li} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                              <span style={{ color, fontSize: 8, marginTop: 6 }}>●</span>
-                              <span style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)' }}>
-                                {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**')
-                                  ? <strong key={pi} style={{ color }}>{p.slice(2, -2)}</strong>
-                                  : <span key={pi}>{p}</span>
-                                )}
-                              </span>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <div key={i} style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: `1px solid ${color}22` }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                              <span style={{ fontSize: 18 }}>{icon}</span>
-                              <span style={{ fontSize: 13, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{titleLine}</span>
-                            </div>
-                            {body.split('\n').map((line, li) => renderLine(line, li))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Stakeholder Map */}
-              <div className="card">
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                  <h3>👥 Stakeholder Map ({stakeholderEngagement.length})</h3>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input className="input-field" style={{ maxWidth: 200, fontSize: 12, padding: '6px 12px' }}
-                      placeholder="Search by name or role..."
-                      value={stakeholderSearch} onChange={e => setStakeholderSearch(e.target.value)} />
-                    <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
-                      onClick={bulkGeneratePainPoints} disabled={bulkPainLoading}>
-                      {bulkPainLoading ? `⏳ ${bulkPainProgress}` : '🧠 Bulk Pain Points'}
-                    </button>
-                    <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
-                      onClick={() => setShowNewStakeholder(!showNewStakeholder)}>
-                      {showNewStakeholder ? '✕ Close' : '➕ Add Contact'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* New Stakeholder Form */}
-                {showNewStakeholder && (
-                  <div style={{ padding: '14px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 12, border: '1px solid var(--globant-border)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10 }}>New Contact for {name}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>FIRST NAME *</label>
-                        <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          placeholder="e.g. Khalid" value={newStkName} onChange={e => setNewStkName(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LAST NAME</label>
-                        <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          placeholder="e.g. Al-Rashid" value={newStkLastName} onChange={e => setNewStkLastName(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ROLE</label>
-                        <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          placeholder="e.g. CTO" value={newStkRole} onChange={e => setNewStkRole(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EMAIL</label>
-                        <input className="input-field" type="email" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          placeholder="khalid@company.com" value={newStkEmail} onChange={e => setNewStkEmail(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>PHONE</label>
-                        <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          placeholder="+971..." value={newStkPhone} onChange={e => setNewStkPhone(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LINKEDIN URL</label>
-                        <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          placeholder="https://linkedin.com/in/..." value={newStkLinkedin} onChange={e => setNewStkLinkedin(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>INFLUENCE</label>
-                        <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
-                          value={newStkInfluence} onChange={e => setNewStkInfluence(e.target.value)}>
-                          <option value="">Select...</option>
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                      <button className="action-btn btn-primary" style={{ fontSize: 12 }}
-                        onClick={createStakeholder} disabled={!newStkName.trim() || creatingStk}>
-                        {creatingStk ? '⏳ Creating...' : '🚀 Create Contact'}
-                      </button>
-                      <button className="action-btn btn-ghost" style={{ fontSize: 12 }}
-                        onClick={() => setShowNewStakeholder(false)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="data-table">
-                    <thead><tr><th>Name</th><th>Role</th><th>Influence</th><th>Last Contact</th><th>Pain Points</th><th>LinkedIn Insights</th><th>Status</th><th style={{ textAlign: 'center' }}>Actions</th></tr></thead>
-                    <tbody>
-                      {stakeholderEngagement
-                        .filter(({ s, sName }) => {
-                          if (!stakeholderSearch) return true;
-                          const term = stakeholderSearch.toLowerCase();
-                          return sName.toLowerCase().includes(term) || (F(s, 'Role') || '').toLowerCase().includes(term);
-                        })
-                        .map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
-                        const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
-                        const painText = typeof pain === 'string' ? pain : String(pain);
-                        const liRaw = F(s, 'LinkedIn News (Generated)') || F(s, 'Linkedin lates news') || '';
-                        const linkedinText = typeof liRaw === 'string' ? liRaw : String(liRaw);
-                        const phone = F(s, 'Phone number');
-                        const email = F(s, 'Email');
-                        const linkedin = F(s, 'LinkedIn');
-                        return (
-                          <tr key={s.id}>
-                            <td style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{sName}</td>
-                            <td style={{ fontSize: 12 }}>{F(s, 'Role')}</td>
-                            <td>{F(s, 'Level of Influence') ? <span className="badge badge-accent">{F(s, 'Level of Influence')}</span> : '—'}</td>
-                            <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                              {lastTouch ? (
-                                <span style={{ color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : '#60a5fa', fontWeight: 600 }}>
-                                  {new Date(lastTouch.fields?.['Date']).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                  <span style={{ fontSize: 10, opacity: 0.8, marginLeft: 4 }}>({daysSince}d)</span>
-                                </span>
-                              ) : (
-                                <span className="badge" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 10 }}>Never</span>
-                              )}
-                            </td>
-                            <td style={{ fontSize: 12, maxWidth: 200, lineHeight: 1.4 }}>{painText.length > 100 ? painText.slice(0, 100) + '...' : painText || <span style={{ color: 'var(--globant-muted)' }}>—</span>}</td>
-                            <td style={{ fontSize: 12, maxWidth: 200, lineHeight: 1.4 }}>{linkedinText.length > 100 ? linkedinText.slice(0, 100) + '...' : linkedinText || <span style={{ color: 'var(--globant-muted)' }}>—</span>}</td>
-                            <td>
-                              {hasMeeting ? <span className="badge badge-blue">Meeting</span> :
-                               hasReplied ? <span className="badge badge-green">Replied</span> :
-                               totalTouches > 0 ? <span className="badge badge-yellow">Waiting</span> :
-                               <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>No contact</span>}
-                            </td>
-                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                                <button title="Generate AI Message" style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }}
-                                  onClick={() => setCpSelectedStakeholder(s)}>✉️</button>
-                                <button title="Schedule Meeting" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }}
-                                  onClick={() => { setCpMeetingModal({ stakeholder: s }); setCpMeetingNotes(''); setCpMeetingDate(''); setCpMeetingTime(''); }}>📅</button>
-                                <button title="Log Call" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }}
-                                  onClick={() => { setCpCallModal(s); setCpCallNotes(''); }}>📞</button>
-                                {phone && <button title={`WhatsApp: ${phone}`} style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }}
-                                  onClick={() => window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}`, '_blank')}>💬</button>}
-                                {linkedin && <button title="Open LinkedIn" style={{ background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#0A66C2' }}
-                                  onClick={() => window.open(linkedin, '_blank')}>in</button>}
-                                <button title="Edit contact" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: 'var(--globant-muted)' }}
-                                  onClick={() => setCpEditingContact(s)}>✏️</button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
