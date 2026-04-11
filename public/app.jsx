@@ -7615,7 +7615,6 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         const accO = accIds.length ? outreach.filter(o=>linkedIds(o,'Account').some(id=>accIds.includes(id))&&!linkedIds(o,'Stakeholder').some(sid=>sid)) : [];
         return [...stkO,...accO].sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0));
       }, [selContact, outreach]);
-        [selContact, outreach]);
 
       const contactAccount = useMemo(() => {
         if (!selContact) return null;
