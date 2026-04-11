@@ -7555,6 +7555,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [newContact, setNewContact] = useState({ name: '', lastName: '', role: '', email: '', phone: '', linkedin: '', accountId: '' });
       const [cardScanLoading, setCardScanLoading] = useState(false);
       const [savingContact, setSavingContact] = useState(false);
+      const [newAccName, setNewAccName] = useState('');
       const [msgChannel, setMsgChannel] = useState('Email');
       const [msgText, setMsgText] = useState('');
       const [msgLoading, setMsgLoading] = useState(false);
@@ -7607,8 +7608,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         }).slice(0,25);
       }, [stakeholders, contactSearch]);
 
-      const contactOutreach = useMemo(() =>
-        selContact ? outreach.filter(o=>linkedIds(o,'Stakeholder').includes(selContact.id)).sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0)) : [],
+      const contactOutreach = useMemo(() => {
+        if (!selContact) return [];
+        const stkO = outreach.filter(o=>linkedIds(o,'Stakeholder').includes(selContact.id));
+        const accIds = linkedIds(selContact,'Account');
+        const accO = accIds.length ? outreach.filter(o=>linkedIds(o,'Account').some(id=>accIds.includes(id))&&!linkedIds(o,'Stakeholder').some(sid=>sid)) : [];
+        return [...stkO,...accO].sort((a,b)=>new Date(b.fields?.Date||0)-new Date(a.fields?.Date||0));
+      }, [selContact, outreach]);
         [selContact, outreach]);
 
       const contactAccount = useMemo(() => {
@@ -7638,9 +7644,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const role = F(stk,'Role')||'';
           const accName = acc ? F(acc,'Account Name')||'' : '';
           const prompt = `Write a short ${msgChannel} outreach to ${sName}, ${role}${accName?' at '+accName:''}. Pain points: ${pain||'unknown'}. Under 120 words. Direct opener, clear CTA.`;
-          const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}`}, body:JSON.stringify({ prompt, max_tokens:250 }) });
+          const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}, body:JSON.stringify({ messages:[{role:'user',content:prompt}], max_tokens:250 }) });
           const json = await res.json();
-          setMsgText(json.result||json.text||json.choices?.[0]?.message?.content||'Error generating.');
+          setMsgText(json.content||json.result||json.text||json.choices?.[0]?.message?.content||'Error generating.');
         } catch { setMsgText('Error generating. Try again.'); }
         setMsgLoading(false);
       };
@@ -7681,11 +7687,22 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!newContact.name.trim()) return;
         setSavingContact(true);
         try {
-          const fields = { 'Name':newContact.name,'Lart name':newContact.lastName,'Role':newContact.role,'Email':newContact.email,'Phone number':newContact.phone,'LinkedIn':newContact.linkedin,...(newContact.accountId?{'Account':[newContact.accountId]}:{}) };
+          let finalAccountId = newContact.accountId === '__new__' ? '' : newContact.accountId;
+          // Create new account if requested
+          if (newContact.accountId === '__new__' && newAccName.trim()) {
+            const accRec = await api.createRecord(TABLE_IDS.accounts, { 'Account Name': newAccName.trim(), 'Status': 'Active' });
+            if (accRec) {
+              finalAccountId = accRec.id;
+              if (addToData) addToData('accounts', { 'Account Name': newAccName.trim(), 'Status': 'Active' });
+            }
+          }
+          const fields = { 'Name':newContact.name,'Lart name':newContact.lastName,'Role':newContact.role,'Email':newContact.email,'Phone number':newContact.phone,'LinkedIn':newContact.linkedin,...(finalAccountId?{'Account':[finalAccountId]}:{}) };
           const rec = await api.createRecord(TABLE_IDS.stakeholders, fields);
-          if (rec && addToData) addToData('stakeholders',{...fields,id:rec.id});
-          setShowAddContact(false); setNewContact({ name:'',lastName:'',role:'',email:'',phone:'',linkedin:'',accountId:'' });
-        } catch { alert('Error saving contact.'); }
+          if (rec && addToData) addToData('stakeholders', fields);
+          setShowAddContact(false);
+          setNewContact({ name:'',lastName:'',role:'',email:'',phone:'',linkedin:'',accountId:'' });
+          setNewAccName('');
+        } catch(e) { alert('Error saving: '+(e.message||'try again')); }
         setSavingContact(false);
       };
       const logActivityNew = async () => {
@@ -7836,12 +7853,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             ))}
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Account</div>
-              <select style={G.inp} value={newContact.accountId} onChange={e=>setNewContact(p=>({...p,accountId:e.target.value}))}>
+              <select style={{...G.inp,marginBottom:newContact.accountId==='__new__'?8:0}} value={newContact.accountId} onChange={e=>{ setNewContact(p=>({...p,accountId:e.target.value})); if(e.target.value!=='__new__') setNewAccName(''); }}>
                 <option value="">No account</option>
+                <option value="__new__">＋ Create new account</option>
                 {[...accounts].sort((a,b)=>(F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a=>(<option key={a.id} value={a.id}>{F(a,'Account Name')}</option>))}
               </select>
+              {newContact.accountId==='__new__' && <input style={G.inp} placeholder="New account name" value={newAccName} onChange={e=>setNewAccName(e.target.value)} />}
             </div>
-            <button onClick={saveContact} disabled={!newContact.name.trim()||savingContact} style={{...G.pbtn,opacity:!newContact.name.trim()||savingContact?0.6:1}}>{savingContact?'⏳ Saving...':'💾 Save Contact'}</button>
+            <button onClick={saveContact} disabled={!newContact.name.trim()||savingContact||(newContact.accountId==='__new__'&&!newAccName.trim())} style={{...G.pbtn,opacity:!newContact.name.trim()||savingContact||(newContact.accountId==='__new__'&&!newAccName.trim())?0.6:1}}>{savingContact?'⏳ Saving...':'💾 Save Contact'}</button>
           </div>
         </div>
       );
