@@ -7647,9 +7647,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const role = F(stk,'Role')||'';
           const accName = acc ? F(acc,'Account Name')||'' : '';
           const isEmail = msgChannel === 'Email';
+          const userName = CURRENT_USER ? (CURRENT_USER.name||CURRENT_USER.email||'') : '';
           const prompt = isEmail
-            ? 'Write a short email outreach to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 120 words. Direct opener, clear CTA.'+(msgContext?' Extra context: '+msgContext:'')+'. Return ONLY valid JSON: {"subject":"...","body":"..."} — no markdown, no extra text.'
-            : 'Write a short '+msgChannel+' outreach message to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 100 words. Direct opener, clear CTA. No subject line.'+(msgContext?' Extra context: '+msgContext:'');
+            ? 'Write a short cold email outreach from '+userName+' to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 120 words. Personalized direct opener, one value line, clear CTA, professional sign-off with '+userName+' name.'+(msgContext?' Extra context: '+msgContext:'')+'. Use proper email structure with blank lines between greeting, body and sign-off. Return ONLY valid JSON with no markdown: {"subject":"short punchy subject","body":"Hi '+sName.split(' ')[0]+',\\n\\n[body paragraph]\\n\\nBest,\\n'+userName+'"}'
+            : 'Write a short '+msgChannel+' outreach message to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 80 words. Direct, conversational, clear CTA. No subject line, no formal sign-off.'+(msgContext?' Extra context: '+msgContext:'');
           const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}, body:JSON.stringify({ messages:[{role:'user',content:prompt}], max_tokens:300 }) });
           const json = await res.json();
           const raw = json.content||json.result||json.text||json.choices?.[0]?.message?.content||'';
