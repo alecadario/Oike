@@ -7952,8 +7952,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               const sc=status==='Active'?'#4ade80':status==='Won'?'#BFD730':status==='Lost'?'#ef4444':'#60a5fa';
               const ao=[...outreach].filter(o=>linkedIds(o,'Account').includes(a.id)).sort((x,y)=>new Date(y.fields?.Date||0)-new Date(x.fields?.Date||0));
               const last=ao[0]; const ds=last?.fields?.Date?Math.floor((Date.now()-new Date(last.fields.Date))/86400000):null;
-              const sum=(localStorage.getItem(`oike_exec_${a.id}`)||'').split('
-').filter(l=>l.trim()&&!l.startsWith('#')).slice(0,2).join(' ').replace(/\*\*/g,'').slice(0,160);
+              const sum=(localStorage.getItem('oike_exec_'+a.id)||'').split('\n').filter(l=>l.trim()&&!l.startsWith('#')).slice(0,2).join(' ').replace(/\*\*/g,'').slice(0,160);
               const stkCnt=stakeholders.filter(s=>linkedIds(s,'Account').includes(a.id)).length;
               return (
                 <div key={a.id} style={G.card}>
