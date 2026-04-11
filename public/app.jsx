@@ -3150,6 +3150,25 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const [oppFormSolIds, setOppFormSolIds] = useState([]);
       const [savingOppForm, setSavingOppForm] = useState(false);
       const [cpSelectedStakeholder, setCpSelectedStakeholder] = useState(null);
+      const [cpEditingContact, setCpEditingContact] = useState(null);
+      const saveCpContactEdit = async (values) => {
+        if (!cpEditingContact) return;
+        const raw = {
+          'Name': values['Name'], 'Lart name': values['Lart name'],
+          'Role': values['Role'], 'Email': values['Email'],
+          'Phone number': values['Phone number'], 'LinkedIn': values['LinkedIn'],
+          'Campaign': values['Campaign'],
+          'Level of Influence': values['Level of Influence'] || null,
+          'Source': values['Source'] || null,
+        };
+        const fields = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== '' && v !== undefined && v !== null));
+        if (onUpdateRecord) onUpdateRecord('stakeholders', cpEditingContact.id, fields);
+        setCpEditingContact(null);
+        const a = api || new AirtableAPI();
+        a.updateRecord(TABLE_IDS.stakeholders, cpEditingContact.id, fields)
+          .then(() => { if (onLogActivity) onLogActivity(); })
+          .catch(e => { console.error(e); alert('Failed to save. ' + e.message); if (onLogActivity) onLogActivity(); });
+      };
       const [cpMeetingModal, setCpMeetingModal] = useState(null);
       const [cpMeetingNotes, setCpMeetingNotes] = useState('');
       const [cpMeetingDate, setCpMeetingDate] = useState('');
@@ -5091,6 +5110,8 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                   onClick={() => window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}`, '_blank')}>💬</button>}
                                 {linkedin && <button title="Open LinkedIn" style={{ background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#0A66C2' }}
                                   onClick={() => window.open(linkedin, '_blank')}>in</button>}
+                                <button title="Edit contact" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: 'var(--globant-muted)' }}
+                                  onClick={() => setCpEditingContact(s)}>✏️</button>
                               </div>
                             </td>
                           </tr>
@@ -5101,6 +5122,27 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Edit Contact Modal (from Account view) */}
+          {cpEditingContact && (
+            <EditModal
+              title={`${F(cpEditingContact, 'Name')} ${F(cpEditingContact, 'Lart name') || ''}`.trim()}
+              fields={[
+                { key: 'Name', label: 'First Name' },
+                { key: 'Lart name', label: 'Last Name' },
+                { key: 'Role', label: 'Role / Title' },
+                { key: 'Email', label: 'Email' },
+                { key: 'Phone number', label: 'Phone' },
+                { key: 'LinkedIn', label: 'LinkedIn URL' },
+                { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
+                { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
+                { key: 'Campaign', label: 'Campaign (if inbound)' },
+              ]}
+              initialValues={cpEditingContact.fields || {}}
+              onSave={saveCpContactEdit}
+              onClose={() => setCpEditingContact(null)}
+            />
           )}
 
           {/* AI Message Modal */}
