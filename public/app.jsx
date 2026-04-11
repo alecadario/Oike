@@ -7560,6 +7560,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [msgText, setMsgText] = useState('');
       const [msgLoading, setMsgLoading] = useState(false);
       const [msgCopied, setMsgCopied] = useState(false);
+      const [msgContext, setMsgContext] = useState('');
       const [showMsgComposer, setShowMsgComposer] = useState(false);
       // Accounts state
       const [accSearch, setAccSearch] = useState('');
@@ -7642,7 +7643,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const pain = F(stk,'Pain Points (Generated)')||F(stk,'Pain points')||'';
           const role = F(stk,'Role')||'';
           const accName = acc ? F(acc,'Account Name')||'' : '';
-          const prompt = `Write a short ${msgChannel} outreach to ${sName}, ${role}${accName?' at '+accName:''}. Pain points: ${pain||'unknown'}. Under 120 words. Direct opener, clear CTA.`;
+          const prompt = 'Write a short '+msgChannel+' outreach to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 120 words. Direct opener, clear CTA.'+(msgContext?' Extra context: '+msgContext:'');
           const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}, body:JSON.stringify({ messages:[{role:'user',content:prompt}], max_tokens:250 }) });
           const json = await res.json();
           setMsgText(json.content||json.result||json.text||json.choices?.[0]?.message?.content||'Error generating.');
@@ -7650,16 +7651,30 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         setMsgLoading(false);
       };
       const copyMessage = () => { navigator.clipboard.writeText(msgText).then(()=>{ setMsgCopied(true); setTimeout(()=>setMsgCopied(false),2000); }); };
+      const logOutreach = (stk, acc, channel) => {
+        if (!stk || !TABLE_IDS.outreach) return;
+        const accIds = linkedIds(stk,'Account');
+        const accId = acc ? acc.id : (accIds[0]||null);
+        const fields = { 'Channel':channel, 'Status':'Sent', 'Notes':msgText?msgText.slice(0,300):'', 'Date':new Date().toISOString().split('T')[0], 'Stakeholder':[stk.id], ...(accId?{'Account':[accId]}:{}) };
+        api.createRecord(TABLE_IDS.outreach, fields).then(rec=>{ if(rec&&addToData) addToData('outreach',fields); }).catch(()=>{});
+      };
       const openGmail = (stk, acc) => {
         const em = F(stk,'Email')||''; const accN = acc ? F(acc,'Account Name')||'' : '';
-        window.open(`https://mail.google.com/mail/?view=cm&to=${em}&su=${encodeURIComponent('Following up — '+accN)}&body=${encodeURIComponent(msgText)}`,'_blank');
+        window.open('https://mail.google.com/mail/?view=cm&to='+em+'&su='+encodeURIComponent('Following up — '+accN)+'&body='+encodeURIComponent(msgText),'_blank');
+        logOutreach(stk, acc, 'Email');
       };
-      const openWA = (stk) => {
+      const openWA = (stk, acc) => {
         const phone = (F(stk,'Phone number')||'').replace(/[^0-9+]/g,'');
         if (!phone) return alert('No phone number.');
-        const waUrl = 'https://wa.me/' + phone + (msgText ? '?text=' + encodeURIComponent(msgText) : ''); window.open(waUrl, '_blank');
+        const waUrl = 'https://wa.me/' + phone + (msgText ? '?text=' + encodeURIComponent(msgText) : '');
+        window.open(waUrl, '_blank');
+        logOutreach(stk, acc||contactAccount, 'WhatsApp');
       };
-      const openLI = (stk) => { const li = F(stk,'LinkedIn')||''; if(!li) return alert('No LinkedIn.'); window.open(li,'_blank'); };
+      const openLI = (stk, acc) => {
+        const li = F(stk,'LinkedIn')||''; if(!li) return alert('No LinkedIn.');
+        window.open(li,'_blank');
+        if (msgText) logOutreach(stk, acc||contactAccount, 'LinkedIn');
+      };
       const openCalendar = (accId) => {
         const acc = accounts.find(a=>a.id===accId);
         const title = encodeURIComponent(`Meeting — ${acc?F(acc,'Account Name'):''}`);
@@ -7674,7 +7689,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             const base64 = e.target.result.split(',')[1];
             const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}`}, body:JSON.stringify({ messages:[{ role:'user', content:[{ type:'image_url', image_url:{ url:`data:image/jpeg;base64,${base64}` }},{ type:'text', text:'Extract contact info from this business card. Return ONLY valid JSON: { name, lastName, role, email, phone, linkedin, company }. Empty string if not found.' }] }], model:'gpt-4o', max_tokens:300 }) });
             const json = await res.json();
-            const txt = json.result||json.text||json.choices?.[0]?.message?.content||'{}';
+            const txt = json.content||json.result||json.text||json.choices?.[0]?.message?.content||'{}';
             const d = JSON.parse(txt.replace(/```json|```/g,'').trim());
             setNewContact(p=>({ ...p, name:d.name||p.name, lastName:d.lastName||p.lastName, role:d.role||p.role, email:d.email||p.email, phone:d.phone||p.phone, linkedin:d.linkedin||p.linkedin }));
           } catch { alert('Could not scan. Fill manually.'); }
@@ -7776,10 +7791,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:8,textTransform:'uppercase'}}>Channel</div>
                   <div style={{display:'flex',gap:6,marginBottom:12}}>
                     {['Email','WhatsApp','LinkedIn'].map(ch=>(
-                      <button key={ch} onClick={()=>setMsgChannel(ch)} style={{flex:1,padding:'8px 4px',border:`1px solid ${msgChannel===ch?'rgba(191,215,48,0.4)':'var(--globant-border)'}`,borderRadius:8,background:msgChannel===ch?'rgba(191,215,48,0.12)':'transparent',color:msgChannel===ch?'var(--globant-green)':'var(--globant-muted)',fontWeight:msgChannel===ch?700:400,fontSize:12,cursor:'pointer'}}>
+                      <button key={ch} onClick={()=>setMsgChannel(ch)} style={{flex:1,padding:'8px 4px',border:'1px solid '+(msgChannel===ch?'rgba(191,215,48,0.4)':'var(--globant-border)'),borderRadius:8,background:msgChannel===ch?'rgba(191,215,48,0.12)':'transparent',color:msgChannel===ch?'var(--globant-green)':'var(--globant-muted)',fontWeight:msgChannel===ch?700:400,fontSize:12,cursor:'pointer'}}>
                         {ch==='Email'?'✉️':ch==='WhatsApp'?'💬':'in'} {ch}
                       </button>
                     ))}
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--globant-muted)',marginBottom:5,textTransform:'uppercase'}}>Context (optional)</div>
+                    <textarea rows={2} style={{...G.inp,resize:'none',fontSize:13,lineHeight:1.4}} placeholder="e.g. Met at SaaStr, mentioned scaling challenges..." value={msgContext} onChange={e=>setMsgContext(e.target.value)} />
                   </div>
                   <button onClick={()=>generateMessage(selContact,contactAccount)} disabled={msgLoading} style={{...G.pbtn,marginBottom:msgText?12:0,opacity:msgLoading?0.6:1}}>{msgLoading?'⏳ Generating...':'✨ Generate'}</button>
                   {msgText && (
