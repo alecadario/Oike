@@ -7561,6 +7561,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [msgLoading, setMsgLoading] = useState(false);
       const [msgCopied, setMsgCopied] = useState(false);
       const [msgContext, setMsgContext] = useState('');
+      const [msgSubject, setMsgSubject] = useState('');
       const [showMsgComposer, setShowMsgComposer] = useState(false);
       // Accounts state
       const [accSearch, setAccSearch] = useState('');
@@ -7639,16 +7640,28 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       // ── Functions ──
       const generateMessage = async (stk, acc) => {
         if (!stk) return;
-        setMsgLoading(true); setMsgText(''); setMsgCopied(false);
+        setMsgLoading(true); setMsgText(''); setMsgSubject(''); setMsgCopied(false);
         try {
           const sName = [F(stk,'Name'),F(stk,'Lart name')].filter(Boolean).join(' ');
           const pain = F(stk,'Pain Points (Generated)')||F(stk,'Pain points')||'';
           const role = F(stk,'Role')||'';
           const accName = acc ? F(acc,'Account Name')||'' : '';
-          const prompt = 'Write a short '+msgChannel+' outreach to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 120 words. Direct opener, clear CTA.'+(msgContext?' Extra context: '+msgContext:'');
-          const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}, body:JSON.stringify({ messages:[{role:'user',content:prompt}], max_tokens:250 }) });
+          const isEmail = msgChannel === 'Email';
+          const prompt = isEmail
+            ? 'Write a short email outreach to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 120 words. Direct opener, clear CTA.'+(msgContext?' Extra context: '+msgContext:'')+'. Return ONLY valid JSON: {"subject":"...","body":"..."} — no markdown, no extra text.'
+            : 'Write a short '+msgChannel+' outreach message to '+sName+', '+role+(accName?' at '+accName:'')+'. Pain points: '+(pain||'unknown')+'. Under 100 words. Direct opener, clear CTA. No subject line.'+(msgContext?' Extra context: '+msgContext:'');
+          const res = await fetch('/api/openai',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}, body:JSON.stringify({ messages:[{role:'user',content:prompt}], max_tokens:300 }) });
           const json = await res.json();
-          setMsgText(json.content||json.result||json.text||json.choices?.[0]?.message?.content||'Error generating.');
+          const raw = json.content||json.result||json.text||json.choices?.[0]?.message?.content||'';
+          if (isEmail) {
+            try {
+              const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+              setMsgSubject(parsed.subject||'');
+              setMsgText(parsed.body||raw);
+            } catch { setMsgText(raw||'Error generating.'); }
+          } else {
+            setMsgText(raw||'Error generating.');
+          }
         } catch { setMsgText('Error generating. Try again.'); }
         setMsgLoading(false);
       };
@@ -7662,7 +7675,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       };
       const openGmail = (stk, acc) => {
         const em = F(stk,'Email')||''; const accN = acc ? F(acc,'Account Name')||'' : '';
-        window.location.href = 'mailto:'+em+'?subject='+encodeURIComponent('Following up — '+accN)+'&body='+encodeURIComponent(msgText);
+        const subj = msgSubject || ('Following up — '+accN);
+        window.location.href = 'mailto:'+em+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(msgText);
         logOutreach(stk, acc, 'Email');
       };
       const openWA = (stk, acc) => {
@@ -7815,7 +7829,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   <button onClick={()=>generateMessage(selContact,contactAccount)} disabled={msgLoading} style={{...G.pbtn,marginBottom:msgText?12:0,opacity:msgLoading?0.6:1}}>{msgLoading?'⏳ Generating...':'✨ Generate'}</button>
                   {msgText && (
                     <div>
-                      <div style={{fontSize:13,lineHeight:1.6,color:'var(--globant-text)',margin:'12px 0',padding:'10px 0',borderTop:'1px solid var(--globant-border)',whiteSpace:'pre-wrap'}}>{msgText}</div>
+                      {msgSubject && (
+                        <div style={{padding:'8px 10px',marginTop:10,background:'rgba(255,255,255,0.04)',border:'1px solid var(--globant-border)',borderRadius:8}}>
+                          <div style={{fontSize:10,fontWeight:700,color:'var(--globant-muted)',marginBottom:3,textTransform:'uppercase'}}>Subject</div>
+                          <input style={{width:'100%',background:'transparent',border:'none',color:'var(--globant-text)',fontSize:13,fontWeight:600,outline:'none',boxSizing:'border-box'}} value={msgSubject} onChange={e=>setMsgSubject(e.target.value)} />
+                        </div>
+                      )}
+                      <div style={{fontSize:13,lineHeight:1.6,color:'var(--globant-text)',margin:'10px 0',padding:'10px 0',borderTop:'1px solid var(--globant-border)',whiteSpace:'pre-wrap'}}>{msgText}</div>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                         <button onClick={copyMessage} style={{flex:1,background:msgCopied?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.06)',border:`1px solid ${msgCopied?'#4ade80':'var(--globant-border)'}`,borderRadius:8,padding:'9px',color:msgCopied?'#4ade80':'var(--globant-text)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{msgCopied?'✅ Copied!':'📋 Copy'}</button>
                         {em && <button onClick={()=>openGmail(selContact,contactAccount)} style={{flex:1,background:'rgba(96,165,250,0.12)',border:'1px solid rgba(96,165,250,0.3)',borderRadius:8,padding:'9px',color:'#60a5fa',fontSize:12,fontWeight:600,cursor:'pointer'}}>📧 Email</button>}
