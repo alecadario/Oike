@@ -12,6 +12,7 @@ const STANDARD_TABLES: Record<string, string> = {
   clientPartners: 'tblwBsDhNdAvcMwzy',
   sources: 'tblciUlYmvQHJm71w',
   users: 'tblCyjbxtx0MTPYq9',
+  icp: 'tblli6WqjCqArxZKx',
 };
 
 // ── Build config dynamically from baseId ──
