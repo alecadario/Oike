@@ -744,7 +744,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [savingKpi, setSavingKpi] = useState(false);
 
       // ─── GOAL VALUES ───
-      const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
+      const goalName = strategyRecord ? (F(strategyRecord, 'Name') || '') : '';
       const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
       const goalDeadline = strategyRecord ? (F(strategyRecord, 'Deadline') || '') : '';
 
@@ -5438,13 +5438,90 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
     // ============ INSIGHTS & CONCLUSIONS ============
     function InsightsView({ data }) {
-      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, strategy = [] } = data;
+      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, strategy = [], users = [] } = data;
+      const isAdmin = CURRENT_USER?.role === 'admin';
       const strategyRecord = strategy[0] || null;
       const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
       const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
       const goalDeadline = strategyRecord ? (F(strategyRecord, 'Deadline') || '') : '';
       const now = new Date();
       const [timePeriod, setTimePeriod] = useState('all');
+
+      // ─── VIEW SELECTOR (admin = company or per-user; others = own only) ───
+      const currentUserRecord = users.find(u => (F(u, 'Email') || '').toLowerCase() === (CURRENT_USER?.email || '').toLowerCase());
+      const currentUserId = currentUserRecord?.id;
+      const [insightsView, setInsightsView] = useState(isAdmin ? 'company' : (currentUserRecord?.id || 'me'));
+      const [aiProjection, setAiProjection] = useState('');
+      const [loadingProjection, setLoadingProjection] = useState(false);
+
+      const meetingStatuses = ['Meeting Scheduled', 'Meeting Booked'];
+      const wonStages = ['Closed Won', 'Closed/Won', 'Cierre ganado'];
+      const wonOppsAll = opportunities.filter(o => wonStages.includes(F(o, 'Stage')));
+
+      // Selected user for personal view
+      const selectedUserRecord = insightsView === 'company' ? null : (users.find(u => u.id === insightsView) || currentUserRecord);
+      const viewName = selectedUserRecord ? (F(selectedUserRecord, 'Name') || F(selectedUserRecord, 'Email') || 'User') : 'Company';
+      const viewMeetingsTarget = selectedUserRecord ? (selectedUserRecord.fields?.['KPI Meetings Target'] || 0) : 0;
+      const viewDealsTarget = selectedUserRecord ? (selectedUserRecord.fields?.['KPI Deals Target'] || 0) : 0;
+
+      // Activities for selected view
+      const viewActivities = insightsView === 'company' ? outreach : outreach.filter(o => {
+        const lb = F(o, 'Logged By');
+        const uName = F(selectedUserRecord, 'Name') || '';
+        const uEmail = F(selectedUserRecord, 'Email') || '';
+        return lb && (lb === uName || lb === uEmail);
+      });
+      const viewMeetings = viewActivities.filter(o => meetingStatuses.includes(F(o, 'Status')));
+
+      // Deals won for selected view
+      const viewDealsWon = insightsView === 'company'
+        ? wonOppsAll.length
+        : wonOppsAll.filter(opp => selectedUserRecord && linkedIds(opp, 'Account').some(accId => {
+            const acc = accounts.find(a => a.id === accId);
+            return acc && (linkedIds(acc, 'BDR').includes(selectedUserRecord.id) || linkedIds(acc, 'Client Partners').includes(selectedUserRecord.id));
+          })).length;
+
+      // ─── VELOCITY (last 4 weeks) ───
+      const fourWeeksAgo = new Date(); fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+      const recentActivities = viewActivities.filter(o => { const d = o.fields?.['Date']; return d && new Date(d) >= fourWeeksAgo; });
+      const recentMeetingsCount = recentActivities.filter(o => meetingStatuses.includes(F(o, 'Status'))).length;
+      const activitiesPerWeek = recentActivities.length / 4;
+      const meetingConvRate = recentActivities.length > 0 ? recentMeetingsCount / recentActivities.length : 0;
+
+      // ─── GAP ANALYSIS ───
+      const meetingsGap = Math.max(0, viewMeetingsTarget - viewMeetings.length);
+      const activitiesNeeded = meetingConvRate > 0 ? Math.ceil(meetingsGap / meetingConvRate) : null;
+      const weeksToTarget = activitiesPerWeek > 0 && activitiesNeeded !== null ? (activitiesNeeded / activitiesPerWeek) : null;
+      const dealsGap = Math.max(0, viewDealsTarget - viewDealsWon);
+      const meetingsToDealRate = viewMeetings.length > 0 ? viewDealsWon / viewMeetings.length : 0;
+      const meetingsNeededForDeals = meetingsToDealRate > 0 ? Math.ceil(dealsGap / meetingsToDealRate) : null;
+
+      // ─── AI PROJECTION ───
+      const generateProjection = async () => {
+        setLoadingProjection(true);
+        try {
+          const deadlineDays = goalDeadline ? Math.ceil((new Date(goalDeadline) - new Date()) / (1000*60*60*24)) : null;
+          const prompt = `You are a B2B sales coach. Write a 3-4 sentence projection in English. Be direct, specific, data-driven and actionable. No fluff.
+
+Context:
+- Person: ${viewName}
+- Company goal: ${goalName || 'not set'}${goalTarget > 0 ? ` (€${goalTarget.toLocaleString()})` : ''}${deadlineDays !== null ? ` · ${deadlineDays} days left` : ''}
+- Meetings target: ${viewMeetingsTarget} | Achieved: ${viewMeetings.length} | Gap: ${meetingsGap}
+- Deals target: ${viewDealsTarget} | Won: ${viewDealsWon} | Gap: ${dealsGap}
+- Activity velocity: ${activitiesPerWeek.toFixed(1)} activities/week (last 4 weeks)
+- Meeting conversion rate: ${(meetingConvRate * 100).toFixed(1)}%
+- Activities needed to close meetings gap: ${activitiesNeeded ?? 'insufficient data'}
+- Weeks to hit meetings target at current pace: ${weeksToTarget !== null ? weeksToTarget.toFixed(1) : 'insufficient data'}
+
+Tell them: (1) whether they're on track or not, (2) the exact number to focus on this week, (3) whether to push volume or improve conversion rate.`;
+          const result = await callOpenAI({ prompt, max_tokens: 220, temperature: 0.6 });
+          setAiProjection(result);
+        } catch (e) {
+          setAiProjection('Could not generate projection. Try again.');
+        } finally {
+          setLoadingProjection(false);
+        }
+      };
 
       // ─── TIME FILTER ───
       const getDateThreshold = () => {
@@ -5690,6 +5767,120 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               ))}
             </div>
           </div>
+
+          {/* ─── VIEW SELECTOR ─── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {isAdmin && (
+                <button className={`action-btn ${insightsView === 'company' ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11, padding: '6px 14px' }} onClick={() => { setInsightsView('company'); setAiProjection(''); }}>
+                  🏢 Company
+                </button>
+              )}
+              {users.filter(u => F(u, 'Name') || F(u, 'Email')).map(u => {
+                const uName = F(u, 'Name') || F(u, 'Email') || 'User';
+                const isMe = u.id === currentUserId;
+                if (!isAdmin && !isMe) return null;
+                return (
+                  <button key={u.id} className={`action-btn ${insightsView === u.id ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11, padding: '6px 14px' }} onClick={() => { setInsightsView(u.id); setAiProjection(''); }}>
+                    👤 {uName}{isMe ? ' (you)' : ''}
+                  </button>
+                );
+              })}
+            </div>
+            {insightsView !== 'company' && <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Showing personal insights for <strong style={{ color: 'var(--globant-text)' }}>{viewName}</strong></div>}
+          </div>
+
+          {/* ─── PERSONAL KPI PROJECTION (only in personal view with targets set) ─── */}
+          {insightsView !== 'company' && (viewMeetingsTarget > 0 || viewDealsTarget > 0) && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 14 }}>
+
+                {/* Meetings Gap Card */}
+                {viewMeetingsTarget > 0 && (
+                  <div className="card" style={{ borderLeft: `3px solid ${meetingsGap === 0 ? '#4ade80' : '#60a5fa'}` }}>
+                    <div className="card-header"><h3>📅 Meetings Projection</h3></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: '#4ade80' }}>{viewMeetings.length}</div>
+                        <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>Achieved</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-muted)' }}>{viewMeetingsTarget}</div>
+                        <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>Target</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: meetingsGap === 0 ? '#4ade80' : '#f59e0b' }}>{meetingsGap}</div>
+                        <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>Gap</div>
+                      </div>
+                    </div>
+                    {meetingsGap > 0 && (
+                      <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--globant-darker)', fontSize: 12 }}>
+                        {activitiesNeeded !== null ? (
+                          <>
+                            <div style={{ marginBottom: 6 }}>→ Necesitás <strong style={{ color: '#60a5fa' }}>{activitiesNeeded} actividades más</strong> para cerrar el gap</div>
+                            <div style={{ marginBottom: 6, color: 'var(--globant-muted)' }}>Tasa actual: <strong style={{ color: 'var(--globant-text)' }}>{(meetingConvRate * 100).toFixed(0)}%</strong> conversión · <strong style={{ color: 'var(--globant-text)' }}>{activitiesPerWeek.toFixed(1)}</strong> actividades/semana</div>
+                            {weeksToTarget !== null && <div style={{ color: weeksToTarget <= 4 ? '#4ade80' : weeksToTarget <= 8 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>⏱ A tu ritmo actual: ~{weeksToTarget.toFixed(1)} semanas para alcanzar el target</div>}
+                          </>
+                        ) : (
+                          <div style={{ color: 'var(--globant-muted)' }}>Insuficientes datos de actividad reciente (últimas 4 semanas) para proyectar.</div>
+                        )}
+                      </div>
+                    )}
+                    {meetingsGap === 0 && <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>🎉 ¡Target alcanzado!</div>}
+                  </div>
+                )}
+
+                {/* Deals Gap Card */}
+                {viewDealsTarget > 0 && (
+                  <div className="card" style={{ borderLeft: `3px solid ${dealsGap === 0 ? '#4ade80' : '#a78bfa'}` }}>
+                    <div className="card-header"><h3>💰 Deals Projection</h3></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: '#BFD730' }}>{viewDealsWon}</div>
+                        <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>Won</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-muted)' }}>{viewDealsTarget}</div>
+                        <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>Target</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: dealsGap === 0 ? '#4ade80' : '#f59e0b' }}>{dealsGap}</div>
+                        <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>Gap</div>
+                      </div>
+                    </div>
+                    {dealsGap > 0 && (
+                      <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--globant-darker)', fontSize: 12 }}>
+                        {meetingsNeededForDeals !== null ? (
+                          <>
+                            <div style={{ marginBottom: 6 }}>→ Necesitás <strong style={{ color: '#a78bfa' }}>{meetingsNeededForDeals} reuniones más</strong> para cerrar el gap</div>
+                            <div style={{ color: 'var(--globant-muted)' }}>Tasa actual: <strong style={{ color: 'var(--globant-text)' }}>{(meetingsToDealRate * 100).toFixed(0)}%</strong> reunión → deal</div>
+                          </>
+                        ) : (
+                          <div style={{ color: 'var(--globant-muted)' }}>Insuficientes datos para proyectar. Cerrá más reuniones primero.</div>
+                        )}
+                      </div>
+                    )}
+                    {dealsGap === 0 && <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>🎉 ¡Target alcanzado!</div>}
+                  </div>
+                )}
+              </div>
+
+              {/* AI Projection */}
+              <div className="card" style={{ borderLeft: '3px solid #BFD730' }}>
+                <div className="card-header">
+                  <h3>🤖 AI Sales Coach</h3>
+                  <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateProjection} disabled={loadingProjection}>
+                    {loadingProjection ? '⏳ Analizando...' : aiProjection ? '🔄 Regenerar' : '✨ Generar proyección'}
+                  </button>
+                </div>
+                {aiProjection ? (
+                  <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', padding: '4px 0' }}>{aiProjection}</div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Generá una proyección personalizada basada en tu ritmo actual y tus metas.</div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Goal context banner */}
           {goalName && (
