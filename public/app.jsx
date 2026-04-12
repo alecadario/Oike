@@ -744,7 +744,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [savingKpi, setSavingKpi] = useState(false);
 
       // ─── GOAL VALUES ───
-      const goalName = strategyRecord ? (F(strategyRecord, 'Name') || '') : '';
+      const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
       const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
       const goalDeadline = strategyRecord ? (F(strategyRecord, 'Deadline') || '') : '';
 
@@ -8209,7 +8209,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
     // ============ SETTINGS MODAL ============
     function SettingsModal({ onClose }) {
       const isAdmin = CURRENT_USER?.role === 'admin';
-      const [tab, setTab] = useState(isAdmin ? 'profile' : 'workspace');
+      const [tab, setTab] = useState('profile');
       const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
       const [saved, setSaved] = useState(false);
 
@@ -8237,7 +8237,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12, flexShrink: 0 }}>
               {[
-                ...(isAdmin ? [{ key: 'profile', label: '🤖 AI Profile' }] : []),
+                { key: 'profile', label: '🤖 AI Profile' },
                 { key: 'workspace', label: '🏢 Workspace' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -8268,8 +8268,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </div>
             )}
 
-            {/* AI Profile tab (admin only) */}
-            {tab === 'profile' && isAdmin && (
+            {/* AI Profile tab */}
+            {tab === 'profile' && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
               <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'rgba(91,191,181,0.08)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.6 }}>
