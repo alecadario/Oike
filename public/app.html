@@ -10,14 +10,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --globant-green: #BFD730;
+      --globant-green: #5BBFB5;
       --globant-dark: #1A1A2E;
       --globant-darker: #12121F;
       --globant-card: #1E1E32;
       --globant-border: #2A2A44;
       --globant-text: #E8E8F0;
       --globant-muted: #8888A8;
-      --globant-accent: #BFD730;
+      --globant-accent: #5BBFB5;
       --globant-success: #4ADE80;
       --globant-warning: #FBBF24;
       --globant-danger: #F87171;
@@ -61,7 +61,7 @@
       transition: all 0.15s ease;
     }
     .nav-item:hover { background: var(--globant-card); color: var(--globant-text); }
-    .nav-item.active { background: rgba(191,215,48,0.12); color: var(--globant-green); }
+    .nav-item.active { background: rgba(91,191,181,0.12); color: var(--globant-green); }
     .nav-item .nav-icon { font-size: 18px; width: 24px; text-align: center; }
 
     .sidebar-footer {
@@ -109,7 +109,7 @@
       padding: 12px; font-size: 13px;
       border-bottom: 1px solid var(--globant-border);
     }
-    .data-table tr:hover { background: rgba(191,215,48,0.04); }
+    .data-table tr:hover { background: rgba(91,191,181,0.04); }
 
     /* Badges */
     .badge {
@@ -120,7 +120,7 @@
     .badge-yellow { background: rgba(251,191,36,0.15); color: var(--globant-warning); }
     .badge-red { background: rgba(248,113,113,0.15); color: var(--globant-danger); }
     .badge-blue { background: rgba(96,165,250,0.15); color: var(--globant-info); }
-    .badge-accent { background: rgba(191,215,48,0.15); color: var(--globant-green); }
+    .badge-accent { background: rgba(91,191,181,0.15); color: var(--globant-green); }
 
     /* Action Buttons */
     .action-btn {
@@ -275,7 +275,7 @@
       flex: 1; font-weight: 700; font-size: 15px; color: var(--globant-text);
     }
     .mobile-topbar .mob-logo {
-      width: 30px; height: 30px; background: linear-gradient(135deg,#BFD730,#8fa824);
+      width: 30px; height: 30px; background: linear-gradient(135deg,#5BBFB5,#3D9E94);
       border-radius: 7px; display: flex; align-items: center; justify-content: center;
       font-weight: 800; font-size: 14px; color: #1A1A2E; flex-shrink: 0;
     }
@@ -358,14 +358,14 @@
   <!-- Loading screen — shown while app.js parses and React mounts -->
   <div id="oike-loading" style="position:fixed;inset:0;background:#12121F;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:Inter,sans-serif;">
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:32px;">
-      <div style="width:42px;height:42px;background:#BFD730;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#1A1A2E;">O</div>
+      <div style="width:42px;height:42px;background:#5BBFB5;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#1A1A2E;">O</div>
       <div>
         <div style="font-weight:700;font-size:18px;color:#E8E8F0;">Oike</div>
         <div style="font-size:12px;color:#8888A8;">Sales Intelligence Platform</div>
       </div>
     </div>
     <div style="width:200px;height:3px;background:#1E1E32;border-radius:3px;overflow:hidden;">
-      <div style="height:100%;background:#BFD730;border-radius:3px;animation:oike-bar 1.4s ease-in-out infinite;"></div>
+      <div style="height:100%;background:#5BBFB5;border-radius:3px;animation:oike-bar 1.4s ease-in-out infinite;"></div>
     </div>
     <div style="font-size:12px;color:#8888A8;margin-top:16px;">Cargando aplicación...</div>
   </div>

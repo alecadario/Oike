@@ -438,7 +438,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
 
             {/* Pain Points */}
-            <div style={{ padding: '10px 12px', background: 'rgba(191,215,48,0.06)', borderRadius: 8, marginBottom: 10, borderLeft: '3px solid var(--globant-green)' }}>
+            <div style={{ padding: '10px 12px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, marginBottom: 10, borderLeft: '3px solid var(--globant-green)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>PAIN POINTS</span>
@@ -506,7 +506,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {['LinkedIn', 'WhatsApp', 'Email'].map(ch => (
                   <button key={ch} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 8, cursor: 'pointer',
-                    background: quickMsgChannel === ch ? 'rgba(191,215,48,0.2)' : 'rgba(255,255,255,0.04)',
+                    background: quickMsgChannel === ch ? 'rgba(91,191,181,0.2)' : 'rgba(255,255,255,0.04)',
                     border: `1px solid ${quickMsgChannel === ch ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
                     color: quickMsgChannel === ch ? 'var(--globant-green)' : 'var(--globant-text)',
                     fontWeight: quickMsgChannel === ch ? 700 : 400,
@@ -944,7 +944,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(28, 1fr)', gap: 3 }}>
                 {heatmapDaysList.map(day => {
                   const intensity = day.count === 0 ? 0 : Math.min(1, day.count / heatmapMax);
-                  const bg = day.count === 0 ? 'var(--globant-darker)' : `rgba(191,215,48,${0.15 + intensity * 0.85})`;
+                  const bg = day.count === 0 ? 'var(--globant-darker)' : `rgba(91,191,181,${0.15 + intensity * 0.85})`;
                   return (
                     <div key={day.key} title={`${day.label}: ${day.count} activities`}
                       style={{ aspectRatio: '1', borderRadius: 3, background: bg, cursor: 'default', transition: 'transform 0.1s' }}
@@ -958,7 +958,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 <span>{heatmapDaysList[0]?.label}</span>
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                   <span>Less</span>
-                  {[0.1,0.3,0.6,1].map(v => <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: `rgba(191,215,48,${v})` }} />)}
+                  {[0.1,0.3,0.6,1].map(v => <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: `rgba(91,191,181,${v})` }} />)}
                   <span>More</span>
                 </div>
                 <span>Today</span>
@@ -1392,7 +1392,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             </div>
 
             {/* Context preview */}
-            <div style={{ padding: '8px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 8, marginBottom: 12, borderLeft: '3px solid var(--globant-green)', fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.5 }}>
+            <div style={{ padding: '8px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, marginBottom: 12, borderLeft: '3px solid var(--globant-green)', fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.5 }}>
               <strong style={{ color: 'var(--globant-green)' }}>Context loaded:</strong>{' '}
               {painText ? '✅ Pain points' : '⚠️ No pain points'} · {linkedinText ? '✅ LinkedIn news' : '⚠️ No LinkedIn news'} · {newsText ? '✅ Company news' : '⚠️ No company news'} · {intelNotesText ? '✅ Intel notes' : '⚠️ No intel notes'} · {sOutreach.length > 0 ? `✅ ${sOutreach.length} previous touches` : '⚠️ No history'}
             </div>
@@ -1410,7 +1410,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               </div>
               {/* CC Client Partner toggle — only for Email */}
               {selectedChannel === 'Email' && cpEmails.length > 0 && (
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(191,215,48,0.06)', borderRadius: 8, border: '1px solid rgba(191,215,48,0.15)' }}>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, border: '1px solid rgba(91,191,181,0.15)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, flex: 1 }}>
                     <input type="checkbox" checked={ccPartner} onChange={e => setCcPartner(e.target.checked)}
                       style={{ accentColor: 'var(--globant-green)', width: 16, height: 16 }} />
@@ -1455,7 +1455,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                   <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                     <button
                       onClick={() => setEventMode('invite')}
-                      style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, border: `1px solid ${eventMode === 'invite' ? 'var(--globant-green)' : 'var(--globant-border)'}`, background: eventMode === 'invite' ? 'rgba(191,215,48,0.15)' : 'rgba(255,255,255,0.03)', color: eventMode === 'invite' ? 'var(--globant-green)' : 'var(--globant-muted)', cursor: 'pointer', fontWeight: eventMode === 'invite' ? 700 : 400 }}>
+                      style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, border: `1px solid ${eventMode === 'invite' ? 'var(--globant-green)' : 'var(--globant-border)'}`, background: eventMode === 'invite' ? 'rgba(91,191,181,0.15)' : 'rgba(255,255,255,0.03)', color: eventMode === 'invite' ? 'var(--globant-green)' : 'var(--globant-muted)', cursor: 'pointer', fontWeight: eventMode === 'invite' ? 700 : 400 }}>
                       🎫 Invite — "Are you going?"
                     </button>
                     <button
@@ -1464,7 +1464,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                       🤝 Follow-up — "Great meeting you"
                     </button>
                   </div>
-                  <div style={{ padding: '6px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: `3px solid ${eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)'}` }}>
+                  <div style={{ padding: '6px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: `3px solid ${eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)'}` }}>
                     {eventMode === 'invite' ? '🎪' : '🤝'} <strong>{F(selectedEvent, 'Event Name')}</strong>
                     {selectedEvent.fields?.['Starting'] && <span> · {new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>}
                     <span style={{ marginLeft: 8, color: eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)' }}>{eventMode === 'invite' ? 'Invite mode' : 'Follow-up mode'}</span>
@@ -1484,7 +1484,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 ))}
               </select>
               {selectedSolution && (
-                <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: '3px solid #a78bfa' }}>
+                <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: '3px solid #a78bfa' }}>
                   🛠️ <strong>{F(selectedSolution, 'Name')}</strong>
                   {(() => { const d = F(selectedSolution, 'Service | Solution Detail'); return d ? <span> · {(typeof d === 'string' ? d : '').slice(0, 120)}...</span> : null; })()}
                 </div>
@@ -1891,7 +1891,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             </div>
               <div>
                 {/* Instructions */}
-                <div style={{ fontSize: 11, color: 'var(--globant-muted)', padding: '8px 12px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, marginBottom: 12, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 11, color: 'var(--globant-muted)', padding: '8px 12px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, marginBottom: 12, lineHeight: 1.6 }}>
                   <strong>CSV columns:</strong> Name, Last Name, Role, Email, Phone, LinkedIn, Account, Influence<br />
                   <strong>Account</strong> must match an existing account name. <strong>Duplicates</strong> detected by email or name+account match.
                 </div>
@@ -2612,10 +2612,10 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                         <option value="">Select account...</option>
                         {accounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
                       </select>
-                      <button onClick={() => setShowNewAccount(true)} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-green)', background: 'rgba(191,215,48,0.1)', color: 'var(--globant-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ New</button>
+                      <button onClick={() => setShowNewAccount(true)} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-green)', background: 'rgba(91,191,181,0.1)', color: 'var(--globant-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ New</button>
                     </div>
                   ) : (
-                    <div style={{ padding: '8px', background: 'rgba(191,215,48,0.06)', borderRadius: 6, border: '1px solid rgba(191,215,48,0.2)' }}>
+                    <div style={{ padding: '8px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)' }}>
                       <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '5px 8px', marginBottom: 4 }} placeholder="Company name *" value={ctxNewAccountName} onChange={e => setCtxNewAccountName(e.target.value)} />
                       <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '5px 8px', marginBottom: 6 }} placeholder="Website (optional)" value={ctxNewAccountWebsite} onChange={e => setCtxNewAccountWebsite(e.target.value)} />
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -2693,7 +2693,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               ) : (
                 <div>
                   {contactImportResult ? (
-                    <div style={{ padding: '12px', background: 'rgba(191,215,48,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+                    <div style={{ padding: '12px', background: 'rgba(91,191,181,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
                       ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}.
                       <button className="action-btn btn-ghost" style={{ fontSize: 11, marginLeft: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>Import another</button>
                     </div>
@@ -2788,7 +2788,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                           {F(s, 'Source') ? (
                             <span style={{
                               fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10,
-                              background: isInbound(F(s, 'Source')) ? 'rgba(124,58,237,0.15)' : 'rgba(191,215,48,0.15)',
+                              background: isInbound(F(s, 'Source')) ? 'rgba(124,58,237,0.15)' : 'rgba(91,191,181,0.15)',
                               color: isInbound(F(s, 'Source')) ? '#a78bfa' : 'var(--globant-green)',
                               whiteSpace: 'nowrap'
                             }}>
@@ -2933,7 +2933,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
 
           {/* KPI Dashboard */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 24 }}>
-            <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(191,215,48,0.12) 0%, rgba(191,215,48,0.03) 100%)' }}>
+            <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{outreach.length}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Total Activities</div>
             </div>
@@ -3027,7 +3027,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
 
               return (
                 <div key={a.id} className="log-entry">
-                  <div className="log-icon" style={{ background: `${channelColors[channel] || 'rgba(191,215,48,0.15)'}22` }}>{icon}</div>
+                  <div className="log-icon" style={{ background: `${channelColors[channel] || 'rgba(91,191,181,0.15)'}22` }}>{icon}</div>
                   <div className="log-content">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div className="log-title">{F(a, 'Activity Name')}</div>
@@ -3041,7 +3041,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                       {stakeholderNames.join(', ')} at {accountNames.join(', ')} • {formatDate(a.fields?.['Date'])}
                     </div>
                     {F(a, 'Message') && (
-                      <div style={{ fontSize: 12, color: 'var(--globant-text)', marginTop: 8, padding: '8px 12px', background: 'rgba(191,215,48,0.08)', borderRadius: 6, borderLeft: '3px solid var(--globant-accent)', whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto' }}>
+                      <div style={{ fontSize: 12, color: 'var(--globant-text)', marginTop: 8, padding: '8px 12px', background: 'rgba(91,191,181,0.08)', borderRadius: 6, borderLeft: '3px solid var(--globant-accent)', whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto' }}>
                         {F(a, 'Message')}
                       </div>
                     )}
@@ -4157,7 +4157,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
             </select>
             {(filterSolutionId || filterIndustry || filterCountry) && (
               <span
-                style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, cursor: 'pointer', padding: '4px 8px', background: 'rgba(191,215,48,0.1)', borderRadius: 5 }}
+                style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, cursor: 'pointer', padding: '4px 8px', background: 'rgba(91,191,181,0.1)', borderRadius: 5 }}
                 onClick={() => { setFilterSolutionId(''); setFilterIndustry(''); setFilterCountry(''); }}
                 title="Clear all filters"
               >
@@ -4294,14 +4294,14 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           {account && (
             <div>
               {/* ── HERO HEADER ── */}
-              <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0, border: '1px solid rgba(191,215,48,0.2)', borderRadius: 12 }}>
-                <div style={{ background: 'linear-gradient(135deg, rgba(191,215,48,0.12) 0%, rgba(96,165,250,0.06) 55%, rgba(167,139,250,0.07) 100%)', padding: '18px 24px 20px' }}>
+              <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0, border: '1px solid rgba(91,191,181,0.2)', borderRadius: 12 }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(96,165,250,0.06) 55%, rgba(167,139,250,0.07) 100%)', padding: '18px 24px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setSelectedAccountId('')}>← Back</button>
                     <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setEditingAccount(account)}>✏️ Edit</button>
                     {F(account, 'Website') && (
                       <a href={String(F(account, 'Website')).startsWith('http') ? F(account, 'Website') : `https://${F(account, 'Website')}`} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 11, color: 'var(--globant-green)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'rgba(191,215,48,0.1)', borderRadius: 6, border: '1px solid rgba(191,215,48,0.2)' }}>
+                        style={{ fontSize: 11, color: 'var(--globant-green)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'rgba(91,191,181,0.1)', borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)' }}>
                         🔗 Website
                       </a>
                     )}
@@ -4313,7 +4313,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                         {F(account, 'Industry') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(96,165,250,0.14)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.22)', fontWeight: 600 }}>🏭 {F(account, 'Industry')}</span>}
                         {F(account, 'Country') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(244,114,182,0.12)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.2)', fontWeight: 600 }}>📍 {F(account, 'Country')}</span>}
                         {F(account, 'Tier') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)', fontWeight: 600 }}>⭐ {F(account, 'Tier')}</span>}
-                        {F(account, 'Inside Sales Status') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(191,215,48,0.14)', color: 'var(--globant-green)', border: '1px solid rgba(191,215,48,0.22)', fontWeight: 600 }}>{F(account, 'Inside Sales Status')}</span>}
+                        {F(account, 'Inside Sales Status') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(91,191,181,0.14)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.22)', fontWeight: 600 }}>{F(account, 'Inside Sales Status')}</span>}
                         {solNames.map((sn, i) => <span key={i} style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.18)' }}>🛠️ {sn}</span>)}
                       </div>
                     </div>
@@ -4340,9 +4340,9 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline']].map(([tab, label]) => (
                   <button key={tab} onClick={() => setAccDetailTab(tab)}
                     style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
-                      background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(191,215,48,0.2) 0%, rgba(191,215,48,0.08) 100%)' : 'transparent',
+                      background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(91,191,181,0.2) 0%, rgba(91,191,181,0.08) 100%)' : 'transparent',
                       color: accDetailTab === tab ? 'var(--globant-green)' : 'var(--globant-muted)',
-                      boxShadow: accDetailTab === tab ? '0 1px 4px rgba(0,0,0,0.25), inset 0 1px 0 rgba(191,215,48,0.12)' : 'none',
+                      boxShadow: accDetailTab === tab ? '0 1px 4px rgba(0,0,0,0.25), inset 0 1px 0 rgba(91,191,181,0.12)' : 'none',
                     }}>
                     {label}
                   </button>
@@ -4387,7 +4387,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                             const fullText = `${item.title}${item.body ? ' — ' + item.body : ''}`;
                             return (
                               <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px', borderLeft: `3px solid ${tag.color}` }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(191,215,48,0.05)'}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(91,191,181,0.05)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: item.body ? 5 : 0 }}>
                                   <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.4 }}>{item.title}</div>
@@ -4563,7 +4563,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                             const clean = line.replace(/^#{1,3}\s+/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
                             if (!clean) return null;
                             if (isHeader) {
-                              return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)', marginTop: i > 0 ? 10 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(191,215,48,0.15)' }}>{clean.replace(/\*\*/g, '')}</div>;
+                              return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)', marginTop: i > 0 ? 10 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(91,191,181,0.15)' }}>{clean.replace(/\*\*/g, '')}</div>;
                             }
                             const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
                             const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
@@ -4724,7 +4724,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                     </td>
                                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                                        {email && <button title="AI Message" style={{ background: 'rgba(191,215,48,0.12)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => setCpSelectedStakeholder(s)}>✉️</button>}
+                                        {email && <button title="AI Message" style={{ background: 'rgba(91,191,181,0.12)', border: '1px solid rgba(91,191,181,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => setCpSelectedStakeholder(s)}>✉️</button>}
                                         <button title="Schedule Meeting" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => { setCpMeetingModal({ stakeholder: s }); setCpMeetingNotes(''); setCpMeetingDate(''); setCpMeetingTime(''); }}>📅</button>
                                         {phone && <button title="Log Call" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => { setCpCallModal(s); setCpCallNotes(''); }}>📞</button>}
                                         {phone && <button title="WhatsApp" style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => window.open('https://wa.me/' + String(phone).replace(/[^0-9+]/g, ''), '_blank')}>💬</button>}
@@ -4852,7 +4852,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                     </select>
                                     <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 8px', marginBottom: 6 }} onClick={() => setShowAddOppStk(!showAddOppStk)}>{showAddOppStk ? '✕ Cancel' : '➕ New Contact'}</button>
                                     {showAddOppStk && (
-                                      <div style={{ display: 'flex', gap: 6, marginBottom: 6, padding: '8px 10px', background: 'rgba(191,215,48,0.06)', borderRadius: 8 }}>
+                                      <div style={{ display: 'flex', gap: 6, marginBottom: 6, padding: '8px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 8 }}>
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
                                         <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }} disabled={!newOppStkName.trim() || creatingOppStk}
@@ -4886,7 +4886,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                               {/* AI tags */}
                               {(F(o, 'Suggested Angle') || F(o, 'Suggested Solution Theme') || F(o, 'Potential Interest') || F(o, 'Role-Based Pain Point')) && (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                                  {F(o, 'Suggested Angle') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(191,215,48,0.12)', color: 'var(--globant-green)' }}>🎯 {F(o, 'Suggested Angle')}</span>}
+                                  {F(o, 'Suggested Angle') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(91,191,181,0.12)', color: 'var(--globant-green)' }}>🎯 {F(o, 'Suggested Angle')}</span>}
                                   {F(o, 'Suggested Solution Theme') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>🛠️ {F(o, 'Suggested Solution Theme')}</span>}
                                   {F(o, 'Potential Interest') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(96,165,250,0.12)', color: '#60a5fa' }}>💡 {F(o, 'Potential Interest')}</span>}
                                   {F(o, 'Role-Based Pain Point') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(244,114,182,0.12)', color: '#f472b6' }}>⚡ {F(o, 'Role-Based Pain Point')}</span>}
@@ -5366,7 +5366,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
-            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(191,215,48,0.15) 0%, rgba(191,215,48,0.03) 100%)' }}>
+            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.15) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{coveragePct}%</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Account Coverage</div>
             </div>
@@ -5931,7 +5931,7 @@ Return ONLY the JSON array, nothing else.`;
                 <div className="card-header"><h3>📝 Event Details</h3></div>
                 {context && <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', marginBottom: summary ? 14 : 0 }}>{context}</div>}
                 {summary && (
-                  <div style={{ padding: '10px 14px', background: 'rgba(191,215,48,0.06)', borderRadius: 8, borderLeft: '3px solid var(--globant-accent)' }}>
+                  <div style={{ padding: '10px 14px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, borderLeft: '3px solid var(--globant-accent)' }}>
                     <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 6 }}>📎 Attachment Summary</div>
                     <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap' }}>{typeof summary === 'string' ? summary.slice(0, 500) : String(summary).slice(0, 500)}</div>
                   </div>
@@ -5943,7 +5943,7 @@ Return ONLY the JSON array, nothing else.`;
             {aiInviteMsg && (
               <div className="card">
                 <div className="card-header"><h3>✨ AI Invitation Message</h3></div>
-                <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', padding: '10px 14px', background: 'rgba(191,215,48,0.06)', borderRadius: 8 }}>{aiInviteMsg}</div>
+                <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', padding: '10px 14px', background: 'rgba(91,191,181,0.06)', borderRadius: 8 }}>{aiInviteMsg}</div>
               </div>
             )}
 
@@ -5963,7 +5963,7 @@ Return ONLY the JSON array, nothing else.`;
                     // Check if invitation was already sent
                     const invSent = eventOutreach.some(o => linkedIds(o, 'Stakeholder').includes(s.id));
                     return (
-                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, background: 'rgba(191,215,48,0.04)', borderRadius: 6 }}>
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, background: 'rgba(91,191,181,0.04)', borderRadius: 6 }}>
                         <div>
                           <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
                             {F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}
@@ -6022,7 +6022,7 @@ Return ONLY the JSON array, nothing else.`;
                       const hasLinkedin = !!F(s, 'LinkedIn');
                       const reason = suggestionReason[sid] || '';
                       return (
-                        <div key={s.id} style={{ padding: '10px 12px', marginBottom: 6, background: 'rgba(191,215,48,0.06)', borderRadius: 8, border: '1px solid rgba(191,215,48,0.15)' }}>
+                        <div key={s.id} style={{ padding: '10px 12px', marginBottom: 6, background: 'rgba(91,191,181,0.06)', borderRadius: 8, border: '1px solid rgba(91,191,181,0.15)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: reason ? 4 : 0 }}>
                             <div>
                               <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
@@ -6164,7 +6164,7 @@ Return ONLY the JSON array, nothing else.`;
 
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(191,215,48,0.12) 0%, rgba(191,215,48,0.03) 100%)' }}>
+            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{events.length}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Total Events</div>
             </div>
@@ -6194,7 +6194,7 @@ Return ONLY the JSON array, nothing else.`;
                 const accSet = new Set();
                 invitedSh.forEach(s => resolveLinked(s, 'Account', accounts, 'Account Name').forEach(n => accSet.add(n)));
                 return (
-                  <div key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{ padding: '14px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(191,215,48,0.04)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(191,215,48,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(191,215,48,0.04)'}>
+                  <div key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{ padding: '14px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(91,191,181,0.04)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(91,191,181,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(91,191,181,0.04)'}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <span style={{ fontWeight: 700, fontSize: 15 }}>{F(ev, 'Event Name')}</span>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -6325,7 +6325,7 @@ Return ONLY the JSON array, nothing else.`;
                       <div style={{ fontSize:16, fontWeight:800, color:'var(--globant-text)', marginBottom:4 }}>{name}</div>
                       <div style={{ fontSize:12, color:'var(--globant-muted)' }}>{industry}</div>
                     </div>
-                    {b2b && <span style={tagStyle('rgba(191,215,48,0.15)', 'var(--globant-green)')}>{b2b}</span>}
+                    {b2b && <span style={tagStyle('rgba(91,191,181,0.15)', 'var(--globant-green)')}>{b2b}</span>}
                   </div>
 
                   {/* Quick tags */}
@@ -6758,7 +6758,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           { bg: 'rgba(74,222,128,0.06)', border: '#4ade80', color: '#4ade80' },
           { bg: 'rgba(96,165,250,0.06)', border: '#60a5fa', color: '#60a5fa' },
           { bg: 'rgba(251,191,36,0.06)', border: '#fbbf24', color: '#fbbf24' },
-          { bg: 'rgba(191,215,48,0.06)', border: '#BFD730', color: '#BFD730' },
+          { bg: 'rgba(91,191,181,0.06)', border: '#BFD730', color: '#BFD730' },
         ];
         return (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -6838,7 +6838,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <h1 style={{ margin: 0 }}>🛠️ {F(selectedSol, 'Name')}</h1>
                   {solType && <span style={{ background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}50`, borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{solType}</span>}
-                  {solPrice && <span style={{ background: 'rgba(191,215,48,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 6, padding: '3px 12px', fontSize: 13, fontWeight: 700 }}>💰 {solPrice}</span>}
+                  {solPrice && <span style={{ background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)', borderRadius: 6, padding: '3px 12px', fontSize: 13, fontWeight: 700 }}>💰 {solPrice}</span>}
                 </div>
                 {F(selectedSol, 'Service | Solution Detail') && (
                   <p style={{ marginTop: 6, color: 'var(--globant-muted)', fontSize: 13, lineHeight: 1.5 }}>{typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail') : ''}</p>
@@ -6859,7 +6859,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   </div>
                 )}
                 {F(selectedSol, 'Stakeholder Key Message') && (
-                  <div style={{ background: 'rgba(191,215,48,0.06)', borderRadius: 8, padding: '14px 16px', border: '1px solid rgba(191,215,48,0.2)' }}>
+                  <div style={{ background: 'rgba(91,191,181,0.06)', borderRadius: 8, padding: '14px 16px', border: '1px solid rgba(91,191,181,0.2)' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>💬 Key Message for Stakeholders</div>
                     <div style={{ fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{typeof F(selectedSol, 'Stakeholder Key Message') === 'string' ? F(selectedSol, 'Stakeholder Key Message') : ''}</div>
                   </div>
@@ -6869,7 +6869,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
             {/* KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
-              <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(191,215,48,0.12) 0%, rgba(191,215,48,0.03) 100%)' }}>
+              <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{selectedMetrics.accountCount}</div>
                 <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Accounts</div>
               </div>
@@ -6994,7 +6994,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     ? available.filter(a => (F(a, 'Account Name') || '').toLowerCase().includes(addAccSearch.toLowerCase()))
                     : available.slice(0, 20);
                   return (
-                    <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(191,215,48,0.06)', borderRadius: 8 }}>
+                    <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(91,191,181,0.06)', borderRadius: 8 }}>
                       <input className="input-field" style={{ width: '100%', marginBottom: 8, fontSize: 12 }}
                         placeholder="Search accounts to add..." value={addAccSearch}
                         onChange={e => setAddAccSearch(e.target.value)} autoFocus />
@@ -7004,7 +7004,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                             {addAccSearch ? 'No matching accounts found' : 'All accounts already mapped'}
                           </p>
                         ) : filtered.map(a => (
-                          <div key={a.id} style={{ padding: '8px 10px', marginBottom: 4, borderRadius: 6, background: 'rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(191,215,48,0.1)' }}
+                          <div key={a.id} style={{ padding: '8px 10px', marginBottom: 4, borderRadius: 6, background: 'rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(91,191,181,0.1)' }}
                             onClick={() => !addingAccount && addAccountToSolution(a.id)}>
                             <div>
                               <div style={{ fontWeight: 600, fontSize: 12 }}>{F(a, 'Account Name')}</div>
@@ -7032,7 +7032,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       const aOpps = opportunities.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
                       const stCount = linkedIds(a, 'Stakeholders').length;
                       return (
-                        <div key={a.id} style={{ padding: '10px 12px', marginBottom: 6, borderRadius: 8, background: 'rgba(191,215,48,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div key={a.id} style={{ padding: '10px 12px', marginBottom: 6, borderRadius: 8, background: 'rgba(91,191,181,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: 13, cursor: goToAccount ? 'pointer' : 'default', color: goToAccount ? 'var(--globant-green)' : 'inherit' }}
                               onClick={() => goToAccount && goToAccount(a.id)}
@@ -7255,7 +7255,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(191,215,48,0.12) 0%, rgba(191,215,48,0.03) 100%)' }}>
+            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{solutions.length}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Total Solutions</div>
             </div>
@@ -7524,8 +7524,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 ...(isAdmin ? [{ key: 'profile', label: '🤖 AI Profile' }] : []),
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
-                  background: tab === t.key ? 'rgba(191,215,48,0.15)' : 'none',
-                  border: tab === t.key ? '1px solid rgba(191,215,48,0.3)' : '1px solid transparent',
+                  background: tab === t.key ? 'rgba(91,191,181,0.15)' : 'none',
+                  border: tab === t.key ? '1px solid rgba(91,191,181,0.3)' : '1px solid transparent',
                   color: tab === t.key ? 'var(--globant-green)' : 'var(--globant-muted)',
                   borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
                 }}>{t.label}</button>
@@ -7555,7 +7555,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             {tab === 'profile' && isAdmin && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
               <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'rgba(191,215,48,0.08)', border: '1px solid rgba(191,215,48,0.2)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.6 }}>
+                <div style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'rgba(91,191,181,0.08)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.6 }}>
                   These values are injected into all AI prompts. Set them to match your company — every client gets their own AI context.
                 </div>
 
@@ -7921,7 +7921,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--globant-text)' }}>{CURRENT_USER.name}</div>
                     <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>{CURRENT_USER.email}</div>
-                    <div style={{ fontSize: 9, marginTop: 2 }}><span style={{ background: CURRENT_USER.role === 'admin' ? 'rgba(191,215,48,0.2)' : 'rgba(96,165,250,0.2)', color: CURRENT_USER.role === 'admin' ? 'var(--globant-green)' : 'var(--globant-info)', padding: '2px 8px', borderRadius: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{CURRENT_USER.role || 'user'}</span></div>
+                    <div style={{ fontSize: 9, marginTop: 2 }}><span style={{ background: CURRENT_USER.role === 'admin' ? 'rgba(91,191,181,0.2)' : 'rgba(96,165,250,0.2)', color: CURRENT_USER.role === 'admin' ? 'var(--globant-green)' : 'var(--globant-info)', padding: '2px 8px', borderRadius: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{CURRENT_USER.role || 'user'}</span></div>
                   </div>
                   <button onClick={logoutUser} style={{ background: 'none', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 10px', color: 'var(--globant-muted)', fontSize: 11, cursor: 'pointer' }} title="Sign out">↪ Exit</button>
                 </div>
@@ -7930,7 +7930,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           </div>
           <div className="main">
             {refreshing && (
-              <div style={{ position: 'fixed', top: 8, right: 20, zIndex: 999, background: 'rgba(191,215,48,0.15)', border: '1px solid rgba(191,215,48,0.3)', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ position: 'fixed', top: 8, right: 20, zIndex: 999, background: 'rgba(91,191,181,0.15)', border: '1px solid rgba(91,191,181,0.3)', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>🔄</span> Syncing...
               </div>
             )}
