@@ -239,6 +239,11 @@
       });
     };
 
+    // Small info tooltip icon — use: <InfoTip text="What to enter here" />
+    const InfoTip = ({ text }) => (
+      <span title={text} style={{ marginLeft: 5, cursor: 'help', fontSize: 11, color: 'var(--globant-muted)', opacity: 0.6, userSelect: 'none' }}>ⓘ</span>
+    );
+
     // Auto-activate account when outreach is logged
     const activateAccountIfNeeded = async (apiInstance, accountIds, allAccounts) => {
       if (!apiInstance || !accountIds || !accountIds.length || !allAccounts) return;
@@ -2565,9 +2570,19 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
 
       return (
         <div>
-          <div className="page-header">
-            <h1>Contacts</h1>
-            <p>All stakeholders · {stakeholders.length} total</p>
+          <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1>Contacts</h1>
+              <p>All stakeholders · {stakeholders.length} total</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowContactImport(!showContactImport); setContactImportResult(null); }}>
+                {showContactImport ? '✕ Close Import' : '📥 Import CSV'}
+              </button>
+              <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => setShowNewContact(!showNewContact)}>
+                {showNewContact ? '✕ Close' : '➕ New Contact'}
+              </button>
+            </div>
           </div>
 
           <div className="filters-row">
@@ -2581,14 +2596,6 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               <option value="">All Sources</option>
               {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowContactImport(!showContactImport); setContactImportResult(null); }}>
-                {showContactImport ? '✕ Close Import' : '📥 Import CSV'}
-              </button>
-              <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => setShowNewContact(!showNewContact)}>
-                {showNewContact ? '✕ Close' : '➕ New Contact'}
-              </button>
-            </div>
           </div>
 
           {/* New Contact Form */}
@@ -2597,15 +2604,15 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               <div className="card-header"><h3>➕ New Contact</h3></div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>FIRST NAME *</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>FIRST NAME *<InfoTip text="Contact's first name as it appears on LinkedIn or their email signature." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. Khalid" value={ctxNewName} onChange={e => setCtxNewName(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LAST NAME</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LAST NAME<InfoTip text="Contact's last name." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. Al-Rashid" value={ctxNewLast} onChange={e => setCtxNewLast(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ACCOUNT *</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ACCOUNT *<InfoTip text="The company this contact works at. Select existing or create a new one inline." /></label>
                   {!showNewAccount ? (
                     <div style={{ display: 'flex', gap: 4 }}>
                       <select className="input-field" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }} value={ctxNewAccountId} onChange={e => setCtxNewAccountId(e.target.value)}>
@@ -2626,23 +2633,23 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                   )}
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ROLE</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ROLE<InfoTip text="Their job title. E.g. 'VP Sales', 'CTO', 'CEO'. Used in AI-generated messaging." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. CTO" value={ctxNewRole} onChange={e => setCtxNewRole(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EMAIL</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EMAIL<InfoTip text="Business email for outreach. Used for email sequences and personalization." /></label>
                   <input className="input-field" type="email" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="email@company.com" value={ctxNewEmail} onChange={e => setCtxNewEmail(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>PHONE</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>PHONE<InfoTip text="Mobile or office number for WhatsApp or call outreach." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="+971..." value={ctxNewPhone} onChange={e => setCtxNewPhone(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LINKEDIN URL</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LINKEDIN URL<InfoTip text="Full LinkedIn profile URL. Used for research and personalizing outreach." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://linkedin.com/in/..." value={ctxNewLinkedin} onChange={e => setCtxNewLinkedin(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>INFLUENCE</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>INFLUENCE<InfoTip text="How much power this person has in a buying decision. Decision Maker = final say. Champion = internal advocate. Influencer = shapes opinion." /></label>
                   <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={ctxNewInfluence} onChange={e => setCtxNewInfluence(e.target.value)}>
                     <option value="">Select...</option>
                     <option value="Decision Maker">Decision Maker</option>
@@ -2654,7 +2661,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>SOURCE</label>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>SOURCE<InfoTip text="How did you find or meet this contact? Helps track which channels generate the most pipeline." /></label>
                   <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={ctxNewSource} onChange={e => setCtxNewSource(e.target.value)}>
                     <option value="">Select source...</option>
                     {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -2662,7 +2669,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                 </div>
                 {isInbound(ctxNewSource) && (
                   <div>
-                    <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>CAMPAIGN</label>
+                    <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>CAMPAIGN<InfoTip text="The specific event or campaign that brought this contact in. E.g. 'GITEX 2025', 'Webinar April'." /></label>
                     <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. GITEX 2025" value={ctxNewCampaign} onChange={e => setCtxNewCampaign(e.target.value)} />
                   </div>
                 )}
@@ -3073,9 +3080,10 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
 
     // ============ CP BRIEFINGS ============
     function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate }) {
-      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events } = data;
+      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [] } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
+      const isAdmin = CURRENT_USER?.role === 'admin';
 
       // Handle navigation from other pages
       useEffect(() => {
@@ -4113,9 +4121,21 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       return (
         <div>
           {renderOppModal()}
-          <div className="page-header">
-            <h1>Accounts</h1>
-            <p>Executive account briefings — one-pager per account</p>
+          <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1>Accounts</h1>
+              <p>Executive account briefings — one-pager per account</p>
+            </div>
+            {!selectedAccountId && CURRENT_USER?.role === 'admin' && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => { setShowNewAccount(!showNewAccount); setShowAccImport(false); }}>
+                  {showNewAccount ? '✕ Close' : '➕ New Account'}
+                </button>
+                <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowAccImport(!showAccImport); setShowNewAccount(false); }}>
+                  {showAccImport ? '✕ Close Import' : '📥 Import CSV'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Search + Import */}
@@ -4164,16 +4184,6 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 {filteredAccounts.length} result{filteredAccounts.length !== 1 ? 's' : ''} · ✕ clear
               </span>
             )}
-            {!selectedAccountId && CURRENT_USER?.role === 'admin' && (
-              <>
-                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => { setShowNewAccount(!showNewAccount); setShowAccImport(false); }}>
-                  {showNewAccount ? '✕ Close' : '➕ New Account'}
-                </button>
-                <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowAccImport(!showAccImport); setShowNewAccount(false); }}>
-                  {showAccImport ? '✕ Close Import' : '📥 Import CSV'}
-                </button>
-              </>
-            )}
           </div>
 
           {/* Manual Account Creation */}
@@ -4182,13 +4192,13 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               <div className="card-header"><h3>➕ Create New Account</h3></div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ flex: 2, minWidth: 200 }}>
-                  <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>ACCOUNT NAME *</label>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>ACCOUNT NAME *<InfoTip text="The official company name. This will appear across all sections of the app." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12 }}
                     placeholder="e.g. Saudi Aramco" value={newAccName} onChange={e => setNewAccName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createAccount()} />
                 </div>
                 <div style={{ flex: 2, minWidth: 200 }}>
-                  <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>WEBSITE</label>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>WEBSITE<InfoTip text="The company's website. Used by AI to look up news, context, and generate personalized outreach." /></label>
                   <input className="input-field" style={{ width: '100%', fontSize: 12 }}
                     placeholder="e.g. https://aramco.com" value={newAccWebsite} onChange={e => setNewAccWebsite(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createAccount()} />
@@ -4485,6 +4495,59 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       )}
                     </div>
                   </div>
+
+                  {/* Team Assignment — admin only */}
+                  {isAdmin && (() => {
+                    const bdrs = users.filter(u => {
+                      const r = F(u, 'Role');
+                      const role = typeof r === 'object' ? r?.name : r;
+                      return (role || '').toLowerCase() === 'bdr';
+                    });
+                    const cps = users.filter(u => {
+                      const r = F(u, 'Role');
+                      const role = typeof r === 'object' ? r?.name : r;
+                      return (role || '').toLowerCase() === 'cp';
+                    });
+                    const currentBdrIds = linkedIds(account, 'BDR');
+                    const currentCpIds = linkedIds(account, 'Client Partners');
+                    const currentBdr = currentBdrIds[0] || '';
+                    const currentCp = currentCpIds[0] || '';
+
+                    const assignUser = async (field, userId) => {
+                      if (!api) return;
+                      try {
+                        const val = userId ? [{ id: userId }] : [];
+                        await api.updateRecord(TABLE_IDS.accounts, account.id, { [field]: val });
+                        if (onUpdateRecord) onUpdateRecord('accounts', account.id, { [field]: val });
+                        if (onLogActivity) onLogActivity();
+                      } catch (e) { alert('Failed to assign: ' + e.message); }
+                    };
+
+                    const sStyle = { width: '100%', padding: '7px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 12, boxSizing: 'border-box' };
+                    const lStyle = { fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5, display: 'block' };
+
+                    return (
+                      <div className="card" style={{ borderLeft: '3px solid #a78bfa', marginBottom: 16 }}>
+                        <div className="card-header"><h3>👥 Team Assignment</h3></div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                          <div>
+                            <label style={lStyle}>BDR Assigned</label>
+                            <select style={sStyle} value={currentBdr} onChange={e => assignUser('BDR', e.target.value)}>
+                              <option value="">— Unassigned —</option>
+                              {bdrs.map(u => <option key={u.id} value={u.id}>{F(u, 'Name') || F(u, 'Email') || u.id}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={lStyle}>Client Partner Assigned</label>
+                            <select style={sStyle} value={currentCp} onChange={e => assignUser('Client Partners', e.target.value)}>
+                              <option value="">— Unassigned —</option>
+                              {cps.map(u => <option key={u.id} value={u.id}>{F(u, 'Name') || F(u, 'Email') || u.id}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Intel Notes */}
                   <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
@@ -6363,20 +6426,20 @@ Return ONLY the JSON array, nothing else.`;
                     <button onClick={() => setShowIcpModal(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:18 }}>✕</button>
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', gap:13 }}>
-                    <div><label style={lStyle}>Name *</label><input style={iStyle} value={icpForm.name} onChange={e => setIcpForm(p => ({ ...p, name: e.target.value }))} autoFocus placeholder="e.g. The Sales Manager" /></div>
+                    <div><label style={lStyle}>Name *<InfoTip text="Give this ICP a descriptive name like 'The Sales Manager' or 'Scaling Founder'. Should describe who this customer is." /></label><input style={iStyle} value={icpForm.name} onChange={e => setIcpForm(p => ({ ...p, name: e.target.value }))} autoFocus placeholder="e.g. The Sales Manager" /></div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                      <div><label style={lStyle}>Industry</label><input style={iStyle} value={icpForm.industry} onChange={e => setIcpForm(p => ({ ...p, industry: e.target.value }))} placeholder="e.g. SaaS / Consulting" /></div>
-                      <div><label style={lStyle}>Country / Region</label><input style={iStyle} value={icpForm.country} onChange={e => setIcpForm(p => ({ ...p, country: e.target.value }))} placeholder="e.g. USA / LATAM" /></div>
+                      <div><label style={lStyle}>Industry<InfoTip text="The industry or sector this ICP belongs to. Can list multiple separated by /." /></label><input style={iStyle} value={icpForm.industry} onChange={e => setIcpForm(p => ({ ...p, industry: e.target.value }))} placeholder="e.g. SaaS / Consulting" /></div>
+                      <div><label style={lStyle}>Country / Region<InfoTip text="Where these customers are located. Can be a country, region, or multiple markets." /></label><input style={iStyle} value={icpForm.country} onChange={e => setIcpForm(p => ({ ...p, country: e.target.value }))} placeholder="e.g. USA / LATAM" /></div>
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-                      <div><label style={lStyle}>B2B / B2C</label><select style={iStyle} value={icpForm.b2b} onChange={e => setIcpForm(p => ({ ...p, b2b: e.target.value }))}>{ICP_B2B_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                      <div><label style={lStyle}>Company Size</label><input style={iStyle} value={icpForm.size} onChange={e => setIcpForm(p => ({ ...p, size: e.target.value }))} placeholder="e.g. 5–50" /></div>
-                      <div><label style={lStyle}>Avg Deal Size</label><input style={iStyle} value={icpForm.deal} onChange={e => setIcpForm(p => ({ ...p, deal: e.target.value }))} placeholder="e.g. $10K–$50K" /></div>
+                      <div><label style={lStyle}>B2B / B2C<InfoTip text="Does this customer sell to businesses (B2B), consumers (B2C), or both?" /></label><select style={iStyle} value={icpForm.b2b} onChange={e => setIcpForm(p => ({ ...p, b2b: e.target.value }))}>{ICP_B2B_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                      <div><label style={lStyle}>Company Size<InfoTip text="Number of employees or team members. Use ranges like '5–50' or '50+' for flexibility." /></label><input style={iStyle} value={icpForm.size} onChange={e => setIcpForm(p => ({ ...p, size: e.target.value }))} placeholder="e.g. 5–50" /></div>
+                      <div><label style={lStyle}>Avg Deal Size<InfoTip text="Typical contract value for this customer. Helps calibrate the sales effort required." /></label><input style={iStyle} value={icpForm.deal} onChange={e => setIcpForm(p => ({ ...p, deal: e.target.value }))} placeholder="e.g. $10K–$50K" /></div>
                     </div>
-                    <div><label style={lStyle}>Pains</label><textarea style={{ ...iStyle, minHeight:70, resize:'vertical' }} value={icpForm.pains} onChange={e => setIcpForm(p => ({ ...p, pains: e.target.value }))} placeholder="What problems does this ICP face?" /></div>
-                    <div><label style={lStyle}>Triggers (comma-separated)</label><input style={iStyle} value={icpForm.triggers} onChange={e => setIcpForm(p => ({ ...p, triggers: e.target.value }))} placeholder="e.g. Missed target, New hire, Scaling team" /></div>
-                    <div><label style={lStyle}>Priorities</label><input style={iStyle} value={icpForm.priorities} onChange={e => setIcpForm(p => ({ ...p, priorities: e.target.value }))} placeholder="e.g. Consistency, Predictability" /></div>
-                    <div><label style={lStyle}>Exclusions (who is NOT a fit)</label><input style={iStyle} value={icpForm.exclusions} onChange={e => setIcpForm(p => ({ ...p, exclusions: e.target.value }))} placeholder="e.g. No team, pre-revenue" /></div>
+                    <div><label style={lStyle}>Pains<InfoTip text="The core problems this ICP struggles with that your solution directly solves. Be specific." /></label><textarea style={{ ...iStyle, minHeight:70, resize:'vertical' }} value={icpForm.pains} onChange={e => setIcpForm(p => ({ ...p, pains: e.target.value }))} placeholder="What problems does this ICP face?" /></div>
+                    <div><label style={lStyle}>Triggers (comma-separated)<InfoTip text="Events or situations that create urgency for this customer to act now. E.g. missed targets, team growth, new leadership." /></label><input style={iStyle} value={icpForm.triggers} onChange={e => setIcpForm(p => ({ ...p, triggers: e.target.value }))} placeholder="e.g. Missed target, New hire, Scaling team" /></div>
+                    <div><label style={lStyle}>Priorities<InfoTip text="What this customer cares about most. Used to align your messaging and positioning." /></label><input style={iStyle} value={icpForm.priorities} onChange={e => setIcpForm(p => ({ ...p, priorities: e.target.value }))} placeholder="e.g. Consistency, Predictability" /></div>
+                    <div><label style={lStyle}>Exclusions (who is NOT a fit)<InfoTip text="Characteristics that disqualify a prospect from this ICP. Helps your team qualify faster and avoid wasted effort." /></label><input style={iStyle} value={icpForm.exclusions} onChange={e => setIcpForm(p => ({ ...p, exclusions: e.target.value }))} placeholder="e.g. No team, pre-revenue" /></div>
                     <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
                       <button className="action-btn btn-ghost" onClick={() => setShowIcpModal(false)}>Cancel</button>
                       <button className="action-btn btn-primary" onClick={saveIcp} disabled={savingIcp || !icpForm.name.trim()}>
@@ -6513,7 +6576,9 @@ Return ONLY the JSON array, nothing else.`;
       const [notesValue, setNotesValue] = useState('');
       const [savingNotes, setSavingNotes] = useState(false);
       const [uploadingFile, setUploadingFile] = useState(false);
-      const [aiRecs, setAiRecs] = useState('');
+      const [aiRecsMap, setAiRecsMap] = useState({});
+      const aiRecs = selectedSolId ? (aiRecsMap[selectedSolId] || '') : '';
+      const setAiRecs = (val) => setAiRecsMap(prev => ({ ...prev, [selectedSolId]: val }));
       const [loadingRecs, setLoadingRecs] = useState(false);
       const [showAddAccount, setShowAddAccount] = useState(false);
       const [addingAccount, setAddingAccount] = useState(false);
@@ -6889,6 +6954,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         setLoadingRecs(false);
       };
 
+      // Combined: generate both Executive Summary + AI Recommendations at once
+      const generateAll = () => Promise.all([generateSolExecSummary(), generateRecs()]);
+
       // Render AI recs with section cards
       const renderRecs = (text) => {
         if (!text) return null;
@@ -6971,9 +7039,57 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
         return (
           <div>
+            {/* Edit Solution Modal (admin only) */}
+            {showEditSol && isAdmin && (() => {
+              const iStyle = { width: '100%', padding: '8px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box' };
+              const lStyle = { fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', display: 'block' };
+              return (
+                <div className="modal-overlay" onClick={() => setShowEditSol(false)}>
+                  <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                      <h3 style={{ margin: 0 }}>✏️ Edit Solution</h3>
+                      <button onClick={() => setShowEditSol(false)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <div>
+                        <label style={lStyle}>Name *<InfoTip text="The commercial name of this solution as it will appear in the app and to clients." /></label>
+                        <input style={iStyle} value={editSolForm.name} onChange={e => setEditSolForm(p => ({ ...p, name: e.target.value }))} autoFocus />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={lStyle}>Type<InfoTip text="Product = one-time purchase. SaaS = subscription. Service = done-for-you. Package = bundled. Retainer = ongoing. Training = education." /></label>
+                          <select style={iStyle} value={editSolForm.type} onChange={e => setEditSolForm(p => ({ ...p, type: e.target.value }))}>
+                            {SOL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={lStyle}>Price<InfoTip text="The price or pricing range shown in the app. E.g. '$149/mo', 'From $5,000', or 'Custom'." /></label>
+                          <input style={iStyle} value={editSolForm.price} onChange={e => setEditSolForm(p => ({ ...p, price: e.target.value }))} placeholder="e.g. $149/mo" />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={lStyle}>Description<InfoTip text="A clear description of what this solution delivers, who it's for, and what problem it solves." /></label>
+                        <textarea style={{ ...iStyle, minHeight: 80, resize: 'vertical' }} value={editSolForm.description} onChange={e => setEditSolForm(p => ({ ...p, description: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={lStyle}>Key Message for Stakeholders<InfoTip text="The one-line value statement you want stakeholders to remember. Used in AI-generated outreach and briefs." /></label>
+                        <textarea style={{ ...iStyle, minHeight: 60, resize: 'vertical' }} value={editSolForm.keyMessage} onChange={e => setEditSolForm(p => ({ ...p, keyMessage: e.target.value }))} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                        <button className="action-btn btn-ghost" onClick={() => setShowEditSol(false)}>Cancel</button>
+                        <button className="action-btn btn-primary" onClick={handleEditSolution} disabled={savingEditSol || !editSolForm.name.trim()}>
+                          {savingEditSol ? '⏳ Saving...' : '✅ Save Changes'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <button className="action-btn btn-ghost" style={{ fontSize: 11, marginBottom: 8 }} onClick={() => { setSelectedSolId(''); setAiRecs(''); }}>← Back to Solutions</button>
+                <button className="action-btn btn-ghost" style={{ fontSize: 11, marginBottom: 8 }} onClick={() => setSelectedSolId('')}>← Back to Solutions</button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <h1 style={{ margin: 0 }}>🛠️ {F(selectedSol, 'Name')}</h1>
                   {solType && <span style={{ background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}50`, borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{solType}</span>}
@@ -6985,8 +7101,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {isAdmin && <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => openEditSol(selectedSol)}>✏️ Edit</button>}
-                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateRecs} disabled={loadingRecs}>
-                  {loadingRecs ? '⏳ Analyzing...' : '✨ AI Recommendations'}
+                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateAll} disabled={loadingRecs || loadingSolSummary}>
+                  {(loadingRecs || loadingSolSummary) ? '⏳ Generating...' : (aiRecs || solExecSummary) ? '🔄 Regenerate Analysis' : '✨ Generate AI Analysis'}
                 </button>
               </div>
             </div>
@@ -7045,14 +7161,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)', marginBottom: 16 }}>
               <div className="card-header">
                 <h3>🧠 Executive Summary</h3>
-                <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                  onClick={generateSolExecSummary} disabled={loadingSolSummary}>
-                  {loadingSolSummary ? '⏳ Generating...' : solExecSummary ? '🔄 Regenerate' : '✨ Generate with AI'}
-                </button>
               </div>
               {!solExecSummary && !loadingSolSummary && (
                 <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>
-                  Generate an AI-powered executive summary with solution traction, top accounts, pain points, expansion opportunities, and immediate actions.
+                  Click "Generate AI Analysis" above to generate a strategic briefing with solution traction, top accounts, pain points, and immediate actions.
                 </p>
               )}
               {solExecSummary && (() => {
@@ -7351,27 +7463,27 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
-                      <label style={lStyle}>Name *</label>
+                      <label style={lStyle}>Name *<InfoTip text="The commercial name of this solution as it will appear in the app and to clients." /></label>
                       <input style={iStyle} value={newSolForm.name} onChange={e => setNewSolForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. AI Process Automation" autoFocus />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
-                        <label style={lStyle}>Type</label>
+                        <label style={lStyle}>Type<InfoTip text="Product = one-time purchase. SaaS = subscription software. Service = done-for-you work. Package = bundled offering. Retainer = ongoing engagement. Training = education program." /></label>
                         <select style={iStyle} value={newSolForm.type} onChange={e => setNewSolForm(p => ({ ...p, type: e.target.value }))}>
                           {SOL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label style={lStyle}>Price (optional)</label>
+                        <label style={lStyle}>Price (optional)<InfoTip text="The price or pricing range shown in the app. E.g. '$149/mo', 'From $5,000', or 'Custom'." /></label>
                         <input style={iStyle} value={newSolForm.price} onChange={e => setNewSolForm(p => ({ ...p, price: e.target.value }))} placeholder="e.g. $5,000/mo or From $20K" />
                       </div>
                     </div>
                     <div>
-                      <label style={lStyle}>Description</label>
+                      <label style={lStyle}>Description<InfoTip text="A clear description of what this solution delivers, who it's for, and what problem it solves." /></label>
                       <textarea style={{ ...iStyle, minHeight: 80, resize: 'vertical' }} value={newSolForm.description} onChange={e => setNewSolForm(p => ({ ...p, description: e.target.value }))} placeholder="What does this solution do? What problem does it solve?" />
                     </div>
                     <div>
-                      <label style={lStyle}>Key Message for Stakeholders (optional)</label>
+                      <label style={lStyle}>Key Message for Stakeholders (optional)<InfoTip text="The one-line value statement you want stakeholders to walk away with. This gets used in AI-generated outreach." /></label>
                       <textarea style={{ ...iStyle, minHeight: 60, resize: 'vertical' }} value={newSolForm.keyMessage} onChange={e => setNewSolForm(p => ({ ...p, keyMessage: e.target.value }))} placeholder="Main value prop to pitch to decision-makers..." />
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--globant-muted)', background: 'rgba(96,165,250,0.08)', borderRadius: 6, padding: '8px 12px' }}>
@@ -7381,54 +7493,6 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <button className="action-btn btn-ghost" onClick={() => setShowNewSol(false)}>Cancel</button>
                       <button className="action-btn btn-primary" onClick={handleCreateSolution} disabled={savingNewSol || !newSolForm.name.trim()}>
                         {savingNewSol ? '⏳ Creating...' : '✅ Create Solution'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Edit Solution Modal (admin only) */}
-          {showEditSol && isAdmin && (() => {
-            const iStyle = { width: '100%', padding: '8px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box' };
-            const lStyle = { fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', display: 'block' };
-            return (
-              <div className="modal-overlay" onClick={() => setShowEditSol(false)}>
-                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                    <h3 style={{ margin: 0 }}>✏️ Edit Solution</h3>
-                    <button onClick={() => setShowEditSol(false)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div>
-                      <label style={lStyle}>Name *</label>
-                      <input style={iStyle} value={editSolForm.name} onChange={e => setEditSolForm(p => ({ ...p, name: e.target.value }))} autoFocus />
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <label style={lStyle}>Type</label>
-                        <select style={iStyle} value={editSolForm.type} onChange={e => setEditSolForm(p => ({ ...p, type: e.target.value }))}>
-                          {SOL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={lStyle}>Price</label>
-                        <input style={iStyle} value={editSolForm.price} onChange={e => setEditSolForm(p => ({ ...p, price: e.target.value }))} placeholder="e.g. $149/mo" />
-                      </div>
-                    </div>
-                    <div>
-                      <label style={lStyle}>Description</label>
-                      <textarea style={{ ...iStyle, minHeight: 80, resize: 'vertical' }} value={editSolForm.description} onChange={e => setEditSolForm(p => ({ ...p, description: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label style={lStyle}>Key Message for Stakeholders</label>
-                      <textarea style={{ ...iStyle, minHeight: 60, resize: 'vertical' }} value={editSolForm.keyMessage} onChange={e => setEditSolForm(p => ({ ...p, keyMessage: e.target.value }))} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                      <button className="action-btn btn-ghost" onClick={() => setShowEditSol(false)}>Cancel</button>
-                      <button className="action-btn btn-primary" onClick={handleEditSolution} disabled={savingEditSol || !editSolForm.name.trim()}>
-                        {savingEditSol ? '⏳ Saving...' : '✅ Save Changes'}
                       </button>
                     </div>
                   </div>
@@ -7886,8 +7950,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
