@@ -13,6 +13,7 @@ const STANDARD_TABLES: Record<string, string> = {
   sources: 'tblciUlYmvQHJm71w',
   users: 'tblCyjbxtx0MTPYq9',
   icp: 'tblli6WqjCqArxZKx',
+  strategy: 'tblMER8W7Q25Rkegd',
 };
 
 // ── Build config dynamically from baseId ──

@@ -12,6 +12,7 @@ const STANDARD_TABLES: Record<string, string> = {
   clientPartners: 'tblwBsDhNdAvcMwzy',
   sources: 'tblciUlYmvQHJm71w',
   users: 'tblCyjbxtx0MTPYq9',
+  strategy: 'tblMER8W7Q25Rkegd',
 };
 
 function buildClientConfig(baseId: string) {
