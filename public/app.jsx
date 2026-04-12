@@ -807,7 +807,6 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           } else {
             const created = await api.createRecord(TABLE_IDS.strategy, fields);
             if (onAddRecord) onAddRecord('strategy', created?.fields || fields);
-            if (onLogActivity) onLogActivity();
           }
           setEditingGoal(false);
         } catch (e) {
@@ -6048,43 +6047,6 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                 </div>
               ))}
               {improvements.length === 0 && <p style={{ color: 'var(--globant-success)', fontSize: 13 }}>Everything looks good! No major improvements needed right now.</p>}
-            </div>
-          </div>
-
-          {/* Account Performance Table */}
-          <div className="card">
-            <div className="card-header"><h3>📊 Account Performance Ranking</h3></div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Account</th>
-                    <th style={{ textAlign: 'center' }}>Tier</th>
-                    <th style={{ textAlign: 'center' }}>Status</th>
-                    <th style={{ textAlign: 'center' }}>Stakeholders</th>
-                    <th style={{ textAlign: 'center' }}>Outreach</th>
-                    <th style={{ textAlign: 'center' }}>Open Opps</th>
-                    <th style={{ textAlign: 'right' }}>Pipeline</th>
-                    <th style={{ textAlign: 'center' }}>Solution</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accountPerformance.map((a, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600 }}>{a.name}</td>
-                      <td style={{ textAlign: 'center' }}>{a.tier ? <span className="badge badge-accent">{a.tier}</span> : '—'}</td>
-                      <td style={{ textAlign: 'center' }}>{a.status ? <span className="badge badge-blue">{a.status}</span> : '—'}</td>
-                      <td style={{ textAlign: 'center' }}>{a.stakeholderCount}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontWeight: 700, color: a.outreachCount > 0 ? 'var(--globant-green)' : 'var(--globant-warning)' }}>{a.outreachCount}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>{a.openOppCount > 0 ? <span className="badge badge-blue">{a.openOppCount}</span> : '—'}</td>
-                      <td style={{ textAlign: 'right' }}>{a.pipelineValue > 0 ? formatCurrency(a.pipelineValue) : '—'}</td>
-                      <td style={{ textAlign: 'center' }}>{a.hasSolution ? '✅' : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
 
