@@ -2612,7 +2612,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
                         <option value="">Select account...</option>
                         {accounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
                       </select>
-                      <button onClick={() => setShowNewAccount(true)} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-green)', background: 'rgba(91,191,181,0.1)', color: 'var(--globant-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ New</button>
+                      {CURRENT_USER?.role === 'admin' && <button onClick={() => setShowNewAccount(true)} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-green)', background: 'rgba(91,191,181,0.1)', color: 'var(--globant-green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ New</button>}
                     </div>
                   ) : (
                     <div style={{ padding: '8px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)' }}>
@@ -4164,7 +4164,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 {filteredAccounts.length} result{filteredAccounts.length !== 1 ? 's' : ''} · ✕ clear
               </span>
             )}
-            {!selectedAccountId && (
+            {!selectedAccountId && CURRENT_USER?.role === 'admin' && (
               <>
                 <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => { setShowNewAccount(!showNewAccount); setShowAccImport(false); }}>
                   {showNewAccount ? '✕ Close' : '➕ New Account'}
@@ -6268,9 +6268,70 @@ Return ONLY the JSON array, nothing else.`;
     }
 
     // ============ ICP ============
-    function ICPSection({ data, goToSolution }) {
+    function ICPSection({ data, goToSolution, api, onLogActivity, onAddRecord }) {
       const { icp = [], solutions = [] } = data;
+      const isAdmin = CURRENT_USER?.role === 'admin';
       const [selected, setSelected] = React.useState(null);
+      const [showIcpModal, setShowIcpModal] = React.useState(false);
+      const [editingIcp, setEditingIcp] = React.useState(null);
+      const [icpForm, setIcpForm] = React.useState({ name: '', industry: '', country: '', b2b: 'B2B', size: '', deal: '', pains: '', triggers: '', priorities: '', exclusions: '' });
+      const [savingIcp, setSavingIcp] = React.useState(false);
+
+      const ICP_B2B_OPTIONS = ['B2B', 'B2C', 'B2B/B2C'];
+
+      const openNewIcp = () => {
+        setEditingIcp(null);
+        setIcpForm({ name: '', industry: '', country: '', b2b: 'B2B', size: '', deal: '', pains: '', triggers: '', priorities: '', exclusions: '' });
+        setShowIcpModal(true);
+      };
+
+      const openEditIcp = (profile) => {
+        setEditingIcp(profile);
+        setIcpForm({
+          name: F(profile, 'Name') || '',
+          industry: F(profile, 'Industry') || '',
+          country: F(profile, 'Country') || '',
+          b2b: F(profile, 'B2B / B2C') || 'B2B',
+          size: F(profile, 'Company Size') || '',
+          deal: F(profile, 'Average deal size') || '',
+          pains: F(profile, 'Pains') || '',
+          triggers: (() => { const t = F(profile, 'Triggers (why now)'); return Array.isArray(t) ? t.join(', ') : (t || ''); })(),
+          priorities: F(profile, 'Priorities') || '',
+          exclusions: F(profile, 'Exclusions (Who is not a fit)') || '',
+        });
+        setShowIcpModal(true);
+      };
+
+      const saveIcp = async () => {
+        if (!icpForm.name.trim()) return;
+        setSavingIcp(true);
+        try {
+          const a = api || new AirtableAPI();
+          const fields = {
+            'Name': icpForm.name.trim(),
+            'Industry': icpForm.industry.trim(),
+            'Country': icpForm.country.trim(),
+            'B2B / B2C': icpForm.b2b,
+            'Company Size': icpForm.size.trim(),
+            'Average deal size': icpForm.deal.trim(),
+            'Pains': icpForm.pains.trim(),
+            'Priorities': icpForm.priorities.trim(),
+            'Exclusions (Who is not a fit)': icpForm.exclusions.trim(),
+          };
+          if (icpForm.triggers.trim()) {
+            fields['Triggers (why now)'] = icpForm.triggers.split(',').map(t => t.trim()).filter(Boolean);
+          }
+          if (editingIcp) {
+            await a.updateRecord(TABLE_IDS.icp, editingIcp.id, fields);
+          } else {
+            const rec = await a.createRecord(TABLE_IDS.icp, fields);
+            if (onAddRecord) onAddRecord('icp', { ...fields, id: rec.id });
+          }
+          setShowIcpModal(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); alert('Failed to save ICP: ' + e.message); }
+        setSavingIcp(false);
+      };
 
       const tagStyle = (bg, color) => ({ display:'inline-block', padding:'2px 10px', borderRadius:12, fontSize:11, fontWeight:600, background:bg, color:color, marginRight:4, marginBottom:4 });
       const fieldBlock = (label, value) => value ? (
@@ -6282,12 +6343,51 @@ Return ONLY the JSON array, nothing else.`;
 
       return (
         <div>
-          <div className="page-header">
+          <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
               <h1>🎯 ICP — Ideal Customer Profiles</h1>
               <p style={{ color:'var(--globant-muted)', marginTop:4 }}>{icp.length} profiles defined</p>
             </div>
+            {isAdmin && <button className="action-btn btn-primary" style={{ fontSize:12, padding:'8px 16px', marginTop:4 }} onClick={openNewIcp}>➕ New ICP</button>}
           </div>
+
+          {/* ICP Create/Edit Modal */}
+          {showIcpModal && isAdmin && (() => {
+            const iStyle = { width:'100%', padding:'8px 10px', background:'var(--globant-input)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box' };
+            const lStyle = { fontSize:11, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, textTransform:'uppercase', display:'block' };
+            return (
+              <div className="modal-overlay" onClick={() => setShowIcpModal(false)}>
+                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:560, maxHeight:'88vh', overflowY:'auto' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+                    <h3 style={{ margin:0 }}>{editingIcp ? '✏️ Edit ICP' : '🎯 New ICP'}</h3>
+                    <button onClick={() => setShowIcpModal(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:18 }}>✕</button>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:13 }}>
+                    <div><label style={lStyle}>Name *</label><input style={iStyle} value={icpForm.name} onChange={e => setIcpForm(p => ({ ...p, name: e.target.value }))} autoFocus placeholder="e.g. The Sales Manager" /></div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                      <div><label style={lStyle}>Industry</label><input style={iStyle} value={icpForm.industry} onChange={e => setIcpForm(p => ({ ...p, industry: e.target.value }))} placeholder="e.g. SaaS / Consulting" /></div>
+                      <div><label style={lStyle}>Country / Region</label><input style={iStyle} value={icpForm.country} onChange={e => setIcpForm(p => ({ ...p, country: e.target.value }))} placeholder="e.g. USA / LATAM" /></div>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+                      <div><label style={lStyle}>B2B / B2C</label><select style={iStyle} value={icpForm.b2b} onChange={e => setIcpForm(p => ({ ...p, b2b: e.target.value }))}>{ICP_B2B_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                      <div><label style={lStyle}>Company Size</label><input style={iStyle} value={icpForm.size} onChange={e => setIcpForm(p => ({ ...p, size: e.target.value }))} placeholder="e.g. 5–50" /></div>
+                      <div><label style={lStyle}>Avg Deal Size</label><input style={iStyle} value={icpForm.deal} onChange={e => setIcpForm(p => ({ ...p, deal: e.target.value }))} placeholder="e.g. $10K–$50K" /></div>
+                    </div>
+                    <div><label style={lStyle}>Pains</label><textarea style={{ ...iStyle, minHeight:70, resize:'vertical' }} value={icpForm.pains} onChange={e => setIcpForm(p => ({ ...p, pains: e.target.value }))} placeholder="What problems does this ICP face?" /></div>
+                    <div><label style={lStyle}>Triggers (comma-separated)</label><input style={iStyle} value={icpForm.triggers} onChange={e => setIcpForm(p => ({ ...p, triggers: e.target.value }))} placeholder="e.g. Missed target, New hire, Scaling team" /></div>
+                    <div><label style={lStyle}>Priorities</label><input style={iStyle} value={icpForm.priorities} onChange={e => setIcpForm(p => ({ ...p, priorities: e.target.value }))} placeholder="e.g. Consistency, Predictability" /></div>
+                    <div><label style={lStyle}>Exclusions (who is NOT a fit)</label><input style={iStyle} value={icpForm.exclusions} onChange={e => setIcpForm(p => ({ ...p, exclusions: e.target.value }))} placeholder="e.g. No team, pre-revenue" /></div>
+                    <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
+                      <button className="action-btn btn-ghost" onClick={() => setShowIcpModal(false)}>Cancel</button>
+                      <button className="action-btn btn-primary" onClick={saveIcp} disabled={savingIcp || !icpForm.name.trim()}>
+                        {savingIcp ? '⏳ Saving...' : editingIcp ? '✅ Save Changes' : '✅ Create ICP'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {icp.length === 0 && (
             <div className="card" style={{ textAlign:'center', padding:40 }}>
@@ -6325,7 +6425,10 @@ Return ONLY the JSON array, nothing else.`;
                       <div style={{ fontSize:16, fontWeight:800, color:'var(--globant-text)', marginBottom:4 }}>{name}</div>
                       <div style={{ fontSize:12, color:'var(--globant-muted)' }}>{industry}</div>
                     </div>
-                    {b2b && <span style={tagStyle('rgba(91,191,181,0.15)', 'var(--globant-green)')}>{b2b}</span>}
+                    <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                      {b2b && <span style={tagStyle('rgba(91,191,181,0.15)', 'var(--globant-green)')}>{b2b}</span>}
+                      {isAdmin && <button onClick={e => { e.stopPropagation(); openEditIcp(profile); }} style={{ background:'rgba(255,255,255,0.05)', border:'1px solid var(--globant-border)', borderRadius:6, padding:'3px 8px', fontSize:11, color:'var(--globant-muted)', cursor:'pointer' }}>✏️</button>}
+                    </div>
                   </div>
 
                   {/* Quick tags */}
@@ -6395,6 +6498,7 @@ Return ONLY the JSON array, nothing else.`;
     // ============ SOLUTIONS HUB ============
     function SolutionsHub({ data, api, onLogActivity, onAddRecord, onDeleteRecord, goToAccount, navigateToSolId, clearNavigateSol }) {
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
+      const isAdmin = CURRENT_USER?.role === 'admin';
       const [selectedSolId, setSelectedSolId] = useState('');
 
       React.useEffect(() => {
@@ -6424,7 +6528,42 @@ Return ONLY the JSON array, nothing else.`;
       const [newSolForm, setNewSolForm] = useState({ name: '', type: 'Service', description: '', price: '', keyMessage: '' });
       const [savingNewSol, setSavingNewSol] = useState(false);
 
-      const SOL_TYPES = ['Service', 'Product', 'Package', 'Consulting', 'Retainer', 'Other'];
+      const SOL_TYPES = ['Product', 'SaaS', 'Service', 'Package', 'Retainer', 'Training'];
+
+      // ─── EDIT SOLUTION (admin only) ───
+      const [showEditSol, setShowEditSol] = useState(false);
+      const [editSolForm, setEditSolForm] = useState({ name: '', type: 'Service', description: '', price: '', keyMessage: '' });
+      const [savingEditSol, setSavingEditSol] = useState(false);
+
+      const openEditSol = (sol) => {
+        const desc = F(sol, 'Service | Solution Detail');
+        const km = F(sol, 'Stakeholder Key Message');
+        setEditSolForm({
+          name: F(sol, 'Name') || '',
+          type: F(sol, 'Type') || 'Service',
+          description: typeof desc === 'string' ? desc : '',
+          price: F(sol, 'Price') || '',
+          keyMessage: typeof km === 'string' ? km : '',
+        });
+        setShowEditSol(true);
+      };
+
+      const handleEditSolution = async () => {
+        if (!selectedSol || !editSolForm.name.trim()) return;
+        setSavingEditSol(true);
+        try {
+          const a = api || new AirtableAPI();
+          const fields = { 'Name': editSolForm.name.trim() };
+          if (editSolForm.description.trim()) fields['Service | Solution Detail'] = editSolForm.description.trim();
+          if (editSolForm.keyMessage.trim()) fields['Stakeholder Key Message'] = editSolForm.keyMessage.trim();
+          if (editSolForm.type) fields['Type'] = editSolForm.type;
+          if (editSolForm.price.trim()) fields['Price'] = editSolForm.price.trim();
+          await a.updateRecord(TABLE_IDS.solutions, selectedSol.id, fields);
+          setShowEditSol(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) { console.error(e); alert('Failed to save: ' + e.message); }
+        setSavingEditSol(false);
+      };
 
       // ─── OPP EDIT (reuse CPBriefings modal pattern via navigate) ───
       const [solHubEditingOpp, setSolHubEditingOpp] = useState(null);
@@ -6844,9 +6983,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   <p style={{ marginTop: 6, color: 'var(--globant-muted)', fontSize: 13, lineHeight: 1.5 }}>{typeof F(selectedSol, 'Service | Solution Detail') === 'string' ? F(selectedSol, 'Service | Solution Detail') : ''}</p>
                 )}
               </div>
-              <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateRecs} disabled={loadingRecs}>
-                {loadingRecs ? '⏳ Analyzing...' : '✨ AI Recommendations'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {isAdmin && <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => openEditSol(selectedSol)}>✏️ Edit</button>}
+                <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateRecs} disabled={loadingRecs}>
+                  {loadingRecs ? '⏳ Analyzing...' : '✨ AI Recommendations'}
+                </button>
+              </div>
             </div>
 
             {/* About — description + key message */}
@@ -7190,10 +7332,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               <h1>Solutions Hub</h1>
               <p>Explore solutions, track adoption across accounts, and get strategic recommendations</p>
             </div>
-            <button className="action-btn btn-primary" style={{ fontSize: 12, padding: '8px 16px', marginTop: 4 }}
+            {isAdmin && <button className="action-btn btn-primary" style={{ fontSize: 12, padding: '8px 16px', marginTop: 4 }}
               onClick={() => { setShowNewSol(true); setNewSolForm({ name: '', type: 'Service', description: '', price: '', keyMessage: '' }); }}>
               ➕ New Solution
-            </button>
+            </button>}
           </div>
 
           {/* New Solution Modal */}
@@ -7239,6 +7381,54 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <button className="action-btn btn-ghost" onClick={() => setShowNewSol(false)}>Cancel</button>
                       <button className="action-btn btn-primary" onClick={handleCreateSolution} disabled={savingNewSol || !newSolForm.name.trim()}>
                         {savingNewSol ? '⏳ Creating...' : '✅ Create Solution'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Edit Solution Modal (admin only) */}
+          {showEditSol && isAdmin && (() => {
+            const iStyle = { width: '100%', padding: '8px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box' };
+            const lStyle = { fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', display: 'block' };
+            return (
+              <div className="modal-overlay" onClick={() => setShowEditSol(false)}>
+                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                    <h3 style={{ margin: 0 }}>✏️ Edit Solution</h3>
+                    <button onClick={() => setShowEditSol(false)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <label style={lStyle}>Name *</label>
+                      <input style={iStyle} value={editSolForm.name} onChange={e => setEditSolForm(p => ({ ...p, name: e.target.value }))} autoFocus />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <label style={lStyle}>Type</label>
+                        <select style={iStyle} value={editSolForm.type} onChange={e => setEditSolForm(p => ({ ...p, type: e.target.value }))}>
+                          {SOL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lStyle}>Price</label>
+                        <input style={iStyle} value={editSolForm.price} onChange={e => setEditSolForm(p => ({ ...p, price: e.target.value }))} placeholder="e.g. $149/mo" />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lStyle}>Description</label>
+                      <textarea style={{ ...iStyle, minHeight: 80, resize: 'vertical' }} value={editSolForm.description} onChange={e => setEditSolForm(p => ({ ...p, description: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label style={lStyle}>Key Message for Stakeholders</label>
+                      <textarea style={{ ...iStyle, minHeight: 60, resize: 'vertical' }} value={editSolForm.keyMessage} onChange={e => setEditSolForm(p => ({ ...p, keyMessage: e.target.value }))} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                      <button className="action-btn btn-ghost" onClick={() => setShowEditSol(false)}>Cancel</button>
+                      <button className="action-btn btn-primary" onClick={handleEditSolution} disabled={savingEditSol || !editSolForm.name.trim()}>
+                        {savingEditSol ? '⏳ Saving...' : '✅ Save Changes'}
                       </button>
                     </div>
                   </div>
@@ -7844,7 +8034,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         insights: <InsightsView data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
-        icp: <ICPSection data={data} goToSolution={goToSolution} />,
+        icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
       };
 
       const navItems = [
