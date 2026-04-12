@@ -6268,7 +6268,7 @@ Return ONLY the JSON array, nothing else.`;
     }
 
     // ============ ICP ============
-    function ICPSection({ data }) {
+    function ICPSection({ data, goToSolution }) {
       const { icp = [], solutions = [] } = data;
       const [selected, setSelected] = React.useState(null);
 
@@ -6309,7 +6309,9 @@ Return ONLY the JSON array, nothing else.`;
               const priorities = F(profile, 'Priorities') || '';
               const exclusions = F(profile, 'Exclusions (Who is not a fit)') || '';
               const solNames = F(profile, 'Name (from Solutions)') || '';
-              const solNamesText = Array.isArray(solNames) ? solNames.join(', ') : String(solNames || '');
+              const solNamesArr = Array.isArray(solNames) ? solNames : (solNames ? [String(solNames)] : []);
+              const linkedSolIds = linkedIds(profile, 'Solutions');
+              const linkedSols = linkedSolIds.map(id => solutions.find(s => s.id === id)).filter(Boolean);
               const isSelected = selected === profile.id;
 
               return (
@@ -6342,9 +6344,24 @@ Return ONLY the JSON array, nothing else.`;
                   )}
 
                   {/* Solutions linked */}
-                  {solNamesText && (
+                  {(linkedSols.length > 0 || solNamesArr.length > 0) && (
                     <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:8 }}>
-                      <span style={{ fontWeight:600 }}>Solutions: </span>{solNamesText}
+                      <span style={{ fontWeight:600 }}>Solutions: </span>
+                      {linkedSols.length > 0
+                        ? linkedSols.map((sol, i) => (
+                            <span key={sol.id}>
+                              {goToSolution
+                                ? <span style={{ color:'var(--globant-green)', cursor:'pointer', fontWeight:600 }}
+                                    onClick={e => { e.stopPropagation(); goToSolution(sol.id); }}>
+                                    {F(sol, 'Name')}
+                                  </span>
+                                : <span>{F(sol, 'Name')}</span>
+                              }
+                              {i < linkedSols.length - 1 ? ', ' : ''}
+                            </span>
+                          ))
+                        : solNamesArr.join(', ')
+                      }
                     </div>
                   )}
 
@@ -6376,9 +6393,16 @@ Return ONLY the JSON array, nothing else.`;
     }
 
     // ============ SOLUTIONS HUB ============
-    function SolutionsHub({ data, api, onLogActivity, onAddRecord, onDeleteRecord, goToAccount }) {
+    function SolutionsHub({ data, api, onLogActivity, onAddRecord, onDeleteRecord, goToAccount, navigateToSolId, clearNavigateSol }) {
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
       const [selectedSolId, setSelectedSolId] = useState('');
+
+      React.useEffect(() => {
+        if (navigateToSolId) {
+          setSelectedSolId(navigateToSolId);
+          if (clearNavigateSol) clearNavigateSol();
+        }
+      }, [navigateToSolId]);
       const [searchTerm, setSearchTerm] = useState('');
       const [solNotes, setSolNotes] = useState('');
       const [editingNotes, setEditingNotes] = useState(false);
@@ -7627,11 +7651,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [showSettings, setShowSettings] = useState(false);
       const [configError, setConfigError] = useState('');
       const [navigateToAccountId, setNavigateToAccountId] = useState('');
+      const [navigateToSolId, setNavigateToSolId] = useState('');
       const [sidebarOpen, setSidebarOpen] = useState(false);
 
       const goToAccount = useCallback((accountId) => {
         setNavigateToAccountId(accountId);
         setPage('accounts');
+      }, []);
+
+      const goToSolution = useCallback((solId) => {
+        setNavigateToSolId(solId);
+        setPage('solutionshub');
       }, []);
 
       // Optimistic update: add a record to local state instantly (before API response)
@@ -7813,8 +7843,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         insights: <InsightsView data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
-        solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} />,
-        icp: <ICPSection data={data} />,
+        solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
+        icp: <ICPSection data={data} goToSolution={goToSolution} />,
       };
 
       const navItems = [
