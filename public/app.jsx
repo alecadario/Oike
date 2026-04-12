@@ -728,22 +728,124 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
     }
 
     // ============ STRATEGY OVERVIEW ============
-    function StrategyOverview({ data }) {
-      const { accounts, stakeholders, opportunities, outreach, solutions, events } = data;
+    function StrategyOverview({ data, api, onUpdateRecord, onAddRecord, onLogActivity }) {
+      const { accounts, stakeholders, opportunities, outreach, solutions, events, users = [], strategy = [] } = data;
+      const isAdmin = CURRENT_USER?.role === 'admin';
 
-      // Executive KPIs
+      // ─── STRATEGY GOAL STATE ───
+      const strategyRecord = strategy[0] || null;
+      const [editingGoal, setEditingGoal] = useState(false);
+      const [goalForm, setGoalForm] = useState({ name: '', target: '', deadline: '' });
+      const [savingGoal, setSavingGoal] = useState(false);
+
+      // ─── TEAM KPI EDITING ───
+      const [editingKpiId, setEditingKpiId] = useState(null);
+      const [kpiForm, setKpiForm] = useState({ meetings: '', deals: '' });
+      const [savingKpi, setSavingKpi] = useState(false);
+
+      // ─── GOAL VALUES ───
+      const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
+      const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
+      const goalDeadline = strategyRecord ? (F(strategyRecord, 'Deadline') || '') : '';
+
+      // ─── CORE DATA ───
+      const meetingStatuses = ['Meeting Scheduled', 'Meeting Booked'];
+      const closedStages = ['Closed Won', 'Closed Lost', 'Closed/Won', 'Closed/Lost', 'Closed/Canceled', 'Cierre ganado', 'Cierre perdido'];
+      const wonStages = ['Closed Won', 'Closed/Won', 'Cierre ganado'];
+
+      const allMeetings = outreach.filter(o => meetingStatuses.includes(F(o, 'Status')));
+      const wonOpps = opportunities.filter(o => wonStages.includes(F(o, 'Stage')));
+      const activeOpps = opportunities.filter(o => !closedStages.includes(F(o, 'Stage')));
+      const activePipeline = activeOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
+      const wonValue = wonOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
       const mappedAccounts = accounts.filter(a => linkedIds(a, 'Stakeholders').length > 0);
       const unmappedAccounts = accounts.filter(a => linkedIds(a, 'Stakeholders').length === 0);
+      const activeAccounts = accounts.filter(a => ['Active', 'Activo'].includes(F(a, 'Inside Sales Status')));
       const accountsWithSolutions = accounts.filter(a => linkedIds(a, 'Solutions').length > 0);
+
+      // ─── GOAL PROGRESS ───
+      const progressPct = goalTarget > 0 ? Math.min(100, Math.round((activePipeline / goalTarget) * 100)) : 0;
+      const wonPct = goalTarget > 0 ? Math.min(100, Math.round((wonValue / goalTarget) * 100)) : 0;
+      const daysRemaining = goalDeadline ? Math.ceil((new Date(goalDeadline) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+
+      // ─── PERSONAL KPIs ───
+      const currentUserRecord = users.find(u => (F(u, 'Email') || '').toLowerCase() === (CURRENT_USER?.email || '').toLowerCase());
+      const currentUserId = currentUserRecord?.id;
+      const myMeetingsTarget = currentUserRecord ? (currentUserRecord.fields?.['KPI Meetings Target'] || 0) : 0;
+      const myDealsTarget = currentUserRecord ? (currentUserRecord.fields?.['KPI Deals Target'] || 0) : 0;
+
+      const myMeetings = allMeetings.filter(o => {
+        const lb = F(o, 'Logged By');
+        return lb && (lb === CURRENT_USER?.name || lb === CURRENT_USER?.email);
+      });
+
+      const myDealsWon = wonOpps.filter(opp =>
+        currentUserId && linkedIds(opp, 'Account').some(accId => {
+          const acc = accounts.find(a => a.id === accId);
+          return acc && (linkedIds(acc, 'BDR').includes(currentUserId) || linkedIds(acc, 'Client Partners').includes(currentUserId));
+        })
+      );
+
+      // ─── HANDLERS ───
+      const openEditGoal = () => {
+        setGoalForm({ name: goalName, target: goalTarget ? String(goalTarget) : '', deadline: goalDeadline });
+        setEditingGoal(true);
+      };
+
+      const saveGoal = async () => {
+        if (!api) return;
+        setSavingGoal(true);
+        try {
+          const fields = {
+            'Goal Name': goalForm.name,
+            'Target Amount': parseFloat(goalForm.target) || 0,
+            ...(goalForm.deadline ? { 'Deadline': goalForm.deadline } : {}),
+          };
+          if (strategyRecord) {
+            await api.updateRecord(TABLE_IDS.strategy, strategyRecord.id, fields);
+            if (onUpdateRecord) onUpdateRecord('strategy', strategyRecord.id, fields);
+          } else {
+            const created = await api.createRecord(TABLE_IDS.strategy, fields);
+            if (onAddRecord) onAddRecord('strategy', created?.fields || fields);
+            if (onLogActivity) onLogActivity();
+          }
+          setEditingGoal(false);
+        } catch (e) {
+          alert('Failed to save goal: ' + e.message);
+        } finally {
+          setSavingGoal(false);
+        }
+      };
+
+      const openEditKpi = (user) => {
+        setEditingKpiId(user.id);
+        setKpiForm({
+          meetings: String(user.fields?.['KPI Meetings Target'] || ''),
+          deals: String(user.fields?.['KPI Deals Target'] || ''),
+        });
+      };
+
+      const saveKpi = async () => {
+        if (!api || !editingKpiId) return;
+        setSavingKpi(true);
+        try {
+          const fields = {
+            'KPI Meetings Target': parseInt(kpiForm.meetings) || 0,
+            'KPI Deals Target': parseInt(kpiForm.deals) || 0,
+          };
+          await api.updateRecord(TABLE_IDS.users, editingKpiId, fields);
+          if (onUpdateRecord) onUpdateRecord('users', editingKpiId, fields);
+          setEditingKpiId(null);
+        } catch (e) {
+          alert('Failed to save KPI targets: ' + e.message);
+        } finally {
+          setSavingKpi(false);
+        }
+      };
+
+      // ─── EXISTING VISUALISATION DATA ───
       const contactedStakeholderIds = new Set();
       outreach.forEach(o => linkedIds(o, 'Stakeholder').forEach(id => contactedStakeholderIds.add(id)));
-      const contactedStakeholders = stakeholders.filter(s => contactedStakeholderIds.has(s.id));
-      const pendingStakeholders = stakeholders.filter(s => !contactedStakeholderIds.has(s.id));
-
-      const closedStages = ['Closed Won', 'Closed Lost', 'Closed/Won', 'Closed/Lost', 'Closed/Canceled', 'Cierre ganado', 'Cierre perdido'];
-      const activeOpps = opportunities.filter(o => !closedStages.includes(F(o, 'Stage')));
-      const activePipeline = activeOpps.reduce((sum, o) => sum + (o.fields?.['Value'] || 0), 0);
-      const wonOpps = opportunities.filter(o => ['Closed Won', 'Closed/Won', 'Cierre ganado'].includes(F(o, 'Stage')));
 
       const today = new Date().toISOString().slice(0, 10);
       const upcomingEvents = (events || []).filter(e => {
@@ -751,21 +853,18 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         return start && start >= today;
       }).sort((a, b) => (a.fields?.['Starting'] || '').localeCompare(b.fields?.['Starting'] || ''));
 
-      // Status breakdown
       const statusCounts = {};
       accounts.forEach(a => {
         const s = F(a, 'Inside Sales Status') || 'No Status';
         statusCounts[s] = (statusCounts[s] || 0) + 1;
       });
 
-      // Top accounts by stakeholder count (mapped ones)
       const topAccounts = [...mappedAccounts].sort((a, b) =>
         linkedIds(b, 'Stakeholders').length - linkedIds(a, 'Stakeholders').length
       ).slice(0, 10);
 
-      // ── Conversion Funnel ──
       const repliedIds = new Set(outreach.filter(o => F(o, 'Status') === 'Replied').flatMap(o => linkedIds(o, 'Stakeholder')));
-      const meetingIds = new Set(outreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status'))).flatMap(o => linkedIds(o, 'Account')));
+      const meetingIds = new Set(outreach.filter(o => meetingStatuses.includes(F(o, 'Status'))).flatMap(o => linkedIds(o, 'Account')));
       const funnelSteps = [
         { label: 'Accounts', value: accounts.length, color: '#60a5fa' },
         { label: 'Mapped', value: mappedAccounts.length, color: '#818cf8' },
@@ -777,7 +876,6 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       ];
       const funnelMax = funnelSteps[0].value || 1;
 
-      // ── Weighted Forecast ──
       const stageProbability = { 'Prospecting': 0.1, 'Qualification': 0.2, 'Discovery': 0.3, 'Proposal': 0.5, 'Negotiation': 0.7, 'Closed Won': 1, 'On Hold': 0.15 };
       const forecastByStage = {};
       activeOpps.forEach(o => {
@@ -792,32 +890,29 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const totalWeighted = Object.values(forecastByStage).reduce((s, v) => s + v.weighted, 0);
       const forecastStages = Object.entries(forecastByStage).sort((a, b) => (stageProbability[b[0]] || 0) - (stageProbability[a[0]] || 0));
 
-      // ── Activity Heatmap (last 28 days) ──
       const heatmapDays = 28;
       const heatmapData = {};
       const heatmapStart = new Date(); heatmapStart.setDate(heatmapStart.getDate() - heatmapDays);
       outreach.forEach(o => {
-        const d = o.fields?.['Date'] ? new Date(o.fields['Date']).toISOString().slice(0,10) : null;
-        if (d && d >= heatmapStart.toISOString().slice(0,10)) heatmapData[d] = (heatmapData[d] || 0) + 1;
+        const d = o.fields?.['Date'] ? new Date(o.fields['Date']).toISOString().slice(0, 10) : null;
+        if (d && d >= heatmapStart.toISOString().slice(0, 10)) heatmapData[d] = (heatmapData[d] || 0) + 1;
       });
       const heatmapDaysList = Array.from({ length: heatmapDays }, (_, i) => {
         const d = new Date(); d.setDate(d.getDate() - (heatmapDays - 1 - i));
-        const key = d.toISOString().slice(0,10);
+        const key = d.toISOString().slice(0, 10);
         return { key, count: heatmapData[key] || 0, label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
       });
       const heatmapMax = Math.max(...heatmapDaysList.map(d => d.count), 1);
 
-      // ── Top 3 Focus Accounts ──
       const now2 = new Date();
       const focusAccounts = mappedAccounts.map(a => {
-        const stIds = linkedIds(a, 'Stakeholders');
         const accOut = outreach.filter(o => linkedIds(o, 'Account').includes(a.id));
-        const lastOut = accOut.sort((x,y) => new Date(y.fields?.['Date']||0) - new Date(x.fields?.['Date']||0))[0];
+        const lastOut = accOut.sort((x, y) => new Date(y.fields?.['Date'] || 0) - new Date(x.fields?.['Date'] || 0))[0];
         const daysSince = lastOut ? Math.floor((now2 - new Date(lastOut.fields?.['Date'])) / 86400000) : 999;
         const hasReply = accOut.some(o => F(o, 'Status') === 'Replied');
-        const hasMeeting = accOut.some(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
-        const openOppCount = activeOpps.filter(o => linkedIds(o,'Account').includes(a.id)).length;
-        const hasNews = !!(F(a,'Recent News'));
+        const hasMeeting = accOut.some(o => meetingStatuses.includes(F(o, 'Status')));
+        const openOppCount = activeOpps.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
+        const hasNews = !!(F(a, 'Recent News'));
         let score = 0;
         if (openOppCount > 0) score += 30;
         if (daysSince > 14 && daysSince < 60) score += 20;
@@ -825,55 +920,234 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         if (hasNews) score += 10;
         if (daysSince > 60) score += 5;
         if (hasMeeting) score -= 10;
-        const reason = openOppCount > 0 ? `${openOppCount} open opp${openOppCount>1?'s':''}` : hasReply ? 'Replied — no meeting yet' : daysSince > 14 ? `${daysSince}d without contact` : 'High potential';
+        const reason = openOppCount > 0 ? `${openOppCount} open opp${openOppCount > 1 ? 's' : ''}` : hasReply ? 'Replied — no meeting yet' : daysSince > 14 ? `${daysSince}d without contact` : 'High potential';
         return { a, score, daysSince, reason, openOppCount, hasReply, hasMeeting };
-      }).sort((a,b) => b.score - a.score).slice(0, 3);
+      }).sort((a, b) => b.score - a.score).slice(0, 3);
+
+      // ─── HELPERS ───
+      const kpiPct = (actual, target) => target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : null;
+      const kpiColor = (pct) => pct === null ? 'var(--globant-muted)' : pct >= 100 ? '#4ade80' : pct >= 60 ? '#fbbf24' : '#ef4444';
+      const sStyle = { background: 'var(--globant-darker)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '6px 10px', fontSize: 13 };
 
       return (
         <div>
           <div className="page-header">
             <h1>Inside Sales Dashboard</h1>
-            <p>Executive overview of your sales operation</p>
+            <p>Strategy, KPIs and execution overview</p>
           </div>
 
-          {/* Row 1: Core KPIs */}
-          <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+          {/* ─── COMPANY GOAL ─── */}
+          <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid #BFD730', background: 'linear-gradient(135deg, rgba(191,215,48,0.06) 0%, transparent 60%)' }}>
+            {!editingGoal ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 18 }}>🎯</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--globant-muted)' }}>Company Goal</span>
+                  {isAdmin && <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '3px 10px' }} onClick={openEditGoal}>✏️ Edit</button>}
+                </div>
+                {goalName ? (
+                  <>
+                    <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>{goalName}</div>
+                    <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 12 }}>
+                      {goalTarget > 0 && <span style={{ fontSize: 13, color: 'var(--globant-muted)' }}>Target: <strong style={{ color: 'var(--globant-text)' }}>{formatCurrency(goalTarget)}</strong></span>}
+                      {goalDeadline && <span style={{ fontSize: 13, color: 'var(--globant-muted)' }}>Deadline: <strong style={{ color: 'var(--globant-text)' }}>{formatDate(goalDeadline)}</strong></span>}
+                      {daysRemaining !== null && (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: daysRemaining < 0 ? '#ef4444' : daysRemaining < 30 ? '#fbbf24' : '#4ade80' }}>
+                          {daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d left`}
+                        </span>
+                      )}
+                    </div>
+                    {goalTarget > 0 && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4 }}>
+                          <span>Pipeline vs target</span>
+                          <span>{progressPct}% — {formatCurrency(activePipeline)} in pipeline{wonValue > 0 ? ` · ${formatCurrency(wonValue)} won` : ''}</span>
+                        </div>
+                        <div style={{ height: 12, borderRadius: 6, background: 'var(--globant-darker)', overflow: 'hidden', position: 'relative' }}>
+                          <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #60a5fa, #818cf8)', borderRadius: 6, transition: 'width 0.5s' }} />
+                          {wonPct > 0 && <div style={{ position: 'absolute', top: 0, height: '100%', width: `${wonPct}%`, background: 'linear-gradient(90deg, #4ade80, #22d3ee)', borderRadius: 6, opacity: 0.75 }} />}
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>
+                          <span><span style={{ color: '#818cf8' }}>█</span> Pipeline: {formatCurrency(activePipeline)}</span>
+                          {wonValue > 0 && <span><span style={{ color: '#4ade80' }}>█</span> Won: {formatCurrency(wonValue)} ({wonPct}%)</span>}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ color: 'var(--globant-muted)', fontSize: 13 }}>
+                    {isAdmin ? 'No company goal set yet. Click Edit to define your target.' : 'No company goal set by admin yet.'}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>✏️ Edit Company Goal</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Goal Name</label>
+                    <input style={{ ...sStyle, width: '100%' }} value={goalForm.name} onChange={e => setGoalForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Q2 2026 Revenue Target" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Target Amount (€)</label>
+                    <input style={{ ...sStyle, width: '100%' }} type="number" value={goalForm.target} onChange={e => setGoalForm(p => ({ ...p, target: e.target.value }))} placeholder="1000000" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Deadline</label>
+                    <input style={{ ...sStyle, width: '100%' }} type="date" value={goalForm.deadline} onChange={e => setGoalForm(p => ({ ...p, deadline: e.target.value }))} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={saveGoal} disabled={savingGoal}>{savingGoal ? '⏳ Saving...' : '💾 Save Goal'}</button>
+                  <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingGoal(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ─── COMPANY KPIs ─── */}
+          <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--globant-muted)' }}>Company Performance</div>
+          <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginBottom: 20 }}>
+            <div className="kpi-card">
+              <div className="kpi-label">Meetings Booked</div>
+              <div className="kpi-value" style={{ color: '#4ade80' }}>{allMeetings.length}</div>
+              <div className="kpi-sub">all time</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Deals Won</div>
+              <div className="kpi-value" style={{ color: '#BFD730' }}>{wonOpps.length}</div>
+              <div className="kpi-sub">{formatCurrency(wonValue)}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Active Pipeline</div>
+              <div className="kpi-value" style={{ fontSize: activePipeline > 999999999 ? 18 : 26 }}>{formatCurrency(activePipeline)}</div>
+              <div className="kpi-sub">{activeOpps.length} open opps</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Active Accounts</div>
+              <div className="kpi-value" style={{ color: '#60a5fa' }}>{activeAccounts.length}</div>
+              <div className="kpi-sub">of {accounts.length} total</div>
+            </div>
             <div className="kpi-card">
               <div className="kpi-label">Accounts Mapped</div>
               <div className="kpi-value">{mappedAccounts.length}</div>
               <div className="kpi-sub">of {accounts.length} total</div>
             </div>
-            <div className="kpi-card">
-              <div className="kpi-label">With Solutions</div>
-              <div className="kpi-value">{accountsWithSolutions.length}</div>
-              <div className="kpi-sub">solution assigned</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Contacted</div>
-              <div className="kpi-value" style={{ color: contactedStakeholders.length > 0 ? 'var(--globant-success)' : 'var(--globant-warning)' }}>{contactedStakeholders.length}</div>
-              <div className="kpi-sub">of {stakeholders.length} stakeholders</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Active Pipeline</div>
-              <div className="kpi-value" style={{ fontSize: activePipeline > 999999999 ? 20 : 28 }}>{formatCurrency(activePipeline)}</div>
-              <div className="kpi-sub">{activeOpps.length} open opps</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Won Deals</div>
-              <div className="kpi-value" style={{ color: 'var(--globant-success)' }}>{wonOpps.length}</div>
-              <div className="kpi-sub">{formatCurrency(wonOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0))}</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Outreach Logged</div>
-              <div className="kpi-value">{outreach.length}</div>
-              <div className="kpi-sub">activities</div>
-            </div>
           </div>
 
-          {/* ── Conversion Funnel + Weighted Forecast ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          {/* ─── PERSONAL KPIs (only when targets set) ─── */}
+          {(myMeetingsTarget > 0 || myDealsTarget > 0) && (
+            <>
+              <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--globant-muted)' }}>Your KPIs</div>
+              <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginBottom: 20 }}>
+                <div className="kpi-card" style={{ borderBottom: `3px solid ${kpiColor(kpiPct(myMeetings.length, myMeetingsTarget))}` }}>
+                  <div className="kpi-label">My Meetings</div>
+                  <div className="kpi-value" style={{ color: kpiColor(kpiPct(myMeetings.length, myMeetingsTarget)) }}>{myMeetings.length}</div>
+                  <div className="kpi-sub">target: {myMeetingsTarget} · {kpiPct(myMeetings.length, myMeetingsTarget) ?? 0}%</div>
+                  {myMeetingsTarget > 0 && <div style={{ height: 4, borderRadius: 2, background: 'var(--globant-darker)', overflow: 'hidden', marginTop: 8 }}>
+                    <div style={{ height: '100%', width: `${kpiPct(myMeetings.length, myMeetingsTarget) ?? 0}%`, background: kpiColor(kpiPct(myMeetings.length, myMeetingsTarget)), borderRadius: 2, transition: 'width 0.5s' }} />
+                  </div>}
+                </div>
+                <div className="kpi-card" style={{ borderBottom: `3px solid ${kpiColor(kpiPct(myDealsWon.length, myDealsTarget))}` }}>
+                  <div className="kpi-label">My Deals Won</div>
+                  <div className="kpi-value" style={{ color: kpiColor(kpiPct(myDealsWon.length, myDealsTarget)) }}>{myDealsWon.length}</div>
+                  <div className="kpi-sub">target: {myDealsTarget} · {kpiPct(myDealsWon.length, myDealsTarget) ?? 0}%</div>
+                  {myDealsTarget > 0 && <div style={{ height: 4, borderRadius: 2, background: 'var(--globant-darker)', overflow: 'hidden', marginTop: 8 }}>
+                    <div style={{ height: '100%', width: `${kpiPct(myDealsWon.length, myDealsTarget) ?? 0}%`, background: kpiColor(kpiPct(myDealsWon.length, myDealsTarget)), borderRadius: 2, transition: 'width 0.5s' }} />
+                  </div>}
+                </div>
+              </div>
+            </>
+          )}
 
-            {/* Funnel */}
+          {/* ─── TEAM KPIs TABLE ─── */}
+          {users.filter(u => F(u, 'Name') || F(u, 'Email')).length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-header">
+                <h3>👥 Team Performance</h3>
+                {isAdmin && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Click ✏️ to set KPI targets per person</span>}
+              </div>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th style={{ textAlign: 'center' }}>Meetings</th>
+                    <th style={{ textAlign: 'center' }}>Target</th>
+                    <th style={{ textAlign: 'center' }}>Deals Won</th>
+                    <th style={{ textAlign: 'center' }}>Target</th>
+                    {isAdmin && <th />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.filter(u => F(u, 'Name') || F(u, 'Email')).map(u => {
+                    const uName = F(u, 'Name') || '';
+                    const uEmail = F(u, 'Email') || '';
+                    const uRole = (() => { const r = F(u, 'Role'); return (typeof r === 'object' ? r?.name : r) || '—'; })();
+                    const uMeetings = allMeetings.filter(o => { const lb = F(o, 'Logged By'); return lb && (lb === uName || lb === uEmail); }).length;
+                    const uDealsWon = wonOpps.filter(opp => linkedIds(opp, 'Account').some(accId => {
+                      const acc = accounts.find(a => a.id === accId);
+                      return acc && (linkedIds(acc, 'BDR').includes(u.id) || linkedIds(acc, 'Client Partners').includes(u.id));
+                    })).length;
+                    const uMeetTarget = u.fields?.['KPI Meetings Target'] || 0;
+                    const uDealTarget = u.fields?.['KPI Deals Target'] || 0;
+                    const mPct = kpiPct(uMeetings, uMeetTarget);
+                    const dPct = kpiPct(uDealsWon, uDealTarget);
+                    const isMe = u.id === currentUserId;
+                    const isEditing = editingKpiId === u.id;
+                    return (
+                      <React.Fragment key={u.id}>
+                        <tr style={{ background: isMe ? 'rgba(191,215,48,0.04)' : undefined }}>
+                          <td style={{ fontWeight: isMe ? 700 : 400 }}>
+                            {uName || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Pending activation</span>}
+                            {isMe && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(191,215,48,0.2)', color: '#BFD730' }}>you</span>}
+                          </td>
+                          <td><span className="badge badge-blue">{uRole}</span></td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: kpiColor(mPct) }}>
+                            {uMeetings}{mPct !== null && <span style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 400 }}> ({mPct}%)</span>}
+                          </td>
+                          <td style={{ textAlign: 'center', color: 'var(--globant-muted)' }}>{uMeetTarget || '—'}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: kpiColor(dPct) }}>
+                            {uDealsWon}{dPct !== null && <span style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 400 }}> ({dPct}%)</span>}
+                          </td>
+                          <td style={{ textAlign: 'center', color: 'var(--globant-muted)' }}>{uDealTarget || '—'}</td>
+                          {isAdmin && (
+                            <td style={{ textAlign: 'right' }}>
+                              {!isEditing
+                                ? <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '3px 10px' }} onClick={() => openEditKpi(u)}>✏️ Set targets</button>
+                                : <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>editing ↓</span>}
+                            </td>
+                          )}
+                        </tr>
+                        {isAdmin && isEditing && (
+                          <tr style={{ background: 'rgba(167,139,250,0.05)' }}>
+                            <td colSpan={7} style={{ padding: '10px 12px' }}>
+                              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 12, fontWeight: 600 }}>KPI targets for {uName || 'this user'}:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <label style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Meetings:</label>
+                                  <input style={{ ...sStyle, width: 80 }} type="number" min="0" value={kpiForm.meetings} onChange={e => setKpiForm(p => ({ ...p, meetings: e.target.value }))} placeholder="0" />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <label style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Deals:</label>
+                                  <input style={{ ...sStyle, width: 80 }} type="number" min="0" value={kpiForm.deals} onChange={e => setKpiForm(p => ({ ...p, deals: e.target.value }))} placeholder="0" />
+                                </div>
+                                <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={saveKpi} disabled={savingKpi}>{savingKpi ? '⏳' : '💾 Save'}</button>
+                                <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingKpiId(null)}>Cancel</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ─── Conversion Funnel + Weighted Forecast ─── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div className="card">
               <div className="card-header"><h3>🎯 Conversion Funnel</h3></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -897,12 +1171,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   );
                 })}
               </div>
-              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--globant-muted)' }}>
-                % = conversion from previous stage
-              </div>
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--globant-muted)' }}>% = conversion from previous stage</div>
             </div>
 
-            {/* Weighted Forecast */}
             <div className="card">
               <div className="card-header">
                 <h3>📊 Weighted Pipeline Forecast</h3>
@@ -912,8 +1183,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 <p style={{ color: 'var(--globant-muted)', fontSize: 12 }}>No active opportunities</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {forecastStages.map(([stage, data]) => {
-                    const prob = Math.round((data.prob || 0) * 100);
+                  {forecastStages.map(([stage, stageData]) => {
+                    const prob = Math.round((stageData.prob || 0) * 100);
                     const stageColor = prob >= 70 ? '#4ade80' : prob >= 40 ? '#f59e0b' : '#60a5fa';
                     return (
                       <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -922,9 +1193,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                           <div style={{ height: '100%', width: `${prob}%`, background: stageColor, opacity: 0.7, borderRadius: 4 }} />
                         </div>
                         <span style={{ fontSize: 10, color: stageColor, fontWeight: 700, width: 32, textAlign: 'right' }}>{prob}%</span>
-                        <span style={{ fontSize: 11, color: 'var(--globant-text)', width: 60, textAlign: 'right' }}>{formatCurrency(data.raw)}</span>
-                        <span style={{ fontSize: 11, color: 'var(--globant-green)', width: 60, textAlign: 'right', fontWeight: 600 }}>→ {formatCurrency(data.weighted)}</span>
-                        <span style={{ fontSize: 10, color: 'var(--globant-muted)', width: 20, textAlign: 'center' }}>{data.count}</span>
+                        <span style={{ fontSize: 11, color: 'var(--globant-text)', width: 60, textAlign: 'right' }}>{formatCurrency(stageData.raw)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--globant-green)', width: 60, textAlign: 'right', fontWeight: 600 }}>→ {formatCurrency(stageData.weighted)}</span>
+                        <span style={{ fontSize: 10, color: 'var(--globant-muted)', width: 20, textAlign: 'center' }}>{stageData.count}</span>
                       </div>
                     );
                   })}
@@ -937,14 +1208,12 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
           </div>
 
-          {/* ── Activity Heatmap + Top Focus Accounts ── */}
+          {/* ─── Activity Heatmap + Focus Accounts ─── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-
-            {/* Heatmap */}
             <div className="card">
               <div className="card-header">
                 <h3>🔥 Activity Heatmap <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--globant-muted)' }}>last 28 days</span></h3>
-                <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{Object.values(heatmapData).reduce((s,v)=>s+v,0)} touches</span>
+                <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{Object.values(heatmapData).reduce((s, v) => s + v, 0)} touches</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(28, 1fr)', gap: 3 }}>
                 {heatmapDaysList.map(day => {
@@ -953,8 +1222,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   return (
                     <div key={day.key} title={`${day.label}: ${day.count} activities`}
                       style={{ aspectRatio: '1', borderRadius: 3, background: bg, cursor: 'default', transition: 'transform 0.1s' }}
-                      onMouseEnter={e => e.target.style.transform='scale(1.3)'}
-                      onMouseLeave={e => e.target.style.transform='scale(1)'}
+                      onMouseEnter={e => e.target.style.transform = 'scale(1.3)'}
+                      onMouseLeave={e => e.target.style.transform = 'scale(1)'}
                     />
                   );
                 })}
@@ -963,14 +1232,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 <span>{heatmapDaysList[0]?.label}</span>
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                   <span>Less</span>
-                  {[0.1,0.3,0.6,1].map(v => <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: `rgba(91,191,181,${v})` }} />)}
+                  {[0.1, 0.3, 0.6, 1].map(v => <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: `rgba(91,191,181,${v})` }} />)}
                   <span>More</span>
                 </div>
                 <span>Today</span>
               </div>
             </div>
 
-            {/* Top 3 Focus Accounts */}
             <div className="card">
               <div className="card-header"><h3>🎯 Focus Now <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--globant-muted)' }}>top 3 accounts to act on today</span></h3></div>
               {focusAccounts.length === 0 ? (
@@ -978,7 +1246,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {focusAccounts.map(({ a, daysSince, reason, openOppCount, hasReply, hasMeeting }, i) => {
-                    const medals = ['🥇','🥈','🥉'];
+                    const medals = ['🥇', '🥈', '🥉'];
                     const stCount = linkedIds(a, 'Stakeholders').length;
                     const urgencyColor = openOppCount > 0 ? '#4ade80' : hasReply ? '#f59e0b' : '#60a5fa';
                     return (
@@ -992,9 +1260,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                           </div>
                           <div style={{ fontSize: 11, marginTop: 4, color: urgencyColor, fontWeight: 600 }}>→ {reason}</div>
                         </div>
-                        <div style={{ fontSize: 20 }}>
-                          {openOppCount > 0 ? '💰' : hasMeeting ? '📅' : hasReply ? '💬' : '📬'}
-                        </div>
+                        <div style={{ fontSize: 20 }}>{openOppCount > 0 ? '💰' : hasMeeting ? '📅' : hasReply ? '💬' : '📬'}</div>
                       </div>
                     );
                   })}
@@ -1003,9 +1269,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
           </div>
 
-          {/* Row 2: Status breakdown + Upcoming Events side by side */}
+          {/* ─── Status Breakdown + Upcoming Events ─── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            {/* Account Status */}
             <div className="card">
               <div className="card-header"><h3>Account Status Breakdown</h3></div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
@@ -1027,7 +1292,6 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               </div>
             </div>
 
-            {/* Upcoming Events */}
             <div className="card">
               <div className="card-header"><h3>Upcoming Events</h3></div>
               {upcomingEvents.length === 0 && <p style={{ color: 'var(--globant-muted)', fontSize: 13 }}>No upcoming events</p>}
@@ -1040,9 +1304,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     <div className="log-icon" style={{ background: 'rgba(96,165,250,0.15)' }}>📅</div>
                     <div className="log-content">
                       <div className="log-title">{F(ev, 'Event Name')}</div>
-                      <div className="log-meta">
-                        {formatDate(start)}{end && end !== start ? ` — ${formatDate(end)}` : ''} · {invitedCount} stakeholders invited
-                      </div>
+                      <div className="log-meta">{formatDate(start)}{end && end !== start ? ` — ${formatDate(end)}` : ''} · {invitedCount} stakeholders invited</div>
                     </div>
                   </div>
                 );
@@ -1050,15 +1312,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
           </div>
 
-          {/* Row 3: Top Mapped Accounts table */}
+          {/* ─── Top Mapped Accounts ─── */}
           <div className="card">
             <div className="card-header"><h3>Top Mapped Accounts</h3></div>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Account</th>
-                  <th>Industry</th>
-                  <th>Status</th>
+                  <th>Account</th><th>Industry</th><th>Status</th>
                   <th style={{ textAlign: 'center' }}>Stakeholders</th>
                   <th style={{ textAlign: 'center' }}>Contacted</th>
                   <th style={{ textAlign: 'center' }}>Opps</th>
@@ -1083,9 +1343,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                       <td>{status && <span className={`badge ${statusColor}`}>{status}</span>}</td>
                       <td style={{ textAlign: 'center' }}>{stIds.length}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <span style={{ color: contactedCount > 0 ? 'var(--globant-success)' : 'var(--globant-warning)' }}>
-                          {contactedCount}/{stIds.length}
-                        </span>
+                        <span style={{ color: contactedCount > 0 ? 'var(--globant-success)' : 'var(--globant-warning)' }}>{contactedCount}/{stIds.length}</span>
                       </td>
                       <td style={{ textAlign: 'center' }}>{oppCount}</td>
                       <td style={{ fontSize: 11 }}>{solNames.length > 0 ? solNames.join(', ') : <span style={{ color: 'var(--globant-muted)' }}>—</span>}</td>
@@ -1096,7 +1354,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </table>
           </div>
 
-          {/* Row 4: Active Pipeline */}
+          {/* ─── Active Pipeline ─── */}
           <div className="card">
             <div className="card-header"><h3>Active Pipeline ({activeOpps.length} opportunities)</h3></div>
             <table className="data-table">
@@ -2912,6 +3170,9 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
       const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
       const today = outreach.filter(a => new Date(a.fields?.['Date'] || 0) >= todayStart).length;
 
+      // Active accounts
+      const activeAccountsCount = accounts.filter(a => ['Active', 'Activo'].includes(F(a, 'Inside Sales Status'))).length;
+
       // Meetings & Replies
       const meetings = outreach.filter(a => F(a, 'Status') === 'Meeting Scheduled' || F(a, 'Status') === 'Meeting Booked').length;
       const replies = outreach.filter(a => F(a, 'Status') === 'Replied').length;
@@ -2939,7 +3200,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           </div>
 
           {/* KPI Dashboard */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 24 }}>
             <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{outreach.length}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Total Activities</div>
@@ -2951,6 +3212,10 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--globant-success)', lineHeight: 1 }}>{stakeholdersContacted.size}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Stakeholders</div>
+            </div>
+            <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
+              <div style={{ fontSize: 30, fontWeight: 800, color: '#60a5fa', lineHeight: 1 }}>{activeAccountsCount}</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Active Accounts</div>
             </div>
             <div className="card" style={{ textAlign: 'center', padding: '16px 12px', cursor: 'pointer', border: selectedStatus === 'Meeting Scheduled' ? '1px solid #60a5fa' : undefined }} onClick={() => setSelectedStatus(selectedStatus === 'Meeting Scheduled' ? '' : 'Meeting Scheduled')}>
               <div style={{ fontSize: 30, fontWeight: 800, color: '#60a5fa', lineHeight: 1 }}>{meetings}</div>
@@ -5173,7 +5438,11 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
     // ============ INSIGHTS & CONCLUSIONS ============
     function InsightsView({ data }) {
-      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events } = data;
+      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, strategy = [] } = data;
+      const strategyRecord = strategy[0] || null;
+      const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
+      const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
+      const goalDeadline = strategyRecord ? (F(strategyRecord, 'Deadline') || '') : '';
       const now = new Date();
       const [timePeriod, setTimePeriod] = useState('all');
 
@@ -5352,7 +5621,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       }
 
       // Pipeline
-      conclusions.push({ icon: '💰', title: 'Pipeline Health', text: `${openOpps.length} open opportunities worth ${formatCurrency(totalPipelineValue)}. Win rate: ${winRate}% (${closedWon.length} won / ${closedLost.length} lost).${wonValue > 0 ? ` Total won: ${formatCurrency(wonValue)}.` : ''}` });
+      conclusions.push({ icon: '💰', title: 'Pipeline Health', text: `${openOpps.length} open opportunities worth ${formatCurrency(totalPipelineValue)}. Win rate: ${winRate}% (${closedWon.length} won / ${closedLost.length} lost).${wonValue > 0 ? ` Total won: ${formatCurrency(wonValue)}.` : ''}${goalTarget > 0 ? ` Pipeline is at ${Math.round((totalPipelineValue / goalTarget) * 100)}% of your ${formatCurrency(goalTarget)} goal.` : ''}` });
 
       // Message readiness
       const pregenPct = stakeholders.length > 0 ? Math.round((withPregen.length / stakeholders.length) * 100) : 0;
@@ -5421,6 +5690,17 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               ))}
             </div>
           </div>
+
+          {/* Goal context banner */}
+          {goalName && (
+            <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(191,215,48,0.07)', border: '1px solid rgba(191,215,48,0.2)', display: 'flex', gap: 12, alignItems: 'center', fontSize: 12 }}>
+              <span style={{ fontSize: 16 }}>🎯</span>
+              <span style={{ color: 'var(--globant-muted)' }}>Goal: <strong style={{ color: 'var(--globant-text)' }}>{goalName}</strong>
+                {goalTarget > 0 && <span> · Target: <strong style={{ color: '#BFD730' }}>{formatCurrency(goalTarget)}</strong></span>}
+                {goalDeadline && <span> · Deadline: <strong style={{ color: 'var(--globant-text)' }}>{formatDate(goalDeadline)}</strong></span>}
+              </span>
+            </div>
+          )}
 
           {/* Scorecard */}
           {timePeriod !== 'all' && (
@@ -7980,8 +8260,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
@@ -8120,7 +8400,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       const bgSync = () => api && loadData(api, true);
       const pages = {
-        overview: <StrategyOverview data={data} />,
+        overview: <StrategyOverview data={data} api={api} onUpdateRecord={updateInData} onAddRecord={addToData} onLogActivity={bgSync} />,
         followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
         contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
