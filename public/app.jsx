@@ -241,7 +241,7 @@
 
     // Small info tooltip icon — use: <InfoTip text="What to enter here" />
     const InfoTip = ({ text }) => (
-      <span title={text} style={{ marginLeft: 5, cursor: 'help', fontSize: 11, color: 'var(--globant-muted)', opacity: 0.6, userSelect: 'none' }}>ⓘ</span>
+      <span className="info-tip">ⓘ<span className="info-tip-text">{text}</span></span>
     );
 
     // Auto-activate account when outreach is logged
@@ -6337,14 +6337,14 @@ Return ONLY the JSON array, nothing else.`;
       const [selected, setSelected] = React.useState(null);
       const [showIcpModal, setShowIcpModal] = React.useState(false);
       const [editingIcp, setEditingIcp] = React.useState(null);
-      const [icpForm, setIcpForm] = React.useState({ name: '', industry: '', country: '', b2b: 'B2B', size: '', deal: '', pains: '', triggers: '', priorities: '', exclusions: '' });
+      const [icpForm, setIcpForm] = React.useState({ name: '', industry: '', country: '', b2b: 'B2B', size: '', deal: '', pains: '', triggers: '', priorities: '', exclusions: '', solutionIds: [] });
       const [savingIcp, setSavingIcp] = React.useState(false);
 
       const ICP_B2B_OPTIONS = ['B2B', 'B2C', 'B2B/B2C'];
 
       const openNewIcp = () => {
         setEditingIcp(null);
-        setIcpForm({ name: '', industry: '', country: '', b2b: 'B2B', size: '', deal: '', pains: '', triggers: '', priorities: '', exclusions: '' });
+        setIcpForm({ name: '', industry: '', country: '', b2b: 'B2B', size: '', deal: '', pains: '', triggers: '', priorities: '', exclusions: '', solutionIds: [] });
         setShowIcpModal(true);
       };
 
@@ -6361,6 +6361,7 @@ Return ONLY the JSON array, nothing else.`;
           triggers: (() => { const t = F(profile, 'Triggers (why now)'); return Array.isArray(t) ? t.join(', ') : (t || ''); })(),
           priorities: F(profile, 'Priorities') || '',
           exclusions: F(profile, 'Exclusions (Who is not a fit)') || '',
+          solutionIds: linkedIds(profile, 'Solutions'),
         });
         setShowIcpModal(true);
       };
@@ -6383,6 +6384,9 @@ Return ONLY the JSON array, nothing else.`;
           };
           if (icpForm.triggers.trim()) {
             fields['Triggers (why now)'] = icpForm.triggers.split(',').map(t => t.trim()).filter(Boolean);
+          }
+          if (icpForm.solutionIds && icpForm.solutionIds.length > 0) {
+            fields['Solutions'] = icpForm.solutionIds.map(id => ({ id }));
           }
           if (editingIcp) {
             await a.updateRecord(TABLE_IDS.icp, editingIcp.id, fields);
@@ -6440,6 +6444,33 @@ Return ONLY the JSON array, nothing else.`;
                     <div><label style={lStyle}>Triggers (comma-separated)<InfoTip text="Events or situations that create urgency for this customer to act now. E.g. missed targets, team growth, new leadership." /></label><input style={iStyle} value={icpForm.triggers} onChange={e => setIcpForm(p => ({ ...p, triggers: e.target.value }))} placeholder="e.g. Missed target, New hire, Scaling team" /></div>
                     <div><label style={lStyle}>Priorities<InfoTip text="What this customer cares about most. Used to align your messaging and positioning." /></label><input style={iStyle} value={icpForm.priorities} onChange={e => setIcpForm(p => ({ ...p, priorities: e.target.value }))} placeholder="e.g. Consistency, Predictability" /></div>
                     <div><label style={lStyle}>Exclusions (who is NOT a fit)<InfoTip text="Characteristics that disqualify a prospect from this ICP. Helps your team qualify faster and avoid wasted effort." /></label><input style={iStyle} value={icpForm.exclusions} onChange={e => setIcpForm(p => ({ ...p, exclusions: e.target.value }))} placeholder="e.g. No team, pre-revenue" /></div>
+                    <div>
+                      <label style={lStyle}>Associated Solutions<InfoTip text="Which of your solutions can be sold to this ICP? Select all that apply." /></label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                        {solutions.map(s => {
+                          const sid = s.id;
+                          const selected = (icpForm.solutionIds || []).includes(sid);
+                          return (
+                            <span key={sid}
+                              onClick={() => setIcpForm(p => ({
+                                ...p,
+                                solutionIds: selected
+                                  ? p.solutionIds.filter(id => id !== sid)
+                                  : [...(p.solutionIds || []), sid]
+                              }))}
+                              style={{ cursor: 'pointer', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                                background: selected ? 'rgba(91,191,181,0.2)' : 'rgba(255,255,255,0.05)',
+                                color: selected ? 'var(--globant-green)' : 'var(--globant-muted)',
+                                border: `1px solid ${selected ? 'rgba(91,191,181,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                                transition: 'all 0.15s'
+                              }}>
+                              {selected ? '✓ ' : ''}{F(s, 'Name')}
+                            </span>
+                          );
+                        })}
+                        {solutions.length === 0 && <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>No solutions found</span>}
+                      </div>
+                    </div>
                     <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
                       <button className="action-btn btn-ghost" onClick={() => setShowIcpModal(false)}>Cancel</button>
                       <button className="action-btn btn-primary" onClick={saveIcp} disabled={savingIcp || !icpForm.name.trim()}>
@@ -6752,7 +6783,6 @@ Return ONLY the JSON array, nothing else.`;
         if (selectedSol) {
           const notes = F(selectedSol, 'Extra imput') || '';
           setSolNotes(typeof notes === 'string' ? notes : '');
-          setAiRecs('');
         }
       }, [selectedSolId]);
 
@@ -7746,7 +7776,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
     // ============ SETTINGS MODAL ============
     function SettingsModal({ onClose }) {
       const isAdmin = CURRENT_USER?.role === 'admin';
-      const [tab, setTab] = useState('workspace');
+      const [tab, setTab] = useState(isAdmin ? 'profile' : 'workspace');
       const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
       const [saved, setSaved] = useState(false);
 
@@ -7774,8 +7804,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12, flexShrink: 0 }}>
               {[
-                { key: 'workspace', label: '🏢 Workspace' },
                 ...(isAdmin ? [{ key: 'profile', label: '🤖 AI Profile' }] : []),
+                { key: 'workspace', label: '🏢 Workspace' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
                   background: tab === t.key ? 'rgba(91,191,181,0.15)' : 'none',

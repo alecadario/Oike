@@ -193,6 +193,28 @@
     }
     .detail-panel-overlay.open { opacity: 1; pointer-events: auto; }
 
+    /* Info Tooltip */
+    .info-tip {
+      position: relative; display: inline-block;
+      margin-left: 5px; cursor: help;
+      font-size: 11px; color: var(--globant-muted); opacity: 0.65;
+      user-select: none; vertical-align: middle;
+    }
+    .info-tip .info-tip-text {
+      visibility: hidden; opacity: 0;
+      width: 220px; background: #1e2235; color: #c8cfe8;
+      font-size: 11px; line-height: 1.5; font-weight: 400;
+      text-transform: none; letter-spacing: 0;
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
+      padding: 8px 10px;
+      position: absolute; z-index: 9999;
+      bottom: 125%; left: 50%; transform: translateX(-50%);
+      transition: opacity 0.15s ease;
+      pointer-events: none; white-space: normal;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .info-tip:hover .info-tip-text { visibility: visible; opacity: 1; }
+
     /* Modal */
     .modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
