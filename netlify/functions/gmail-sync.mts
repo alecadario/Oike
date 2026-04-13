@@ -291,9 +291,14 @@ export default async (req: Request, context: Context) => {
 
       if (!matchedStakeholder) continue;
 
-      // Parse date
+      // Parse date — extract directly from header string to avoid UTC offset shifting the day
       let isoDate = new Date().toISOString().split('T')[0];
-      try { isoDate = new Date(dateStr).toISOString().split('T')[0]; } catch {}
+      try {
+        const MONTHS: Record<string, string> = { Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12' };
+        const m = dateStr.match(/(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})/);
+        if (m) isoDate = `${m[3]}-${MONTHS[m[2]]}-${m[1].padStart(2, '0')}`;
+        else isoDate = new Date(dateStr).toISOString().split('T')[0];
+      } catch {}
 
       const logged = await logEmailActivity(
         baseId,
