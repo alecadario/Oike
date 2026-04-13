@@ -8403,33 +8403,22 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
     }
 
     // ============ SETTINGS MODAL ============
-    function SettingsModal({ onClose }) {
+    function SettingsModal({ onClose, gmailReturnStatus = '' }) {
       const isAdmin = CURRENT_USER?.role === 'admin';
-      const [tab, setTab] = useState('profile');
+      const [tab, setTab] = useState(gmailReturnStatus ? 'integrations' : 'profile');
       const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
       const [saved, setSaved] = useState(false);
 
       // ── Gmail integration state ──
-      const [gmailConnected, setGmailConnected] = useState(false);
+      const [gmailConnected, setGmailConnected] = useState(gmailReturnStatus === 'connected');
       const [gmailConnecting, setGmailConnecting] = useState(false);
       const [gmailSyncing, setGmailSyncing] = useState(false);
-      const [gmailSyncResult, setGmailSyncResult] = useState('');
+      const [gmailSyncResult, setGmailSyncResult] = useState(
+        gmailReturnStatus === 'error' || gmailReturnStatus === 'denied'
+          ? 'Gmail connection failed. Please try again.'
+          : ''
+      );
       const [gmailDaysBack, setGmailDaysBack] = useState(7);
-
-      // Check URL param on mount (set after OAuth callback redirect)
-      useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('gmail') === 'connected') {
-          setGmailConnected(true);
-          setTab('integrations');
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-        if (params.get('gmail') === 'denied' || params.get('gmail') === 'error') {
-          setGmailSyncResult('Gmail connection failed. Please try again.');
-          setTab('integrations');
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-      }, []);
 
       const handleConnectGmail = async () => {
         setGmailConnecting(true);
@@ -8871,6 +8860,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [api, setApi] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
       const [showOnboarding, setShowOnboarding] = useState(false);
+      const [gmailReturnStatus, setGmailReturnStatus] = useState(''); // 'connected' | 'error' | 'denied'
       const [configError, setConfigError] = useState('');
       const [navigateToAccountId, setNavigateToAccountId] = useState('');
       const [navigateToSolId, setNavigateToSolId] = useState('');
@@ -9033,6 +9023,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             // Show onboarding wizard on first login
             const done = localStorage.getItem(ONBOARDING_KEY);
             if (!done) setShowOnboarding(true);
+            // Detect Gmail OAuth return
+            const urlParams = new URLSearchParams(window.location.search);
+            const gmailParam = urlParams.get('gmail');
+            if (gmailParam) {
+              setGmailReturnStatus(gmailParam);
+              setShowSettings(true);
+              window.history.replaceState({}, '', window.location.pathname);
+            }
           } catch (e) {
             console.error('Init failed:', e);
             setConfigError('Failed to connect. Please try again.');
@@ -9170,7 +9168,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           </div>
 
           {/* Settings Modal */}
-          {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+          {showSettings && <SettingsModal onClose={() => { setShowSettings(false); setGmailReturnStatus(''); }} gmailReturnStatus={gmailReturnStatus} />}
         </div>
       );
     }
