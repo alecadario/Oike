@@ -283,7 +283,7 @@
     };
 
     // ============ STAKEHOLDER HISTORY MODAL ============
-    function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData, onNavigateToAccount }) {
+    function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData, onNavigateToAccount, onSend }) {
       if (!stakeholder) return null;
       const [genLoading, setGenLoading] = useState(''); // 'pain' | 'linkedin' | ''
       const PAIN_TS_LS_KEY = 'oike_pain_timestamps';
@@ -724,7 +724,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               }
             }}
             onClose={() => setShowAIGenerator(false)}
-            onSend={() => setShowAIGenerator(false)}
+            onSend={(s, ch, msg, cc, evId) => { if (onSend) onSend(s, ch, msg, cc, evId); setShowAIGenerator(false); if (onRefresh) onRefresh(); }}
             data={{ ...allData, outreach: allData?.outreach || [] }}
           />
         )}
@@ -1437,9 +1437,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
     function AIMessageModal({ stakeholder, onClose, onSend, data }) {
       const [tab, setTab] = useState(() => {
         const touchCount = (data.outreach || []).filter(o => linkedIds(o, 'Stakeholder').includes(stakeholder.id)).length;
-        return touchCount >= 1 ? 'followup' : 'first';
+        return touchCount >= 5 ? 'breakup' : touchCount >= 1 ? 'followup' : 'first';
       });
-      const [generatedMessages, setGeneratedMessages] = useState({ first: '', followup: '' });
+      const [generatedMessages, setGeneratedMessages] = useState({ first: '', followup: '', breakup: '' });
       const [loadingAI, setLoadingAI] = useState(false);
       const [selectedChannel, setSelectedChannel] = useState('');
       const [savingDraft, setSavingDraft] = useState(false);
@@ -1601,85 +1601,78 @@ Keep it natural — write for the ear, not the eye.`,
         },
       };
 
-      const tabPrompts = {
-        first: {
-          label: 'First Contact',
-          goal: 'This is the FIRST outreach ever to this person. Your only goal: open a conversation and earn a response. Do NOT try to sell or pitch. Create genuine curiosity based on their specific context and propose one clear, low-friction next step.',
-          extra: `Do NOT reference any previous conversation — this is cold outreach. Lead with THEIR world (a challenge, a news trigger, an industry shift), not with ${COMPANY_PROFILE.companyName}. CRITICAL: Since this is first contact, the message MUST include a brief self-introduction — one sentence mentioning who you are (name if available), your role, and ${COMPANY_PROFILE.companyName}. Place it naturally, not as the opening line.`,
-        },
-        followup: {
-          label: 'Follow-up',
-          goal: sOutreach.length >= 5
-            ? `This is a FINAL follow-up after ${sOutreach.length} previous touches with no reply. Write a breakup message — honest, warm, memorable. Not desperate. Goal: earn a response OR leave a strong last impression. Two options: (A) briefly acknowledge the silence, share ONE sharp value statement, close with no pressure; (B) ignore the silence completely, open with a bold trigger from their world, end with a hyper-specific ask. Pick whichever fits best. Ultra-short.`
-            : `This is a follow-up after ${sOutreach.length} previous touch${sOutreach.length !== 1 ? 'es' : ''} — no reply yet. Re-engage with a completely NEW angle. Different hook, different trigger, different value. Do NOT repeat what was said before.`,
-          extra: `OUTREACH HISTORY: ${sOutreach.length} message${sOutreach.length !== 1 ? 's' : ''} sent via ${[...new Set(sOutreach.map(o => F(o,'Channel')).filter(Boolean))].join(' + ') || 'unknown channel'} — no replies recorded.${lastMessages && lastMessages.trim() ? `\n\nPREVIOUS MESSAGES:\n${lastMessages}` : ''}\n\nCRITICAL: Never say "following up", "just checking in", or "touching base". Lead with something fresh from their world — company news, an industry shift, a specific trigger. End with one low-friction ask.`,
-        },
-      };
-
       const handleGenerate = async () => {
         if (!selectedChannel) { alert('Select a channel first'); return; }
 
         setLoadingAI(true);
         try {
           const chGuide = channelPrompts[selectedChannel];
-          const tabGuide = tabPrompts[tab];
 
-          // Build available context hooks — only include what's actually populated
-          const contextHooks = [
-            painText && `Pain point: "${painText.split('\n')[0].slice(0, 120)}"`,
-            newsText && `Company news: "${newsText.slice(0, 200)}"`,
-            linkedinText && `LinkedIn/recent activity: "${linkedinText.slice(0, 150)}"`,
-            intelNotesText && `BDR intel: "${intelNotesText.slice(0, 150)}"`,
-          ].filter(Boolean);
+          // Determine mission based on context
+          const isEventFollowup = eventContext && eventMode === 'followup';
+          const isEventInvite = eventContext && eventMode === 'invite';
+          const touchCount = sOutreach.length;
 
-          const prompt = `You are a senior B2B sales copywriter. Write a highly personalized outreach message.
+          const mission = isEventFollowup
+            ? `MISSION: Write a warm follow-up after meeting ${sName} in person at an event. The relationship has started. Skip introductions entirely. Reference the meeting briefly and naturally. ONE clear next step.`
+            : isEventInvite
+            ? `MISSION: Use an upcoming event as a natural excuse to reach out to ${sName}. Casual tone — ask if they're attending, express you'd love to meet there. NOT a formal invitation, NOT a pitch.`
+            : tab === 'first'
+            ? `MISSION: Write a FIRST CONTACT message to ${sName}. This is cold outreach — they don't know you yet. Goal: open a conversation, earn a reply. Do NOT pitch or sell. Create genuine curiosity. Include a brief natural self-introduction (one sentence: who you are, your role, ${COMPANY_PROFILE.companyName}).`
+            : tab === 'breakup'
+            ? `MISSION: This is the LAST message you will ever send to ${sName} — after ${touchCount} touches with no reply. Make it count. TWO options, pick the one that fits best: (A) BREAKUP — acknowledge you've reached out a few times, say you won't keep pushing, leave one sharp value statement or insight they can keep. No guilt, no pressure, warm tone. (B) PATTERN INTERRUPT — forget the silence, open with a bold specific trigger from their world (news, challenge, industry shift), end with a hyper-specific ask (a date, a binary question). Ultra-short. Either way: this message must feel FINAL and human, not like attempt #${touchCount + 1}.`
+            : `MISSION: This is a follow-up after ${touchCount} previous touch${touchCount !== 1 ? 'es' : ''} with no reply. Re-engage with a COMPLETELY DIFFERENT angle than before. New hook, new value, new trigger. Do NOT repeat anything from previous messages. Do NOT write as if this is a first contact.`;
 
-SENDER: ${COMPANY_PROFILE.senderName}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} — ${COMPANY_PROFILE.companyName}${COMPANY_PROFILE.services ? ` (${COMPANY_PROFILE.services})` : ''}
+          // Available context — only what's actually populated
+          const availableContext = [
+            painText && `• Their pain points: ${painText.slice(0, 300)}`,
+            newsText && `• Recent company news: ${newsText.slice(0, 350)}`,
+            linkedinText && `• LinkedIn/recent activity: ${linkedinText.slice(0, 200)}`,
+            intelNotesText && `• BDR sales intel: ${intelNotesText.slice(0, 250)}`,
+            focusText && `• Their focus area: ${focusText}`,
+            solNames.length && `• Solutions mapped: ${solNames.join(', ')}`,
+            oppSummary && `• Active pipeline: ${oppSummary}`,
+          ].filter(Boolean).join('\n');
 
-RECIPIENT:
-- Name: ${sName} | Role: ${role || 'Unknown'} at ${accountName}
-- Industry: ${industry || 'Unknown'}${influence ? ` | Seniority: ${influence}` : ''}
-${painText ? `- Their pain points: ${painText.slice(0, 300)}` : ''}
-${linkedinText ? `- LinkedIn / recent activity: ${linkedinText.slice(0, 200)}` : ''}
+          const prompt = `You are a senior B2B sales copywriter. Your job: write ONE highly personalized outreach message that sounds like a real human wrote it — not a template.
 
-COMPANY CONTEXT:
-${newsText ? `- Recent news: ${newsText.slice(0, 400)}` : ''}
-${intelNotesText ? `- Sales intel: ${intelNotesText.slice(0, 300)}` : ''}
-${focusText ? `- Focus area: ${focusText}` : ''}
-${solNames.length ? `- Solutions mapped: ${solNames.join(', ')}` : ''}
-${oppSummary ? `- Active pipeline: ${oppSummary}` : ''}
+${mission}
 
-${sOutreach.length > 0 ? `PREVIOUS OUTREACH (${sOutreach.length} touch${sOutreach.length !== 1 ? 'es' : ''}, most recent first — no reply received):
-${sOutreach.slice(0, 5).map(o => `  ${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'} · ${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'}${F(o,'Message') ? ' → "' + String(F(o,'Message')).slice(0, 100) + '"' : ''}${F(o,'Notes') ? ' | ' + String(F(o,'Notes')).slice(0, 80) : ''}`).join('\n')}` : ''}
+━━━ SENDER ━━━
+${COMPANY_PROFILE.senderName}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} at ${COMPANY_PROFILE.companyName}${COMPANY_PROFILE.services ? ` — ${COMPANY_PROFILE.services}` : ''}
+${COMPANY_PROFILE.goals ? `Company focus: ${COMPANY_PROFILE.goals}` : ''}
 
-HOOK TO USE${contextHooks.length > 1 ? ' (pick the strongest one and build around it)' : ''}:
-${contextHooks.length > 0 ? contextHooks.map(h => `→ ${h}`).join('\n') : '→ Use their role and industry to infer a relevant challenge'}
+━━━ RECIPIENT ━━━
+${sName} | ${role || 'Unknown role'} at ${accountName} | ${industry || 'Unknown industry'}${influence ? ` | ${influence}` : ''}
 
-GOAL: ${eventContext && eventMode === 'followup' ? 'Warm follow-up after meeting at an event. Skip introductions. Reference the meeting naturally and propose one clear next step.' : tabGuide.goal}
-${tabGuide.extra && !eventContext ? tabGuide.extra : ''}
-${eventContext && eventMode === 'invite' ? `EVENT TO USE AS HOOK: ${eventContext}\nApproach: casual — ask if they're attending, say you'd love to meet there. Not a formal invitation.` : ''}
-${eventContext && eventMode === 'followup' ? `EVENT MET AT: ${eventContext}\nApproach: warm, brief. You already met. Reference the conversation, keep it human, one next step.` : ''}
-${solutionContext ? `SOLUTION TO POSITION: ${solutionContext}\nWeave it naturally as the answer to their pain point. Don't pitch — connect it to a specific challenge.` : ''}
-${extraContext ? `SENDER'S PERSONAL CONTEXT (highest priority — must appear in message): "${extraContext}"` : ''}
+━━━ AVAILABLE CONTEXT (USE THIS — don't make things up) ━━━
+${availableContext || '→ No specific data available. Infer from role and industry.'}
 
-CHANNEL: ${selectedChannel}
+${touchCount > 0 ? `━━━ PREVIOUS OUTREACH (${touchCount} touch${touchCount !== 1 ? 'es' : ''} — no replies) ━━━
+${sOutreach.slice(0, 5).map(o => `${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'} · ${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'}${F(o,'Message') ? ' → "' + String(F(o,'Message')).slice(0, 100) + '"' : ''}${F(o,'Notes') ? ' | note: ' + String(F(o,'Notes')).slice(0, 80) : ''}`).join('\n')}` : ''}
+${isEventInvite ? `\n━━━ EVENT ━━━\n${eventContext}\n` : ''}
+${isEventFollowup ? `\n━━━ EVENT WHERE YOU MET ━━━\n${eventContext}\n` : ''}
+${solutionContext ? `\n━━━ SOLUTION TO POSITION ━━━\n${solutionContext}\nConnect it to their pain — don't pitch, hint at relevance.\n` : ''}
+${extraContext ? `\n━━━ SENDER'S PERSONAL CONTEXT (HIGHEST PRIORITY) ━━━\n"${extraContext}"\nThis MUST appear naturally in the message.\n` : ''}
+━━━ CHANNEL & FORMAT ━━━
+Channel: ${selectedChannel}
 Tone: ${chGuide.tone}
-Format: ${chGuide.format}
-${suggestedLanguage ? `Language: Write in ${suggestedLanguage} (account is based in ${accountCountry}).` : ''}
-${COMPANY_PROFILE.voiceTone ? `\nSENDER'S VOICE (CRITICAL — the message must sound like this person, not an AI):\n- Style: ${COMPANY_PROFILE.voiceTone}\n${COMPANY_PROFILE.voiceAvoid ? `- Never do: ${COMPANY_PROFILE.voiceAvoid}\n` : ''}${COMPANY_PROFILE.voiceExample ? `- Match this real example: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
-${COMPANY_PROFILE.goals ? `\nCOMPANY CONTEXT: ${COMPANY_PROFILE.goals}` : ''}
-${COMPANY_PROFILE.market ? `\nMARKET: ${COMPANY_PROFILE.market} — be culturally aware without overdoing it.` : ''}
+${chGuide.format}
+${suggestedLanguage ? `\nLanguage: ${suggestedLanguage} (account in ${accountCountry})` : ''}
+${COMPANY_PROFILE.voiceTone ? `\nSender's voice — MUST sound like this person:\n- ${COMPANY_PROFILE.voiceTone}${COMPANY_PROFILE.voiceAvoid ? `\n- Never: ${COMPANY_PROFILE.voiceAvoid}` : ''}${COMPANY_PROFILE.voiceExample ? `\n- Example from sender: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
+${COMPANY_PROFILE.market ? `\nMarket: ${COMPANY_PROFILE.market}` : ''}
 
-HARD RULES:
-1. Open with THEIR world — first sentence must be about them (news, challenge, role, trigger), not about ${COMPANY_PROFILE.companyName}
-2. Use their first name only, never full name
-3. Connect ${COMPANY_PROFILE.companyName}'s value to ONE specific challenge of theirs — no generic service lists
-4. ONE micro-CTA — low friction, specific. Not "let me know if you're interested"
-5. BANNED: "I hope this finds you well" / "I came across your profile" / "I wanted to reach out" / "I'd love to connect" / "just checking in" / "following up" / "touching base" / "as a leader in" / "I noticed that you"
-6. Read it aloud before outputting — if it sounds like an AI wrote it, rewrite it
-7. Output ONLY the message. No intro, no explanation, no "Here's a draft..."`;
+━━━ RULES ━━━
+1. OPEN with something specific about THEM — their news, a challenge, a trigger. NOT about ${COMPANY_PROFILE.companyName}.
+2. If pain points are available: connect ${COMPANY_PROFILE.companyName}'s value to ONE specific pain point. Never list services generically.
+3. If follow-up: you MUST write something noticeably different from a first-contact message. The reader should feel this is NOT the first time.
+4. First name only — never full name in the body.
+5. ONE micro-CTA — specific and low friction. Not "let me know if you're interested."
+6. BANNED PHRASES: "I hope this finds you well" / "I came across your profile" / "I wanted to reach out" / "I'd love to connect" / "just checking in" / "following up" / "touching base" / "as a leader in" / "congratulations on" (too generic) / "I noticed that"
+7. If it sounds like an AI wrote it, rewrite it.
+8. Output ONLY the message — no intro, no explanation, no subject line prefix unless Email format requires it.`;
 
-          const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 500 });
+          const generated = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
         } catch (e) {
           console.error(e);
@@ -1691,7 +1684,7 @@ HARD RULES:
       const handleSend = (channel) => {
         if (!currentMessage.trim()) return;
         const ccList = (channel === 'Email' && ccPartner && cpEmails.length > 0) ? cpEmails : [];
-        onSend(stakeholder, channel, currentMessage, ccList);
+        onSend(stakeholder, channel, currentMessage, ccList, isEventInvite ? selectedEventId : null);
         onClose();
       };
 
@@ -1708,7 +1701,7 @@ HARD RULES:
             'Date': new Date().toISOString(),
             'Status': 'Draft',
             'Message': currentMessage,
-            'Notes': `Saved as draft from AI Message Generator (${tabPrompts[tab]?.label || tab})${selectedChannel === 'Email' && ccPartner && cpEmails.length > 0 ? ` | CC: ${cpEmails.join(', ')}` : ''}`,
+            'Notes': `Saved as draft from AI Message Generator (${tab === 'first' ? 'First Contact' : tab === 'breakup' ? 'Breakup' : 'Follow-up'})${selectedChannel === 'Email' && ccPartner && cpEmails.length > 0 ? ` | CC: ${cpEmails.join(', ')}` : ''}`,
             'Logged By': CURRENT_USER?.name || '',
             ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
@@ -1772,7 +1765,8 @@ HARD RULES:
               <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>2. MESSAGE TYPE</label>
               <div className="tabs">
                 <button className={`tab-btn ${tab === 'first' ? 'active' : ''}`} onClick={() => setTab('first')}>First Contact</button>
-                <button className={`tab-btn ${tab === 'followup' ? 'active' : ''}`} onClick={() => setTab('followup')}>Follow-up{sOutreach.length > 0 ? ` · ${sOutreach.length} touches` : ''}</button>
+                <button className={`tab-btn ${tab === 'followup' ? 'active' : ''}`} onClick={() => setTab('followup')}>Follow-up{sOutreach.length > 0 ? ` · ${sOutreach.length}` : ''}</button>
+                <button className={`tab-btn ${tab === 'breakup' ? 'active' : ''}`} onClick={() => setTab('breakup')}>Breakup 💀</button>
               </div>
             </div>
 
@@ -1859,7 +1853,7 @@ HARD RULES:
               onClick={handleGenerate}
               disabled={loadingAI || !selectedChannel}
             >
-              {loadingAI ? '⏳ Generating with GPT-4o...' : !selectedChannel ? 'Select a channel first ↑' : `✨ Generate ${tabPrompts[tab]?.label} via ${selectedChannel}`}
+              {loadingAI ? '⏳ Generating with GPT-4o...' : !selectedChannel ? 'Select a channel first ↑' : `✨ Generate ${tab === 'first' ? 'First Contact' : tab === 'breakup' ? 'Breakup' : 'Follow-up'} via ${selectedChannel}`}
             </button>
 
             {/* Generated message */}
@@ -2028,7 +2022,7 @@ HARD RULES:
         return [...levels].sort();
       }, [stakeholders]);
 
-      const useMessage = (stakeholder, channel, message, ccList = []) => {
+      const useMessage = (stakeholder, channel, message, ccList = [], _eventId = null) => {
         const name = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -2621,6 +2615,7 @@ HARD RULES:
               onRefresh={onLogActivity}
               allData={data}
               onNavigateToAccount={goToAccount}
+              onSend={useMessage}
             />
           )}
         </div>
@@ -2846,7 +2841,7 @@ HARD RULES:
         if (onLogActivity) onLogActivity();
       };
 
-      const useMessage = (stakeholder, channel, message) => {
+      const useMessage = (stakeholder, channel, message, ccList = [], _eventId = null) => {
         const name = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -3182,6 +3177,7 @@ HARD RULES:
               onRefresh={onLogActivity}
               allData={data}
               onNavigateToAccount={goToAccount}
+              onSend={useMessage}
             />
           )}
           {editingContact && (
@@ -4101,7 +4097,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
       };
 
       // CP Briefings: use message (send + log)
-      const cpUseMessage = async (stakeholder, channel, message, ccList = []) => {
+      const cpUseMessage = async (stakeholder, channel, message, ccList = [], _eventId = null) => {
         const sn = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -5502,6 +5498,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               onRefresh={onLogActivity}
               allData={data}
               onNavigateToAccount={goToAccount}
+              onSend={cpUseMessage}
             />
           )}
 
@@ -6421,7 +6418,7 @@ Return ONLY the JSON array, nothing else.`;
         setRemovingInvite(null);
       };
 
-      const evUseMessage = async (stakeholder, channel, message, ccList = []) => {
+      const evUseMessage = async (stakeholder, channel, message, ccList = [], eventId = null) => {
         const sn = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -6452,6 +6449,18 @@ Return ONLY the JSON array, nothing else.`;
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          // If this was an event invite from AI Generator, link the stakeholder to the event
+          if (eventId) {
+            const ev = data.events?.find(e => e.id === eventId);
+            if (ev) {
+              const currentInvited = linkedIds(ev, 'Stakeholders invited');
+              if (!currentInvited.includes(stakeholder.id)) {
+                await a.updateRecord(TABLE_IDS.events, eventId, {
+                  'Stakeholders invited': [...currentInvited, stakeholder.id]
+                });
+              }
+            }
+          }
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Event message log failed:', e); }
       };
@@ -6697,6 +6706,7 @@ Return ONLY the JSON array, nothing else.`;
                 onClose={() => setEvHistoryStakeholder(null)}
                 onRefresh={onLogActivity}
                 allData={data}
+                onSend={evUseMessage}
               />
             )}
 
