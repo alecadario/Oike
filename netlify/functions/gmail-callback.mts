@@ -58,21 +58,21 @@ export default async (req: Request, context: Context) => {
 
   // User denied access
   if (error) {
-    return Response.redirect('https://oike.app?gmail=denied', 302);
+    return Response.redirect('https://oike.app/app?gmail=denied', 302);
   }
 
   if (!code || !state) {
-    return Response.redirect('https://oike.app?gmail=error', 302);
+    return Response.redirect('https://oike.app/app?gmail=error', 302);
   }
 
   // Decode user email from state
   let userEmail = '';
   try { userEmail = atob(state); } catch {
-    return Response.redirect('https://oike.app?gmail=error', 302);
+    return Response.redirect('https://oike.app/app?gmail=error', 302);
   }
 
   if (!userEmail) {
-    return Response.redirect('https://oike.app?gmail=error', 302);
+    return Response.redirect('https://oike.app/app?gmail=error', 302);
   }
 
   const clientId     = Netlify.env.get('GOOGLE_CLIENT_ID');
@@ -80,22 +80,22 @@ export default async (req: Request, context: Context) => {
   const airtableKey  = Netlify.env.get('AIRTABLE_API_KEY');
 
   if (!clientId || !clientSecret || !airtableKey) {
-    return Response.redirect('https://oike.app?gmail=error', 302);
+    return Response.redirect('https://oike.app/app?gmail=error', 302);
   }
 
   // Exchange code for tokens
   const tokens = await exchangeCode(code, clientId, clientSecret);
   if (!tokens || !tokens.refresh_token) {
-    return Response.redirect('https://oike.app?gmail=error', 302);
+    return Response.redirect('https://oike.app/app?gmail=error', 302);
   }
 
   // Store refresh token in Airtable
   const stored = await storeRefreshToken(userEmail, tokens.refresh_token, airtableKey);
   if (!stored) {
-    return Response.redirect('https://oike.app?gmail=error', 302);
+    return Response.redirect('https://oike.app/app?gmail=error', 302);
   }
 
-  return Response.redirect('https://oike.app?gmail=connected', 302);
+  return Response.redirect('https://oike.app/app?gmail=connected', 302);
 };
 
 export const config: Config = { path: '/api/gmail/callback' };
