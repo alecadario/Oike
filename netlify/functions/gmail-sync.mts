@@ -211,6 +211,24 @@ export default async (req: Request, context: Context) => {
     const emailMap = new Map<string, typeof stakeholders[0]>();
     for (const s of stakeholders) emailMap.set(s.email, s);
 
+    // 3b. Confirm which Gmail account is connected
+    let gmailAccountEmail = 'unknown';
+    try {
+      const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      if (profileRes.ok) {
+        const prof = await profileRes.json();
+        gmailAccountEmail = prof.emailAddress || 'unknown';
+      } else {
+        const errText = await profileRes.text();
+        console.error('[gmail-sync] Profile fetch failed:', profileRes.status, errText);
+        return new Response(JSON.stringify({ error: `Gmail auth error (${profileRes.status}). Please reconnect Gmail.` }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch (e) {
+      console.error('[gmail-sync] Profile fetch exception:', e);
+    }
+
     // 4. Fetch recent emails
     const emails = await fetchRecentEmails(accessToken, daysBack);
 
@@ -262,8 +280,10 @@ export default async (req: Request, context: Context) => {
     }
 
     const diagMsg = synced > 0
-      ? `✅ ${synced} email(s) logged from the last ${daysBack} days.`
-      : `No matches found. Scanned ${emails.length} Gmail message(s) against ${stakeholders.length} contact(s) with email addresses. Make sure your contacts have email addresses and you've exchanged emails with them recently.`;
+      ? `✅ ${synced} email(s) logged. (Gmail: ${gmailAccountEmail}, scanned ${emails.length} messages)`
+      : emails.length === 0
+        ? `Gmail account "${gmailAccountEmail}" — 0 messages found in last ${daysBack} days. Check that this is the right Gmail account and that it has sent/received emails recently.`
+        : `No matches. Gmail "${gmailAccountEmail}" had ${emails.length} message(s) but none matched ${stakeholders.length} contact email(s) in your CRM.`;
 
     return new Response(JSON.stringify({ synced, total: emails.length, contacts: stakeholders.length, message: diagMsg }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
