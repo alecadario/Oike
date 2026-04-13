@@ -1449,6 +1449,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [eventMode, setEventMode] = useState('invite'); // 'invite' | 'followup'
       const [selectedSolutionId, setSelectedSolutionId] = useState('');
       const [showAdvanced, setShowAdvanced] = useState(false);
+      const [selectedLanguage, setSelectedLanguage] = useState('');
 
       const currentMessage = generatedMessages[tab] || '';
 
@@ -1667,15 +1668,16 @@ ${extraContext ? `\n━━━ EXTRA CONTEXT — HIGHEST PRIORITY ━━━\n"${e
 Channel: ${selectedChannel}
 Tone: ${chGuide.tone}
 ${chGuide.format}
-${suggestedLanguage ? `\nLanguage: ${suggestedLanguage} (account in ${accountCountry})` : ''}
+Language: ${selectedLanguage || suggestedLanguage || 'English'} — write the ENTIRE message in this language.
 ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}${COMPANY_PROFILE.voiceAvoid ? `\n- Never: ${COMPANY_PROFILE.voiceAvoid}` : ''}${COMPANY_PROFILE.voiceExample ? `\n- Example: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
 
 ━━━ RULES ━━━
 1. First name only — never full name in the body.
 2. ONE micro-CTA — specific, low friction.
-3. BANNED: "I hope this finds you well" / "I wanted to reach out" / "just checking in" / "following up" / "touching base" / "I'd love to connect" / "as a leader in" / "I noticed that"
-4. If it sounds like AI wrote it, rewrite it.
-5. Output ONLY the message — no intro, no explanation. Email: include Subject line first.`;
+3. BANNED PHRASES: "I hope this finds you well" / "I wanted to reach out" / "just checking in" / "following up" / "touching base" / "I'd love to connect" / "as a leader in" / "I noticed that"
+4. NEVER use [brackets] or placeholder text like [Company Name] or [insert X]. If you don't have the data, write around it naturally.
+5. If it sounds like AI wrote it, rewrite it.
+6. Output ONLY the message — no intro, no explanation. Email: first line must be "Subject: [your subject here]", then blank line, then body.`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
@@ -1838,6 +1840,22 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             </div>
 
             </>}
+
+            {/* Language selector */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>LANGUAGE <span style={{ fontWeight: 400 }}>(auto-detected: {suggestedLanguage || 'English'})</span></label>
+              <select className="input-field" style={{ width: '100%', fontSize: 12 }}
+                value={selectedLanguage} onChange={e => setSelectedLanguage(e.target.value)}>
+                <option value="">— Auto ({suggestedLanguage || 'English'}) —</option>
+                <option value="English">🇬🇧 English</option>
+                <option value="Spanish">🇪🇸 Español</option>
+                <option value="Portuguese">🇧🇷 Português</option>
+                <option value="French">🇫🇷 Français</option>
+                <option value="Arabic">🇸🇦 العربية</option>
+                <option value="German">🇩🇪 Deutsch</option>
+                <option value="Italian">🇮🇹 Italiano</option>
+              </select>
+            </div>
 
             {/* Your context */}
             <div style={{ marginBottom: 12 }}>
@@ -2034,10 +2052,13 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         const linkedin = F(stakeholder, 'LinkedIn') || '';
         let subject = '';
         let body = message;
-        if (channel === 'Email' && message.startsWith('Subject:')) {
+        if (channel === 'Email') {
           const lines = message.split('\n');
-          subject = lines[0].replace('Subject:', '').trim();
-          body = lines.slice(1).join('\n').trim();
+          const subjectIdx = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          if (subjectIdx !== -1) {
+            subject = lines[subjectIdx].replace(/^subject:\s*/i, '').trim();
+            body = lines.slice(subjectIdx + 1).join('\n').trim();
+          }
         }
         if (channel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
         else if (channel === 'Email' && email) { const ccParam = ccList.length > 0 ? `&cc=${encodeURIComponent(ccList.join(','))}` : ''; window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${ccParam}`, '_blank'); }
@@ -2851,8 +2872,17 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
         const linkedin = F(stakeholder, 'LinkedIn') || '';
+        let subject = '', body = message;
+        if (channel === 'Email') {
+          const lines = message.split('\n');
+          const subjectIdx = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          if (subjectIdx !== -1) {
+            subject = lines[subjectIdx].replace(/^subject:\s*/i, '').trim();
+            body = lines.slice(subjectIdx + 1).join('\n').trim();
+          }
+        }
         if (channel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
-        else if (channel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(message)}`, '_blank');
+        else if (channel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
         else if (channel === 'LinkedIn' && linkedin) { navigator.clipboard.writeText(message).catch(() => {}); window.open(linkedin, '_blank'); }
         const companyIds = linkedIds(stakeholder, 'Account');
         const outreachFields = {
@@ -4108,10 +4138,13 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         const phone = F(stakeholder, 'Phone number') || '';
         const linkedin = F(stakeholder, 'LinkedIn') || '';
         let subject = '', body = message;
-        if (channel === 'Email' && message.startsWith('Subject:')) {
+        if (channel === 'Email') {
           const lines = message.split('\n');
-          subject = lines[0].replace('Subject:', '').trim();
-          body = lines.slice(1).join('\n').trim();
+          const subjectIdx = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          if (subjectIdx !== -1) {
+            subject = lines[subjectIdx].replace(/^subject:\s*/i, '').trim();
+            body = lines.slice(subjectIdx + 1).join('\n').trim();
+          }
         }
         const ccParam = (channel === 'Email' && ccList.length > 0) ? `&cc=${encodeURIComponent(ccList.join(','))}` : '';
         if (channel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
@@ -6429,10 +6462,13 @@ Return ONLY the JSON array, nothing else.`;
         const phone = F(stakeholder, 'Phone number') || '';
         const linkedin = F(stakeholder, 'LinkedIn') || '';
         let subject = '', body = message;
-        if (channel === 'Email' && message.startsWith('Subject:')) {
+        if (channel === 'Email') {
           const lines = message.split('\n');
-          subject = lines[0].replace('Subject:', '').trim();
-          body = lines.slice(1).join('\n').trim();
+          const subjectIdx = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          if (subjectIdx !== -1) {
+            subject = lines[subjectIdx].replace(/^subject:\s*/i, '').trim();
+            body = lines.slice(subjectIdx + 1).join('\n').trim();
+          }
         }
         const ccParam = (channel === 'Email' && ccList.length > 0) ? `&cc=${encodeURIComponent(ccList.join(','))}` : '';
         if (channel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
