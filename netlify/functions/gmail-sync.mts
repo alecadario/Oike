@@ -93,6 +93,7 @@ async function fetchRecentEmails(accessToken: string, daysBack = 30): Promise<an
   // Gmail `after:` operator requires YYYY/MM/DD format, not Unix timestamps
   const afterDate = new Date(Date.now() - daysBack * 24 * 3600 * 1000);
   const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
+  // Only INBOX — log received emails from contacts, not outbound sent
   const query = encodeURIComponent(`after:${afterStr}`);
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`;
 
