@@ -38,7 +38,7 @@
       localStorage.setItem('oike_base_id', loginBaseId);
       TABLE_IDS = data.config?.tables || {};
       CLIENT_CONFIG = data.config || {};
-      console.log('LOGIN OK — baseId:', AIRTABLE_BASE_ID, 'tables:', TABLE_IDS);
+      // login successful
       return data;
     }
 
@@ -74,6 +74,19 @@
     // ============ COMPANY PROFILE (configurable per client) ============
     const COMPANY_PROFILE_KEY = 'oike_company_profile';
     const SOURCE_OPTIONS = ['Outbound', 'Inbound - Events', 'Inbound - Paid Media', 'Inbound - Referral', 'Inbound - Website', 'Inbound - Direct'];
+
+    // ============ PIPELINE CONSTANTS ============
+    const OPP_STAGES     = ['Prospecting', 'Qualification', 'Discovery', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost', 'On Hold'];
+    const WON_STAGES     = ['Closed Won', 'Closed/Won', 'Cierre ganado'];
+    const CLOSED_STAGES  = [...WON_STAGES, 'Closed Lost', 'Closed/Lost', 'Closed/Canceled', 'Cierre perdido'];
+
+    // ============ PERFORMANCE BENCHMARKS ============
+    // Reply rate: ≥20% = above benchmark, ≥8% = on benchmark, <8% = below
+    // Meeting rate: ≥5% = above benchmark, ≥2% = on benchmark, <2% = below
+    const BENCH_REPLY_HIGH   = 20;
+    const BENCH_REPLY_LOW    = 8;
+    const BENCH_MEETING_HIGH = 5;
+    const BENCH_MEETING_LOW  = 2;
     let COMPANY_PROFILE = (() => {
       const defaults = {
         companyName: 'Your Company',
@@ -376,29 +389,22 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           const a = new AirtableAPI();
           // Step 1: Update trigger field to fire Airtable Automation
           const triggerTime = new Date().toISOString();
-          console.log('[LinkedIn] Step 1: Updating AI Refresh Trigger to', triggerTime);
           await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, {
             'AI Refresh Trigger': triggerTime
           });
 
-          // Step 2: Wait for Airtable Automation + AI to regenerate
+          // Wait for Airtable Automation + AI to regenerate
           setGenLoading('linkedin-wait');
-          console.log('[LinkedIn] Step 2: Waiting 20s for Airtable AI...');
           await new Promise(r => setTimeout(r, 20000));
 
-          // Step 3: Re-fetch the record to get fresh aiText
-          console.log('[LinkedIn] Step 3: Re-fetching record...');
+          // Re-fetch the record to get fresh aiText
           const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${TABLE_IDS.stakeholders}/${stakeholder.id}`;
           const res = await fetch(url, { headers: { Authorization: `Bearer ${atKey}` } });
           if (!res.ok) throw new Error('Failed to fetch updated record');
           const record = await res.json();
 
-          // Debug: log the raw field value
-          const rawVal = record?.fields?.['Linkedin lates news'];
-          console.log('[LinkedIn] Raw field value:', JSON.stringify(rawVal));
-          console.log('[LinkedIn] Field state:', rawVal?.state, 'isAiText:', typeof rawVal === 'object' && rawVal?.value !== undefined);
-
           // Handle aiText: could be {value: "...", state: "generated"} or just a string
+          const rawVal = record?.fields?.['Linkedin lates news'];
           let freshText = '';
           if (rawVal && typeof rawVal === 'object' && rawVal.value) {
             freshText = rawVal.value;
@@ -409,16 +415,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           if (freshText) {
             setLocalLinkedin(freshText);
             try { localStorage.setItem(LINKEDIN_CACHE_KEY, freshText); } catch {}
-            console.log('[LinkedIn] Success! Got', freshText.length, 'chars');
           } else {
-            // Maybe AI is still generating — try again after 10 more seconds
-            console.log('[LinkedIn] No value yet, retrying in 10s...');
+            // AI still generating — retry after 10 more seconds
             setGenLoading('linkedin-retry');
             await new Promise(r => setTimeout(r, 10000));
             const res2 = await fetch(url, { headers: { Authorization: `Bearer ${atKey}` } });
             const record2 = await res2.json();
             const rawVal2 = record2?.fields?.['Linkedin lates news'];
-            console.log('[LinkedIn] Retry raw value:', JSON.stringify(rawVal2));
             const text2 = rawVal2?.value || (typeof rawVal2 === 'string' ? rawVal2 : '');
             if (text2) {
               setLocalLinkedin(text2);
@@ -805,8 +808,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
       // ─── CORE DATA ───
       const meetingStatuses = ['Meeting Scheduled', 'Meeting Booked'];
-      const closedStages = ['Closed Won', 'Closed Lost', 'Closed/Won', 'Closed/Lost', 'Closed/Canceled', 'Cierre ganado', 'Cierre perdido'];
-      const wonStages = ['Closed Won', 'Closed/Won', 'Cierre ganado'];
+      // closedStages / wonStages defined globally as CLOSED_STAGES / WON_STAGES
+      const closedStages = CLOSED_STAGES;
+      const wonStages = WON_STAGES;
 
       const allMeetings = outreach.filter(o => meetingStatuses.includes(F(o, 'Status')));
       const wonOpps = opportunities.filter(o => wonStages.includes(F(o, 'Stage')));
@@ -4386,7 +4390,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       };
 
       // ─── OPPORTUNITY CREATE / EDIT ───
-      const OPP_STAGES = ['Prospecting', 'Qualification', 'Discovery', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost', 'On Hold'];
+      // OPP_STAGES defined globally above
 
       const openNewOpp = () => {
         setOppForm({ name: '', stage: 'Prospecting', description: '', owner: '', value: '', closeDate: '', openingDate: '', nextStep: '' });
@@ -5612,8 +5616,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       const [loadingProjection, setLoadingProjection] = useState(false);
 
       const meetingStatuses = ['Meeting Scheduled', 'Meeting Booked'];
-      const wonStages = ['Closed Won', 'Closed/Won', 'Cierre ganado'];
-      const wonOppsAll = opportunities.filter(o => wonStages.includes(F(o, 'Stage')));
+      const wonOppsAll = opportunities.filter(o => WON_STAGES.includes(F(o, 'Stage')));
 
       // Selected user for personal view
       const selectedUserRecord = insightsView === 'company' ? null : (users.find(u => u.id === insightsView) || currentUserRecord);
@@ -5773,12 +5776,12 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const meetingRate = totalOutreach > 0 ? Math.round((meetingCount / totalOutreach) * 100) : 0;
 
       // Benchmarks
-      const replyBench = replyRate >= 20 ? { label: 'Above benchmark', color: '#4ade80', icon: '🟢' }
-        : replyRate >= 8 ? { label: 'On benchmark', color: '#fbbf24', icon: '🟡' }
-        : { label: 'Below benchmark (8-20%)', color: '#f87171', icon: '🔴' };
-      const meetingBench = meetingRate >= 5 ? { label: 'Above benchmark', color: '#4ade80', icon: '🟢' }
-        : meetingRate >= 2 ? { label: 'On benchmark', color: '#fbbf24', icon: '🟡' }
-        : { label: 'Below benchmark (2-5%)', color: '#f87171', icon: '🔴' };
+      const replyBench = replyRate >= BENCH_REPLY_HIGH ? { label: 'Above benchmark', color: '#4ade80', icon: '🟢' }
+        : replyRate >= BENCH_REPLY_LOW ? { label: 'On benchmark', color: '#fbbf24', icon: '🟡' }
+        : { label: `Below benchmark (${BENCH_REPLY_LOW}–${BENCH_REPLY_HIGH}%)`, color: '#f87171', icon: '🔴' };
+      const meetingBench = meetingRate >= BENCH_MEETING_HIGH ? { label: 'Above benchmark', color: '#4ade80', icon: '🟢' }
+        : meetingRate >= BENCH_MEETING_LOW ? { label: 'On benchmark', color: '#fbbf24', icon: '🟡' }
+        : { label: `Below benchmark (${BENCH_MEETING_LOW}–${BENCH_MEETING_HIGH}%)`, color: '#f87171', icon: '🔴' };
 
       // Last contact per stakeholder
       const staleStakeholders = [];
@@ -6088,13 +6091,13 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
               <div style={{ fontSize: 32, fontWeight: 800, color: replyBench.color, lineHeight: 1 }}>{replyRate}%</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Reply Rate</div>
               <div style={{ fontSize: 9, color: replyBench.color, marginTop: 4, fontWeight: 600 }}>{replyBench.icon} {replyBench.label}</div>
-              <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>Benchmark: 8–20%</div>
+              <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>{`Benchmark: ${BENCH_REPLY_LOW}–${BENCH_REPLY_HIGH}%`}</div>
             </div>
             <div className="card" style={{ textAlign: 'center', padding: '18px 12px', borderBottom: `3px solid ${meetingBench.color}` }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: meetingBench.color, lineHeight: 1 }}>{meetingRate}%</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Meeting Rate</div>
               <div style={{ fontSize: 9, color: meetingBench.color, marginTop: 4, fontWeight: 600 }}>{meetingBench.icon} {meetingBench.label}</div>
-              <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>Benchmark: 2–5%</div>
+              <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>{`Benchmark: ${BENCH_MEETING_LOW}–${BENCH_MEETING_HIGH}%`}</div>
               <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>{meetingCount} meetings / {totalOutreach} touches</div>
             </div>
             <div className="card" style={{ textAlign: 'center', padding: '18px 12px' }}>
@@ -7292,7 +7295,7 @@ Return ONLY the JSON array, nothing else.`;
       const [solHubOppForm, setSolHubOppForm] = useState({});
       const [solHubOppSolIds, setSolHubOppSolIds] = useState([]);
       const [savingSolHubOpp, setSavingSolHubOpp] = useState(false);
-      const OPP_STAGES_SH = ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closed Won','Closed Lost','On Hold'];
+      const OPP_STAGES_SH = OPP_STAGES;
 
       const openSolHubOppEdit = (opp) => {
         setSolHubOppForm({
