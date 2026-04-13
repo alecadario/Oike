@@ -198,7 +198,7 @@ export default async (req: Request, context: Context) => {
     // 3. Fetch stakeholders with emails
     const stakeholders = await fetchStakeholders(baseId, stakeholdersTableId, airtableKey);
     if (stakeholders.length === 0) {
-      return new Response(JSON.stringify({ synced: 0, message: 'No contacts with email addresses found.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ synced: 0, message: 'No contacts with email addresses found. Add email addresses to your contacts first.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // Build a lookup map: email → stakeholder
@@ -255,7 +255,11 @@ export default async (req: Request, context: Context) => {
       if (logged) synced++;
     }
 
-    return new Response(JSON.stringify({ synced, total: emails.length, message: `${synced} email(s) logged from the last ${daysBack} days.` }), {
+    const diagMsg = synced > 0
+      ? `✅ ${synced} email(s) logged from the last ${daysBack} days.`
+      : `No matches found. Scanned ${emails.length} Gmail message(s) against ${stakeholders.length} contact(s) with email addresses. Make sure your contacts have email addresses and you've exchanged emails with them recently.`;
+
+    return new Response(JSON.stringify({ synced, total: emails.length, contacts: stakeholders.length, message: diagMsg }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
 
