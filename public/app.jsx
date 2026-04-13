@@ -2923,7 +2923,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         const a = api || new AirtableAPI();
         a.updateRecord(TABLE_IDS.stakeholders, editingContact.id, updatedFields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to save. Refreshing...'); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); alert('Failed to save contact: ' + (e.message || 'Unknown error')); if (onLogActivity) onLogActivity(); });
       };
 
       const influenceLevels = useMemo(() => {
@@ -3550,6 +3550,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           'Role': values['Role'], 'Email': values['Email'],
           'Phone number': values['Phone number'], 'LinkedIn': values['LinkedIn'],
           'Campaign': values['Campaign'],
+          'Country': values['Country'] || null,
           'Level of Influence': values['Level of Influence'] || null,
           'Source': values['Source'] || null,
         };
