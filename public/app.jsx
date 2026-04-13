@@ -8748,7 +8748,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!contact.firstName.trim()) return alert('First name is required.');
         setSaving(true);
         try {
-          const fields = { 'First name': contact.firstName.trim() };
+          const fields = { 'Name': contact.firstName.trim() };
           if (contact.lastName)  fields['Last name'] = contact.lastName.trim();
           if (contact.role)      fields['Role']      = contact.role.trim();
           if (contact.linkedin)  fields['LinkedIn']  = contact.linkedin.trim();
