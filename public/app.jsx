@@ -283,7 +283,7 @@
     };
 
     // ============ STAKEHOLDER HISTORY MODAL ============
-    function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData }) {
+    function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData, onNavigateToAccount }) {
       if (!stakeholder) return null;
       const [genLoading, setGenLoading] = useState(''); // 'pain' | 'linkedin' | ''
       const PAIN_TS_LS_KEY = 'oike_pain_timestamps';
@@ -298,6 +298,7 @@
       const [quickMsg, setQuickMsg] = useState('');
       const [quickMsgChannel, setQuickMsgChannel] = useState('LinkedIn');
       const [sendingQuickMsg, setSendingQuickMsg] = useState(false);
+      const [showAIGenerator, setShowAIGenerator] = useState(false);
 
       const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Lart name') ? ` ${F(stakeholder, 'Lart name')}` : '');
       const accNames = resolveLinked(stakeholder, 'Account', accounts, 'Account Name');
@@ -347,6 +348,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           if (!stakeholder.id.startsWith('tmp_')) {
             const a = new AirtableAPI();
             a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated })
+              .then(() => { if (onRefresh) onRefresh(); })
               .catch(e => console.warn('Could not persist pain points to Airtable:', e.message));
           }
         } catch (e) {
@@ -425,13 +427,14 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const linkedinText = typeof localLinkedin === 'string' ? localLinkedin : String(localLinkedin || '');
 
       return (
+        <>
         <div className="modal-overlay" onClick={onClose}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '85vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: 18 }}>{sName}</h3>
                 <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 4 }}>
-                  {role}{accNames.length ? ` · ${accNames.join(', ')}` : ''}
+                  {role}{account && onNavigateToAccount ? <span> · <span style={{ color: 'var(--globant-green)', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { onClose(); onNavigateToAccount(account.id); }}>{accountName}</span></span> : (accNames.length ? ` · ${accNames.join(', ')}` : '')}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   {F(stakeholder, 'Email') && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>✉️ {F(stakeholder, 'Email')}</span>}
@@ -503,6 +506,19 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               </div>
             </div>
 
+            {/* AI Message Generator toggle */}
+            <div style={{ marginBottom: 12 }}>
+              <button
+                onClick={() => setShowAIGenerator(v => !v)}
+                style={{ width: '100%', padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                  background: showAIGenerator ? 'rgba(91,191,181,0.15)' : 'rgba(91,191,181,0.07)',
+                  border: '1px solid rgba(91,191,181,0.35)', color: 'var(--globant-green)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>✨ Generate with AI</span>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{showAIGenerator ? '▲ collapse' : '▼ expand'}</span>
+              </button>
+            </div>
+
             {/* Manual Quick Message */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--globant-text)' }}>✍️ Quick Message</div>
@@ -541,8 +557,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                         'Status': 'Sent', 'Message': quickMsg,
                         'Notes': 'Sent via Quick Message',
                         'Logged By': CURRENT_USER?.name || '',
-                        'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-                        'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+                        ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+                        ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
                       });
                                 } catch (e) { console.error('Quick message log failed:', e); }
                     setQuickMsg('');
@@ -600,13 +616,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                               'Activity Name': `${act.label} — ${sName} — ${new Date().toLocaleDateString('en-US')}`,
                               'Account': accountIds,
                               'Stakeholder': [stakeholder.id],
-                              'Channel': 'Email',
+                              'Channel': quickAction === 'meeting' ? 'Calendar' : 'Email',
                               'Date': new Date().toISOString(),
                               'Status': act.status,
                               ...(quickNote ? { 'Notes': quickNote } : {}),
                               'Logged By': CURRENT_USER?.name || '',
-                              'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-                              'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+                              ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+                              ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
                             });
                             await activateAccountIfNeeded(a, accountIds, accounts);
                             setQuickAction('');
@@ -674,6 +690,16 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             )}
           </div>
         </div>
+
+        {showAIGenerator && (
+          <AIMessageModal
+            stakeholder={stakeholder}
+            onClose={() => setShowAIGenerator(false)}
+            onSend={() => setShowAIGenerator(false)}
+            data={{ ...allData, outreach: allData?.outreach || [] }}
+          />
+        )}
+        </>
       );
     }
 
@@ -1576,6 +1602,9 @@ ACCOUNT CONTEXT:
 - Active Opportunities: ${oppSummary || 'None'}
 - Inside Sales Plan: ${planText || 'Not available'}
 - Intel Notes (recent context from BDR): ${intelNotesText || 'None'}
+${sOutreach.length > 0 ? `
+INTERACTION HISTORY (${sOutreach.length} previous touches — most recent first):
+${sOutreach.slice(0, 5).map(o => `- [${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown date'}] ${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'}${F(o,'Message') ? ': "' + String(F(o,'Message')).slice(0, 120) + (String(F(o,'Message')).length > 120 ? '..."' : '"') : ''}${F(o,'Notes') ? ' | Note: ' + String(F(o,'Notes')).slice(0, 80) : ''}`).join('\n')}` : ''}
 
 MESSAGE TYPE: ${eventContext && eventMode === 'followup' ? 'Post-Event Follow-up' : tabGuide.label}
 ${eventContext && eventMode === 'followup' ? 'This is a WARM follow-up after meeting in person at an event. The relationship has already started — do NOT treat this as cold outreach. Skip introductions, reference the meeting naturally, and focus on continuing the conversation with one clear next step.' : tabGuide.goal}
@@ -1633,8 +1662,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             'Message': currentMessage,
             'Notes': `Saved as draft from AI Message Generator (${tabPrompts[tab]?.label || tab})${selectedChannel === 'Email' && ccPartner && cpEmails.length > 0 ? ` | CC: ${cpEmails.join(', ')}` : ''}`,
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           alert('Draft saved! Run "create-gmail-drafts" task to push to Gmail.');
           onClose();
@@ -1802,7 +1831,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
     }
 
     // ============ FOLLOW-UP CENTER ============
-    function FollowupCenter({ data, api, onLogActivity, onAddRecord }) {
+    function FollowupCenter({ data, api, onLogActivity, onAddRecord, goToAccount }) {
       const { accounts, stakeholders, outreach } = data;
       const [accountSearch, setAccountSearch] = useState('');
       const [selectedInfluence, setSelectedInfluence] = useState('');
@@ -1881,8 +1910,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             'Message': responseContent,
             'Notes': 'Stakeholder responded — logged from Follow-up Center',
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
@@ -1905,8 +1934,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
             'Message': notes || '',
             'Notes': `Meeting ${date ? `on ${date}` : 'TBD'} — logged from Follow-up Center`,
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
@@ -1966,8 +1995,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           'Status': 'Sent', 'Message': message || '',
           'Notes': 'Auto-logged from Follow-up Center',
           'Logged By': CURRENT_USER?.name || '',
-          'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-          'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+          ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+          ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
         };
         if (onAddRecord) onAddRecord('outreach', outreachFields);
         const a = api || new AirtableAPI();
@@ -2533,6 +2562,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               onClose={() => setHistoryStakeholder(null)}
               onRefresh={onLogActivity}
               allData={data}
+              onNavigateToAccount={goToAccount}
             />
           )}
         </div>
@@ -2598,7 +2628,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
     }
 
     // ============ CONTACTS SECTION ============
-    function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord }) {
+    function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord, goToAccount }) {
       const { accounts, stakeholders, outreach } = data;
       const [searchName, setSearchName] = useState('');
       const [searchAccount, setSearchAccount] = useState('');
@@ -2774,8 +2804,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
           'Status': 'Sent', 'Message': message,
           'Notes': 'Sent from Contacts',
           'Logged By': CURRENT_USER?.name || '',
-          'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-          'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+          ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+          ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
         };
         if (onAddRecord) onAddRecord('outreach', outreachFields);
         const a = api || new AirtableAPI();
@@ -3093,6 +3123,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               onClose={() => setHistoryStakeholder(null)}
               onRefresh={onLogActivity}
               allData={data}
+              onNavigateToAccount={goToAccount}
             />
           )}
           {editingContact && (
@@ -3343,7 +3374,7 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
     }
 
     // ============ CP BRIEFINGS ============
-    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate }) {
+    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, goToAccount }) {
       const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [] } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -3982,8 +4013,8 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             'Status': 'Meeting Scheduled', 'Message': notes || '',
             'Notes': `Meeting ${date ? `on ${date}` : 'TBD'} — logged from CP Briefings`,
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
@@ -4003,8 +4034,8 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             'Status': 'Sent', 'Message': notes || '',
             'Notes': `Call logged from CP Briefings`,
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
@@ -4039,8 +4070,8 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             'Status': 'Sent', 'Message': message || '',
             'Notes': `Auto-logged from CP Briefings`,
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
@@ -4074,8 +4105,8 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         if (newStkPhone.trim()) fields['Phone number'] = newStkPhone.trim();
         if (newStkLinkedin.trim()) fields['LinkedIn'] = newStkLinkedin.trim();
         if (newStkInfluence) fields['Level of Influence'] = newStkInfluence;
-        fields['BDR Owner'] = CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '';
-        fields['CP Assigned'] = CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '';
+        if (CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name) fields['BDR Owner'] = CURRENT_USER.name;
+        if (CURRENT_USER?.role === 'cp' && CURRENT_USER?.name) fields['CP Assigned'] = CURRENT_USER.name;
         // Optimistic: show instantly
         if (onAddRecord) onAddRecord('stakeholders', fields);
         setNewStkName(''); setNewStkLastName(''); setNewStkRole(''); setNewStkEmail('');
@@ -4147,13 +4178,12 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         setUploadingFile(true);
         try {
           let content = '';
-          if (file.name.endsWith('.csv') || file.name.endsWith('.tsv')) {
+          try {
             content = await file.text();
-          } else if (file.name.endsWith('.json')) {
-            content = await file.text();
-          } else {
-            content = await file.text();
+          } catch (readErr) {
+            throw new Error(`Could not read file "${file.name}". Supported types: .txt, .csv, .json, .md, .html`);
           }
+          if (!content.trim()) throw new Error('File appears to be empty or unreadable.');
           const truncated = content.slice(0, 4000);
 
           const prompt = `You are a B2B sales intelligence analyst. Summarize the key insights from this file that are relevant for selling digital transformation, AI, CX, and data services to ${name}.
@@ -4180,7 +4210,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error(e);
-          alert('Failed to process file. Check OpenAI API key.');
+          alert('Failed to process file: ' + (e.message || 'Unknown error. Check file type and OpenAI API key.'));
         }
         setUploadingFile(false);
         e.target.value = '';
@@ -4218,8 +4248,8 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           const a = api || new AirtableAPI();
           const newRec = await a.createRecord(TABLE_IDS.solutions, {
             'Name': newSolName.trim(),
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           if (newRec?.id) {
             await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Solutions': [...currentSolIds, newRec.id] });
@@ -5413,6 +5443,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               onClose={() => setHistoryStakeholder(null)}
               onRefresh={onLogActivity}
               allData={data}
+              onNavigateToAccount={goToAccount}
             />
           )}
 
@@ -5789,6 +5820,22 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
             {insightsView !== 'company' && <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Showing personal insights for <strong style={{ color: 'var(--globant-text)' }}>{viewName}</strong></div>}
           </div>
 
+          {/* ─── PERSONAL KPI SUMMARY (always shown in personal view) ─── */}
+          {insightsView !== 'company' && viewMeetingsTarget === 0 && viewDealsTarget === 0 && (
+            <div style={{ display: 'flex', gap: 14, marginBottom: 20, flexWrap: 'wrap' }}>
+              <div className="card" style={{ flex: 1, minWidth: 140, borderLeft: '3px solid #60a5fa' }}>
+                <div style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>📅 MEETINGS ACHIEVED</div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: '#4ade80' }}>{viewMeetings.length}</div>
+                <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>Set a target in Strategy to track progress</div>
+              </div>
+              <div className="card" style={{ flex: 1, minWidth: 140, borderLeft: '3px solid #a78bfa' }}>
+                <div style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>📊 ACTIVITIES LOGGED</div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--globant-text)' }}>{viewActivities.length}</div>
+                <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>{activitiesPerWeek.toFixed(1)} / week avg (last 4 weeks)</div>
+              </div>
+            </div>
+          )}
+
           {/* ─── PERSONAL KPI PROJECTION (only in personal view with targets set) ─── */}
           {insightsView !== 'company' && (viewMeetingsTarget > 0 || viewDealsTarget > 0) && (
             <div style={{ marginBottom: 20 }}>
@@ -5816,16 +5863,16 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                       <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--globant-darker)', fontSize: 12 }}>
                         {activitiesNeeded !== null ? (
                           <>
-                            <div style={{ marginBottom: 6 }}>→ Necesitás <strong style={{ color: '#60a5fa' }}>{activitiesNeeded} actividades más</strong> para cerrar el gap</div>
-                            <div style={{ marginBottom: 6, color: 'var(--globant-muted)' }}>Tasa actual: <strong style={{ color: 'var(--globant-text)' }}>{(meetingConvRate * 100).toFixed(0)}%</strong> conversión · <strong style={{ color: 'var(--globant-text)' }}>{activitiesPerWeek.toFixed(1)}</strong> actividades/semana</div>
-                            {weeksToTarget !== null && <div style={{ color: weeksToTarget <= 4 ? '#4ade80' : weeksToTarget <= 8 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>⏱ A tu ritmo actual: ~{weeksToTarget.toFixed(1)} semanas para alcanzar el target</div>}
+                            <div style={{ marginBottom: 6 }}>→ You need <strong style={{ color: '#60a5fa' }}>{activitiesNeeded} more activities</strong> to close the gap</div>
+                            <div style={{ marginBottom: 6, color: 'var(--globant-muted)' }}>Current rate: <strong style={{ color: 'var(--globant-text)' }}>{(meetingConvRate * 100).toFixed(0)}%</strong> conversion · <strong style={{ color: 'var(--globant-text)' }}>{activitiesPerWeek.toFixed(1)}</strong> activities/week</div>
+                            {weeksToTarget !== null && <div style={{ color: weeksToTarget <= 4 ? '#4ade80' : weeksToTarget <= 8 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>⏱ At your current pace: ~{weeksToTarget.toFixed(1)} weeks to reach target</div>}
                           </>
                         ) : (
-                          <div style={{ color: 'var(--globant-muted)' }}>Insuficientes datos de actividad reciente (últimas 4 semanas) para proyectar.</div>
+                          <div style={{ color: 'var(--globant-muted)' }}>Not enough recent activity data (last 4 weeks) to project.</div>
                         )}
                       </div>
                     )}
-                    {meetingsGap === 0 && <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>🎉 ¡Target alcanzado!</div>}
+                    {meetingsGap === 0 && <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>🎉 Target reached!</div>}
                   </div>
                 )}
 
@@ -5851,11 +5898,11 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                       <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--globant-darker)', fontSize: 12 }}>
                         {meetingsNeededForDeals !== null ? (
                           <>
-                            <div style={{ marginBottom: 6 }}>→ Necesitás <strong style={{ color: '#a78bfa' }}>{meetingsNeededForDeals} reuniones más</strong> para cerrar el gap</div>
-                            <div style={{ color: 'var(--globant-muted)' }}>Tasa actual: <strong style={{ color: 'var(--globant-text)' }}>{(meetingsToDealRate * 100).toFixed(0)}%</strong> reunión → deal</div>
+                            <div style={{ marginBottom: 6 }}>→ You need <strong style={{ color: '#a78bfa' }}>{meetingsNeededForDeals} more meetings</strong> to close the gap</div>
+                            <div style={{ color: 'var(--globant-muted)' }}>Current rate: <strong style={{ color: 'var(--globant-text)' }}>{(meetingsToDealRate * 100).toFixed(0)}%</strong> meeting → deal</div>
                           </>
                         ) : (
-                          <div style={{ color: 'var(--globant-muted)' }}>Insuficientes datos para proyectar. Cerrá más reuniones primero.</div>
+                          <div style={{ color: 'var(--globant-muted)' }}>Not enough data to project. Close more meetings first.</div>
                         )}
                       </div>
                     )}
@@ -6221,8 +6268,8 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
             'Message': message,
             'Notes': `Event invitation for "${evName}" (${evDate})`,
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           // 2. Add stakeholder to event's "Stakeholders invited" field
           const currentInvited = linkedIds(event, 'Stakeholders invited');
@@ -6340,8 +6387,8 @@ Return ONLY the JSON array, nothing else.`;
             'Status': 'Sent', 'Message': message,
             'Notes': 'Sent from Events Hub',
             'Logged By': CURRENT_USER?.name || '',
-            'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '',
-            'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
@@ -8361,7 +8408,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
 
       const [ready, setReady] = useState(false);
-      const [page, setPage] = useState('overview');
+      const [page, setPage] = useState(() => localStorage.getItem('oike_page') || 'overview');
+      const setPageAndSave = useCallback((p) => { setPage(p); localStorage.setItem('oike_page', p); }, []);
       const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
@@ -8373,13 +8421,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       const goToAccount = useCallback((accountId) => {
         setNavigateToAccountId(accountId);
-        setPage('accounts');
-      }, []);
+        setPageAndSave('accounts');
+      }, [setPageAndSave]);
 
       const goToSolution = useCallback((solId) => {
         setNavigateToSolId(solId);
-        setPage('solutionshub');
-      }, []);
+        setPageAndSave('solutionshub');
+      }, [setPageAndSave]);
 
       // Optimistic update: add a record to local state instantly (before API response)
       const addToData = useCallback((tableKey, fields) => {
@@ -8554,12 +8602,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const bgSync = () => api && loadData(api, true);
       const pages = {
         overview: <StrategyOverview data={data} api={api} onUpdateRecord={updateInData} onAddRecord={addToData} onLogActivity={bgSync} />,
-        followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
-        contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
+        followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} goToAccount={goToAccount} />,
+        contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} goToAccount={goToAccount} />,
         activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         insights: <InsightsView data={data} />,
-        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} />,
+        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
       };
@@ -8609,7 +8657,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 <div
                   key={item.key}
                   className={'nav-item ' + (page === item.key ? 'active' : '')}
-                  onClick={() => { setPage(item.key); setSidebarOpen(false); }}
+                  onClick={() => { setPageAndSave(item.key); setSidebarOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
