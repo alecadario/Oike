@@ -294,6 +294,7 @@
       const [localLinkedin, setLocalLinkedin] = useState(F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '');
       const [quickAction, setQuickAction] = useState(''); // 'bounced' | 'reply' | 'meeting' | 'notinterested' | ''
       const [quickNote, setQuickNote] = useState('');
+      const [quickDate, setQuickDate] = useState('');
       const [savingQuick, setSavingQuick] = useState(false);
       const [quickMsg, setQuickMsg] = useState('');
       const [quickMsgChannel, setQuickMsgChannel] = useState('LinkedIn');
@@ -347,7 +348,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           } catch {}
           if (!stakeholder.id.startsWith('tmp_')) {
             const a = new AirtableAPI();
-            a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain Points (Generated)': generated })
+            a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain points': generated })
               .then(() => { if (onRefresh) onRefresh(); })
               .catch(e => console.warn('Could not persist pain points to Airtable:', e.message));
           }
@@ -601,6 +602,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 const act = actions[quickAction];
                 return (
                   <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {quickAction === 'meeting' && (
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Meeting date & time</label>
+                        <input type="datetime-local" className="input-field" style={{ fontSize: 12, width: '100%' }}
+                          value={quickDate} onChange={e => setQuickDate(e.target.value)} />
+                      </div>
+                    )}
                     {act.hasNote && (
                       <textarea className="input-field" style={{ width: '100%', minHeight: 50, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, marginBottom: 8 }}
                         placeholder={act.notePlaceholder} value={quickNote} onChange={e => setQuickNote(e.target.value)} />
@@ -617,7 +625,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                               'Account': accountIds,
                               'Stakeholder': [stakeholder.id],
                               'Channel': quickAction === 'meeting' ? 'Calendar' : 'Email',
-                              'Date': new Date().toISOString(),
+                              'Date': (quickAction === 'meeting' && quickDate) ? new Date(quickDate).toISOString() : new Date().toISOString(),
                               'Status': act.status,
                               ...(quickNote ? { 'Notes': quickNote } : {}),
                               'Logged By': CURRENT_USER?.name || '',
@@ -627,7 +635,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                             await activateAccountIfNeeded(a, accountIds, accounts);
                             setQuickAction('');
                             setQuickNote('');
-                                            } catch (e) {
+                            setQuickDate('');
+                          } catch (e) {
                             console.error(e);
                             alert('Failed to log activity');
                           }
@@ -636,7 +645,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                         {savingQuick ? '⏳ Saving...' : `✅ Log ${act.label}`}
                       </button>
                       <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
-                        onClick={() => { setQuickAction(''); setQuickNote(''); }}>
+                        onClick={() => { setQuickAction(''); setQuickNote(''); setQuickDate(''); }}>
                         Cancel
                       </button>
                     </div>
@@ -2016,8 +2025,8 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
         if (fuNewPhone.trim()) fields['Phone number'] = fuNewPhone.trim();
         if (fuNewLinkedin.trim()) fields['LinkedIn'] = fuNewLinkedin.trim();
         if (fuNewInfluence) fields['Level of Influence'] = fuNewInfluence;
-        fields['BDR Owner'] = CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '';
-        fields['CP Assigned'] = CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '';
+        if (CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name) fields['BDR Owner'] = CURRENT_USER.name;
+        if (CURRENT_USER?.role === 'cp' && CURRENT_USER?.name) fields['CP Assigned'] = CURRENT_USER.name;
         // Optimistic: show in UI instantly
         if (onAddRecord) onAddRecord('stakeholders', fields);
         // Close form immediately
@@ -3746,7 +3755,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
             const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
             if (!eng.s.id.startsWith('tmp_')) {
-              await a.updateRecord(TABLE_IDS.stakeholders, eng.s.id, { 'Pain Points (Generated)': generated })
+              await a.updateRecord(TABLE_IDS.stakeholders, eng.s.id, { 'Pain points': generated })
                 .catch(e => console.warn(`Could not save pain points for ${sFullName}:`, e.message));
             }
           } catch (e) {
@@ -5499,7 +5508,10 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         const lb = F(o, 'Logged By');
         const uName = F(selectedUserRecord, 'Name') || '';
         const uEmail = F(selectedUserRecord, 'Email') || '';
-        return lb && (lb === uName || lb === uEmail);
+        // Also match against CURRENT_USER JWT name/email for the current user's own view
+        const cuName = insightsView === currentUserId ? (CURRENT_USER?.name || '') : '';
+        const cuEmail = insightsView === currentUserId ? (CURRENT_USER?.email || '') : '';
+        return lb && (lb === uName || lb === uEmail || (cuName && lb === cuName) || (cuEmail && lb === cuEmail));
       });
       const viewMeetings = viewActivities.filter(o => meetingStatuses.includes(F(o, 'Status')));
 
