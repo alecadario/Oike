@@ -8409,6 +8409,67 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
       const [saved, setSaved] = useState(false);
 
+      // ── Gmail integration state ──
+      const [gmailConnected, setGmailConnected] = useState(false);
+      const [gmailConnecting, setGmailConnecting] = useState(false);
+      const [gmailSyncing, setGmailSyncing] = useState(false);
+      const [gmailSyncResult, setGmailSyncResult] = useState('');
+      const [gmailDaysBack, setGmailDaysBack] = useState(7);
+
+      // Check URL param on mount (set after OAuth callback redirect)
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('gmail') === 'connected') {
+          setGmailConnected(true);
+          setTab('integrations');
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        if (params.get('gmail') === 'denied' || params.get('gmail') === 'error') {
+          setGmailSyncResult('Gmail connection failed. Please try again.');
+          setTab('integrations');
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }, []);
+
+      const handleConnectGmail = async () => {
+        setGmailConnecting(true);
+        try {
+          const res = await fetch('/api/gmail/auth', {
+            method: 'GET',
+            headers: getAuthHeaders(),
+          });
+          const data = await res.json();
+          if (data.url) window.location.href = data.url;
+          else setGmailSyncResult('Could not start Gmail connection.');
+        } catch (e) {
+          setGmailSyncResult('Connection error. Try again.');
+        }
+        setGmailConnecting(false);
+      };
+
+      const handleGmailSync = async () => {
+        setGmailSyncing(true);
+        setGmailSyncResult('');
+        try {
+          const res = await fetch('/api/gmail/sync', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              baseId: AIRTABLE_BASE_ID,
+              stakeholdersTableId: TABLE_IDS.stakeholders,
+              outreachTableId: TABLE_IDS.outreach,
+              daysBack: gmailDaysBack,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) setGmailSyncResult(data.message || `${data.synced} email(s) logged.`);
+          else setGmailSyncResult(data.error || 'Sync failed.');
+        } catch (e) {
+          setGmailSyncResult('Sync error. Try again.');
+        }
+        setGmailSyncing(false);
+      };
+
       const handleSave = () => {
         saveCompanyProfile(profile);
         setSaved(true);
@@ -8435,6 +8496,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               {[
                 { key: 'profile', label: '🤖 AI Profile' },
                 { key: 'workspace', label: '🏢 Workspace' },
+                { key: 'integrations', label: '🔌 Integrations' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
                   background: tab === t.key ? 'rgba(91,191,181,0.15)' : 'none',
@@ -8444,6 +8506,73 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 }}>{t.label}</button>
               ))}
             </div>
+
+            {/* Integrations tab */}
+            {tab === 'integrations' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Gmail card */}
+                <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                    <span style={{ fontSize: 26 }}>📧</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>Gmail</div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Auto-log emails to/from your contacts</div>
+                    </div>
+                    <div style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: gmailConnected ? '#4ade80' : 'var(--globant-muted)' }}>
+                      {gmailConnected ? '● Connected' : '○ Not connected'}
+                    </div>
+                  </div>
+
+                  {!gmailConnected ? (
+                    <button className="action-btn btn-primary" style={{ width: '100%', padding: '10px' }} onClick={handleConnectGmail} disabled={gmailConnecting}>
+                      {gmailConnecting ? 'Redirecting to Google...' : '🔗 Connect Gmail'}
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <label style={{ fontSize: 12, color: 'var(--globant-muted)', whiteSpace: 'nowrap' }}>Sync last</label>
+                        <select value={gmailDaysBack} onChange={e => setGmailDaysBack(Number(e.target.value))}
+                          style={{ background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '6px 10px', fontSize: 12 }}>
+                          <option value={3}>3 days</option>
+                          <option value={7}>7 days</option>
+                          <option value={14}>14 days</option>
+                          <option value={30}>30 days</option>
+                        </select>
+                        <button className="action-btn btn-primary" style={{ flex: 1, padding: '8px' }} onClick={handleGmailSync} disabled={gmailSyncing}>
+                          {gmailSyncing ? '⏳ Syncing...' : '🔄 Sync now'}
+                        </button>
+                      </div>
+                      <button className="action-btn" style={{ width: '100%', padding: '8px', fontSize: 12 }} onClick={handleConnectGmail}>
+                        Reconnect Gmail
+                      </button>
+                    </div>
+                  )}
+
+                  {gmailSyncResult && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: gmailSyncResult.toLowerCase().includes('fail') || gmailSyncResult.toLowerCase().includes('error') ? '#f87171' : '#4ade80', background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: '8px 12px' }}>
+                      {gmailSyncResult}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 12, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.5 }}>
+                    Oike reads emails to/from contacts already in your CRM and logs them automatically as activities. Read-only access — Oike never sends emails on your behalf.
+                  </div>
+                </div>
+
+                {/* Reset onboarding */}
+                <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '16px 20px', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>🚀 Onboarding</div>
+                  <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 10 }}>Restart the setup wizard — useful before a demo.</div>
+                  <button className="action-btn" style={{ padding: '8px 16px', fontSize: 12 }} onClick={() => {
+                    localStorage.removeItem(ONBOARDING_KEY);
+                    onClose();
+                    window.location.reload();
+                  }}>Reset onboarding tour</button>
+                </div>
+
+              </div>
+            )}
 
             {/* Workspace tab */}
             {tab === 'workspace' && (
@@ -8552,6 +8681,184 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
     }
 
+    // ============ ONBOARDING WIZARD ============
+    const ONBOARDING_KEY = 'oike_onboarding_complete';
+
+    function OnboardingWizard({ api, onComplete }) {
+      const [step, setStep] = useState(0);
+      const [saving, setSaving] = useState(false);
+
+      // Step 0 — Company Profile
+      const [profile, setProfile] = useState({
+        companyName: COMPANY_PROFILE.companyName !== 'Your Company' ? COMPANY_PROFILE.companyName : '',
+        senderName:  COMPANY_PROFILE.senderName  !== 'Your Name'    ? COMPANY_PROFILE.senderName  : '',
+        senderTitle: COMPANY_PROFILE.senderTitle !== 'Business Consultant' ? COMPANY_PROFILE.senderTitle : '',
+        services:    COMPANY_PROFILE.services    !== 'digital transformation, AI, CX, data' ? COMPANY_PROFILE.services : '',
+        market:      COMPANY_PROFILE.market      !== 'your target market' ? COMPANY_PROFILE.market : '',
+      });
+
+      // Step 1 — First Account
+      const [account, setAccount] = useState({ name: '', industry: '', website: '' });
+      const [createdAccountId, setCreatedAccountId] = useState(null);
+
+      // Step 2 — First Contact
+      const [contact, setContact] = useState({ firstName: '', lastName: '', role: '', linkedin: '' });
+
+      const INDUSTRIES = ['Technology','Consulting','Real Estate','Financial Services','Healthcare','Retail','Manufacturing','Education','Government','Other'];
+
+      const iStyle = { width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 13px', color: 'var(--globant-text)', fontSize: 13, boxSizing: 'border-box', marginBottom: 12 };
+      const lStyle = { fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' };
+
+      const steps = [
+        { icon: '🏢', title: 'Your Company', subtitle: 'This tells the AI who you are so every message sounds like you.' },
+        { icon: '🎯', title: 'First Target Account', subtitle: 'Add the first company you want to reach out to.' },
+        { icon: '👤', title: 'First Contact', subtitle: 'Who are you trying to reach at that company?' },
+        { icon: '🚀', title: "You're ready!", subtitle: 'Oike is set up. Let\'s generate your first message.' },
+      ];
+
+      const handleProfileNext = () => {
+        if (!profile.companyName.trim() || !profile.senderName.trim()) return alert('Company name and your name are required.');
+        saveCompanyProfile({
+          companyName: profile.companyName,
+          senderName:  profile.senderName,
+          senderTitle: profile.senderTitle,
+          services:    profile.services,
+          market:      profile.market,
+        });
+        setStep(1);
+      };
+
+      const handleAccountNext = async () => {
+        if (!account.name.trim()) return alert('Account name is required.');
+        setSaving(true);
+        try {
+          const fields = { 'Account Name': account.name.trim() };
+          if (account.industry) fields['Industry'] = account.industry;
+          if (account.website)  fields['Website']  = account.website.trim();
+          const rec = await api.createRecord(TABLE_IDS.accounts, fields);
+          setCreatedAccountId(rec.id);
+          setStep(2);
+        } catch (e) {
+          alert('Could not create account. Try again.');
+        }
+        setSaving(false);
+      };
+
+      const handleContactNext = async () => {
+        if (!contact.firstName.trim()) return alert('First name is required.');
+        setSaving(true);
+        try {
+          const fields = { 'First name': contact.firstName.trim() };
+          if (contact.lastName)  fields['Last name'] = contact.lastName.trim();
+          if (contact.role)      fields['Role']      = contact.role.trim();
+          if (contact.linkedin)  fields['LinkedIn']  = contact.linkedin.trim();
+          if (createdAccountId)  fields['Account']   = [createdAccountId];
+          await api.createRecord(TABLE_IDS.stakeholders, fields);
+          setStep(3);
+        } catch (e) {
+          alert('Could not create contact. Try again.');
+        }
+        setSaving(false);
+      };
+
+      const handleFinish = () => {
+        try { localStorage.setItem(ONBOARDING_KEY, 'true'); } catch {}
+        onComplete();
+      };
+
+      const cur = steps[step];
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'var(--globant-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: '36px 32px', width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.4)' }}>
+
+            {/* Progress dots */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 28 }}>
+              {steps.map((_, i) => (
+                <div key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: i <= step ? '#BFD730' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s' }} />
+              ))}
+            </div>
+
+            <div style={{ fontSize: 32, marginBottom: 10 }}>{cur.icon}</div>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700 }}>{cur.title}</h2>
+            <p style={{ margin: '0 0 24px', color: 'var(--globant-muted)', fontSize: 13 }}>{cur.subtitle}</p>
+
+            {/* Step 0 — Company Profile */}
+            {step === 0 && (
+              <div>
+                <label style={lStyle}>Your name *</label>
+                <input style={iStyle} placeholder="Ale Cadario" value={profile.senderName} onChange={e => setProfile(p => ({...p, senderName: e.target.value}))} />
+                <label style={lStyle}>Your title</label>
+                <input style={iStyle} placeholder="Sales Manager" value={profile.senderTitle} onChange={e => setProfile(p => ({...p, senderTitle: e.target.value}))} />
+                <label style={lStyle}>Company name *</label>
+                <input style={iStyle} placeholder="Oike / Globant / ..." value={profile.companyName} onChange={e => setProfile(p => ({...p, companyName: e.target.value}))} />
+                <label style={lStyle}>Services / product (brief)</label>
+                <input style={iStyle} placeholder="B2B sales intelligence platform..." value={profile.services} onChange={e => setProfile(p => ({...p, services: e.target.value}))} />
+                <label style={lStyle}>Target market</label>
+                <input style={iStyle} placeholder="B2B companies with sales teams..." value={profile.market} onChange={e => setProfile(p => ({...p, market: e.target.value}))} />
+                <button className="action-btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: 4 }} onClick={handleProfileNext}>Continue →</button>
+              </div>
+            )}
+
+            {/* Step 1 — First Account */}
+            {step === 1 && (
+              <div>
+                <label style={lStyle}>Company name *</label>
+                <input style={iStyle} placeholder="Acme Corp" value={account.name} onChange={e => setAccount(a => ({...a, name: e.target.value}))} />
+                <label style={lStyle}>Industry</label>
+                <select style={iStyle} value={account.industry} onChange={e => setAccount(a => ({...a, industry: e.target.value}))}>
+                  <option value="">Select industry...</option>
+                  {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                </select>
+                <label style={lStyle}>Website</label>
+                <input style={iStyle} placeholder="https://acme.com" value={account.website} onChange={e => setAccount(a => ({...a, website: e.target.value}))} />
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button className="action-btn" style={{ flex: 1, padding: '11px' }} onClick={() => setStep(0)}>← Back</button>
+                  <button className="action-btn btn-primary" style={{ flex: 2, padding: '11px' }} onClick={handleAccountNext} disabled={saving}>{saving ? 'Saving...' : 'Continue →'}</button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 — First Contact */}
+            {step === 2 && (
+              <div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={lStyle}>First name *</label>
+                    <input style={iStyle} placeholder="María" value={contact.firstName} onChange={e => setContact(c => ({...c, firstName: e.target.value}))} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={lStyle}>Last name</label>
+                    <input style={iStyle} placeholder="García" value={contact.lastName} onChange={e => setContact(c => ({...c, lastName: e.target.value}))} />
+                  </div>
+                </div>
+                <label style={lStyle}>Role / Title</label>
+                <input style={iStyle} placeholder="CEO / VP Sales / Director..." value={contact.role} onChange={e => setContact(c => ({...c, role: e.target.value}))} />
+                <label style={lStyle}>LinkedIn URL</label>
+                <input style={iStyle} placeholder="https://linkedin.com/in/..." value={contact.linkedin} onChange={e => setContact(c => ({...c, linkedin: e.target.value}))} />
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button className="action-btn" style={{ flex: 1, padding: '11px' }} onClick={() => setStep(1)}>← Back</button>
+                  <button className="action-btn btn-primary" style={{ flex: 2, padding: '11px' }} onClick={handleContactNext} disabled={saving}>{saving ? 'Saving...' : 'Continue →'}</button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3 — Done */}
+            {step === 3 && (
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ color: 'var(--globant-muted)', fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
+                  Your company profile is set, your first account and contact are in. Go to <strong>Accounts</strong> to open the account, find your contact, and generate your first message with the AI Generator.
+                </p>
+                <button className="action-btn btn-primary" style={{ width: '100%', padding: '13px', fontSize: 15 }} onClick={handleFinish}>
+                  Go to Oike →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     // ============ MAIN APP ============
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
@@ -8563,6 +8870,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
+      const [showOnboarding, setShowOnboarding] = useState(false);
       const [configError, setConfigError] = useState('');
       const [navigateToAccountId, setNavigateToAccountId] = useState('');
       const [navigateToSolId, setNavigateToSolId] = useState('');
@@ -8722,6 +9030,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             setApi(a);
             setReady(true);
             await loadData(a);
+            // Show onboarding wizard on first login
+            const done = localStorage.getItem(ONBOARDING_KEY);
+            if (!done) setShowOnboarding(true);
           } catch (e) {
             console.error('Init failed:', e);
             setConfigError('Failed to connect. Please try again.');
@@ -8777,6 +9088,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       return (
         <div>
+          {/* Onboarding wizard — shown on first login */}
+          {showOnboarding && api && (
+            <OnboardingWizard
+              api={api}
+              onComplete={() => { setShowOnboarding(false); api && loadData(api, true); }}
+            />
+          )}
           {/* Mobile top bar */}
           <div className="mobile-topbar">
             <button
