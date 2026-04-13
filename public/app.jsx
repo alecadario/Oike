@@ -1436,11 +1436,10 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
     // ============ AI MESSAGE MODAL ============
     function AIMessageModal({ stakeholder, onClose, onSend, data }) {
       const [tab, setTab] = useState(() => {
-        // Auto-select tab based on outreach history — don't let "First Contact" run when there's history
         const touchCount = (data.outreach || []).filter(o => linkedIds(o, 'Stakeholder').includes(stakeholder.id)).length;
-        return touchCount >= 5 ? 'followup3' : touchCount >= 1 ? 'followup2' : 'first';
+        return touchCount >= 1 ? 'followup' : 'first';
       });
-      const [generatedMessages, setGeneratedMessages] = useState({ first: '', followup2: '', followup3: '' });
+      const [generatedMessages, setGeneratedMessages] = useState({ first: '', followup: '' });
       const [loadingAI, setLoadingAI] = useState(false);
       const [selectedChannel, setSelectedChannel] = useState('');
       const [savingDraft, setSavingDraft] = useState(false);
@@ -1449,6 +1448,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [selectedEventId, setSelectedEventId] = useState('');
       const [eventMode, setEventMode] = useState('invite'); // 'invite' | 'followup'
       const [selectedSolutionId, setSelectedSolutionId] = useState('');
+      const [showAdvanced, setShowAdvanced] = useState(false);
 
       const currentMessage = generatedMessages[tab] || '';
 
@@ -1607,15 +1607,12 @@ Keep it natural — write for the ear, not the eye.`,
           goal: 'This is the FIRST outreach ever to this person. Your only goal: open a conversation and earn a response. Do NOT try to sell or pitch. Create genuine curiosity based on their specific context and propose one clear, low-friction next step.',
           extra: `Do NOT reference any previous conversation — this is cold outreach. Lead with THEIR world (a challenge, a news trigger, an industry shift), not with ${COMPANY_PROFILE.companyName}. CRITICAL: Since this is first contact, the message MUST include a brief self-introduction — one sentence mentioning who you are (name if available), your role, and ${COMPANY_PROFILE.companyName}. Place it naturally, not as the opening line.`,
         },
-        followup2: {
-          label: 'Follow-up 2',
-          goal: 'This is a SECOND touch — they did not reply. Your goal: re-engage with a completely NEW angle. Add value they didn\'t get in the first message — a new insight, a relevant case study mention, a different pain point. Do NOT repeat or reference the first message directly.',
-          extra: lastMessages ? `PREVIOUS MESSAGES SENT:\n${lastMessages}\n\nCRITICAL: Bring a fresh angle — different pain point, different hook, different value. Never say "following up on my previous message" or "just checking in".` : '',
-        },
-        followup3: {
-          label: 'Follow-up 3',
-          goal: 'This is the THIRD and final touch. Be ultra-concise (shorter than previous messages). Options: offer something tangible (a 1-pager, a benchmark, a specific insight), suggest a specific time, or create gentle urgency. This is your breakup message — make it memorable, not desperate.',
-          extra: lastMessages ? `PREVIOUS MESSAGES SENT:\n${lastMessages}\n\nCRITICAL: This is the last shot. Do NOT repeat ANY previous angle. Either: (a) offer something concrete and downloadable, (b) name-drop a relevant client result, or (c) propose a specific date/time. Keep it under 40 words for WhatsApp/LinkedIn, under 60 for Email.` : '',
+        followup: {
+          label: 'Follow-up',
+          goal: sOutreach.length >= 5
+            ? `This is a FINAL follow-up after ${sOutreach.length} previous touches with no reply. Write a breakup message — honest, warm, memorable. Not desperate. Goal: earn a response OR leave a strong last impression. Two options: (A) briefly acknowledge the silence, share ONE sharp value statement, close with no pressure; (B) ignore the silence completely, open with a bold trigger from their world, end with a hyper-specific ask. Pick whichever fits best. Ultra-short.`
+            : `This is a follow-up after ${sOutreach.length} previous touch${sOutreach.length !== 1 ? 'es' : ''} — no reply yet. Re-engage with a completely NEW angle. Different hook, different trigger, different value. Do NOT repeat what was said before.`,
+          extra: `OUTREACH HISTORY: ${sOutreach.length} message${sOutreach.length !== 1 ? 's' : ''} sent via ${[...new Set(sOutreach.map(o => F(o,'Channel')).filter(Boolean))].join(' + ') || 'unknown channel'} — no replies recorded.${lastMessages && lastMessages.trim() ? `\n\nPREVIOUS MESSAGES:\n${lastMessages}` : ''}\n\nCRITICAL: Never say "following up", "just checking in", or "touching base". Lead with something fresh from their world — company news, an industry shift, a specific trigger. End with one low-friction ask.`,
         },
       };
 
@@ -1627,52 +1624,60 @@ Keep it natural — write for the ear, not the eye.`,
           const chGuide = channelPrompts[selectedChannel];
           const tabGuide = tabPrompts[tab];
 
-          const prompt = `You are a B2B sales copywriter for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
+          // Build available context hooks — only include what's actually populated
+          const contextHooks = [
+            painText && `Pain point: "${painText.split('\n')[0].slice(0, 120)}"`,
+            newsText && `Company news: "${newsText.slice(0, 200)}"`,
+            linkedinText && `LinkedIn/recent activity: "${linkedinText.slice(0, 150)}"`,
+            intelNotesText && `BDR intel: "${intelNotesText.slice(0, 150)}"`,
+          ].filter(Boolean);
 
-STAKEHOLDER:
-- Name: ${sName}
-- Role: ${role} at ${accountName}
-- Industry: ${industry}
-- Influence: ${influence}
-- Pain Points: ${painText || 'Not available'}
-- LinkedIn Latest News: ${linkedinText || 'Not available'}
+          const prompt = `You are a senior B2B sales copywriter. Write a highly personalized outreach message.
 
-ACCOUNT CONTEXT:
-- Company: ${accountName}
-- Recent News: ${newsText || 'Not available'}
-- Service Focus: ${focusText || 'Not defined'}
-- Solutions Mapped: ${solNames.join(', ') || 'None yet'}
-- Active Opportunities: ${oppSummary || 'None'}
-- Inside Sales Plan: ${planText || 'Not available'}
-- Intel Notes (recent context from BDR): ${intelNotesText || 'None'}
-${sOutreach.length > 0 ? `
-INTERACTION HISTORY (${sOutreach.length} previous touches — most recent first):
-${sOutreach.slice(0, 5).map(o => `- [${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown date'}] ${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'}${F(o,'Message') ? ': "' + String(F(o,'Message')).slice(0, 120) + (String(F(o,'Message')).length > 120 ? '..."' : '"') : ''}${F(o,'Notes') ? ' | Note: ' + String(F(o,'Notes')).slice(0, 80) : ''}`).join('\n')}` : ''}
+SENDER: ${COMPANY_PROFILE.senderName}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} — ${COMPANY_PROFILE.companyName}${COMPANY_PROFILE.services ? ` (${COMPANY_PROFILE.services})` : ''}
 
-MESSAGE TYPE: ${eventContext && eventMode === 'followup' ? 'Post-Event Follow-up' : tabGuide.label}
-${eventContext && eventMode === 'followup' ? 'This is a WARM follow-up after meeting in person at an event. The relationship has already started — do NOT treat this as cold outreach. Skip introductions, reference the meeting naturally, and focus on continuing the conversation with one clear next step.' : tabGuide.goal}
-${eventContext && eventMode === 'followup' ? '' : tabGuide.extra}
+RECIPIENT:
+- Name: ${sName} | Role: ${role || 'Unknown'} at ${accountName}
+- Industry: ${industry || 'Unknown'}${influence ? ` | Seniority: ${influence}` : ''}
+${painText ? `- Their pain points: ${painText.slice(0, 300)}` : ''}
+${linkedinText ? `- LinkedIn / recent activity: ${linkedinText.slice(0, 200)}` : ''}
+
+COMPANY CONTEXT:
+${newsText ? `- Recent news: ${newsText.slice(0, 400)}` : ''}
+${intelNotesText ? `- Sales intel: ${intelNotesText.slice(0, 300)}` : ''}
+${focusText ? `- Focus area: ${focusText}` : ''}
+${solNames.length ? `- Solutions mapped: ${solNames.join(', ')}` : ''}
+${oppSummary ? `- Active pipeline: ${oppSummary}` : ''}
+
+${sOutreach.length > 0 ? `PREVIOUS OUTREACH (${sOutreach.length} touch${sOutreach.length !== 1 ? 'es' : ''}, most recent first — no reply received):
+${sOutreach.slice(0, 5).map(o => `  ${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'} · ${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'}${F(o,'Message') ? ' → "' + String(F(o,'Message')).slice(0, 100) + '"' : ''}${F(o,'Notes') ? ' | ' + String(F(o,'Notes')).slice(0, 80) : ''}`).join('\n')}` : ''}
+
+HOOK TO USE${contextHooks.length > 1 ? ' (pick the strongest one and build around it)' : ''}:
+${contextHooks.length > 0 ? contextHooks.map(h => `→ ${h}`).join('\n') : '→ Use their role and industry to infer a relevant challenge'}
+
+GOAL: ${eventContext && eventMode === 'followup' ? 'Warm follow-up after meeting at an event. Skip introductions. Reference the meeting naturally and propose one clear next step.' : tabGuide.goal}
+${tabGuide.extra && !eventContext ? tabGuide.extra : ''}
+${eventContext && eventMode === 'invite' ? `EVENT TO USE AS HOOK: ${eventContext}\nApproach: casual — ask if they're attending, say you'd love to meet there. Not a formal invitation.` : ''}
+${eventContext && eventMode === 'followup' ? `EVENT MET AT: ${eventContext}\nApproach: warm, brief. You already met. Reference the conversation, keep it human, one next step.` : ''}
+${solutionContext ? `SOLUTION TO POSITION: ${solutionContext}\nWeave it naturally as the answer to their pain point. Don't pitch — connect it to a specific challenge.` : ''}
+${extraContext ? `SENDER'S PERSONAL CONTEXT (highest priority — must appear in message): "${extraContext}"` : ''}
 
 CHANNEL: ${selectedChannel}
-- Tone: ${chGuide.tone}
-- Format: ${chGuide.format}
+Tone: ${chGuide.tone}
+Format: ${chGuide.format}
+${suggestedLanguage ? `Language: Write in ${suggestedLanguage} (account is based in ${accountCountry}).` : ''}
+${COMPANY_PROFILE.voiceTone ? `\nSENDER'S VOICE (CRITICAL — the message must sound like this person, not an AI):\n- Style: ${COMPANY_PROFILE.voiceTone}\n${COMPANY_PROFILE.voiceAvoid ? `- Never do: ${COMPANY_PROFILE.voiceAvoid}\n` : ''}${COMPANY_PROFILE.voiceExample ? `- Match this real example: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
+${COMPANY_PROFILE.goals ? `\nCOMPANY CONTEXT: ${COMPANY_PROFILE.goals}` : ''}
+${COMPANY_PROFILE.market ? `\nMARKET: ${COMPANY_PROFILE.market} — be culturally aware without overdoing it.` : ''}
 
-${extraContext ? `⚠️ CRITICAL — SENDER'S PERSONAL CONTEXT (MUST be incorporated into the message):\n"${extraContext}"\nYou MUST weave this context naturally into the message. This is first-hand intel from the sender and takes priority over other data.\n` : ''}
-${eventContext && eventMode === 'invite' ? `🎪 EVENT CONTEXT — Use this event as the reason to reach out:\n${eventContext}\nAPPROACH: Keep it simple and natural. Ask if they're planning to attend the event, and say you'd love to meet them there / grab a coffee / say hello. Do NOT write a formal invitation or pitch the event. Just use it as a warm, human excuse to connect. Example tone: "I'll be at [event] — are you planning to go? Would love to meet in person."\n` : ''}${eventContext && eventMode === 'followup' ? `🤝 POST-EVENT FOLLOW-UP — The sender already met this person at the event:\n${eventContext}\nAPPROACH: This is a warm follow-up after an in-person meeting. Reference that you met at the event naturally — don't make it awkward or overly formal. Acknowledge the conversation you had (keep it vague since we don't know the details), express genuine interest in continuing it, and include one clear next step (a call, a coffee, sending something). Tone: warm, human, brief. It should feel like a message from someone who actually remembers the conversation and wants to take it further. Do NOT pitch heavily — the relationship is already warm. Example tone: "Great meeting you at [event] — wanted to follow up on what we discussed. Would love to continue the conversation over a quick call next week."\n` : ''}
-${solutionContext ? `🛠️ SOLUTION TO PITCH — The sender wants to position this specific solution/service in the message:\n${solutionContext}\nYou MUST weave this solution naturally into the message — explain how it addresses the stakeholder's pain points or industry challenges. Reference the solution's capabilities specifically, don't be generic. The solution is the VALUE PROPOSITION of this message.\n` : ''}
-SENDER: ${COMPANY_PROFILE.senderName}, ${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}
-${suggestedLanguage ? `\n🌍 LANGUAGE: The account is based in ${accountCountry}. Write the message in ${suggestedLanguage}. If the sender's personal context explicitly specifies a different language, use that instead.\n` : ''}
-${COMPANY_PROFILE.voiceTone ? `\n🎙️ SENDER'S VOICE & TONE (CRITICAL — this defines HOW the message sounds):\n- Personality: ${COMPANY_PROFILE.voiceTone}\n${COMPANY_PROFILE.voiceAvoid ? `- NEVER do this: ${COMPANY_PROFILE.voiceAvoid}\n` : ''}${COMPANY_PROFILE.voiceExample ? `- Write like this real example from the sender: "${COMPANY_PROFILE.voiceExample}"\n` : ''}- The message MUST sound like this person wrote it, not like an AI. Match the energy, rhythm and vocabulary from the example above.\n` : ''}
-RULES:
-- Lead with THEIR world, not yours. First sentence must reference something about THEM (role, company, news, challenge)
-- Personalize with their first name only — never full name in the body
-- Reference recent news or LinkedIn activity ONLY if it's specific and recent — vague references are worse than none
-- Connect ${COMPANY_PROFILE.companyName}'s capabilities to THEIR specific challenges — never list services generically
-- BANNED PHRASES: "I hope this finds you well", "I came across your profile", "I wanted to reach out", "I'd love to connect", "just checking in", "following up", "touching base", "quick question", "I noticed that you", "as a leader in"
-- ONE clear micro-CTA — low commitment, specific (not "let me know if you're interested")
-- Sound like a real person, not a template. Read it aloud — if it sounds robotic, rewrite it.
-- ${COMPANY_PROFILE.market ? `Market context (${COMPANY_PROFILE.market}): tailor tone and references to the target market. Be culturally aware without overdoing it.` : ''}
-${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n` : ''}${eventContext && eventMode === 'invite' ? '- EVENT: Keep it casual — ask if they\'re attending, say you\'d love to meet there. Do NOT write a formal invitation.\n' : ''}${eventContext && eventMode === 'followup' ? '- POST-EVENT: You ALREADY met them. DO NOT ask if they\'re attending. Reference the meeting as something that already happened. The tone is warm, not cold.\n' : ''}${solutionContext ? '- SOLUTION: Weave the solution naturally as a value prop connected to their pain points. Don\'t pitch — hint at relevant results.\n' : ''}${extraContext ? '- SENDER CONTEXT: The personal context provided MUST appear naturally in the message — it\'s first-hand intel and takes priority.\n' : ''}- Write ONLY the message. No meta-commentary, no explanations, no "Here's a message for..." prefix.`;
+HARD RULES:
+1. Open with THEIR world — first sentence must be about them (news, challenge, role, trigger), not about ${COMPANY_PROFILE.companyName}
+2. Use their first name only, never full name
+3. Connect ${COMPANY_PROFILE.companyName}'s value to ONE specific challenge of theirs — no generic service lists
+4. ONE micro-CTA — low friction, specific. Not "let me know if you're interested"
+5. BANNED: "I hope this finds you well" / "I came across your profile" / "I wanted to reach out" / "I'd love to connect" / "just checking in" / "following up" / "touching base" / "as a leader in" / "I noticed that you"
+6. Read it aloud before outputting — if it sounds like an AI wrote it, rewrite it
+7. Output ONLY the message. No intro, no explanation, no "Here's a draft..."`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
@@ -1767,14 +1772,22 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>2. MESSAGE TYPE</label>
               <div className="tabs">
                 <button className={`tab-btn ${tab === 'first' ? 'active' : ''}`} onClick={() => setTab('first')}>First Contact</button>
-                <button className={`tab-btn ${tab === 'followup2' ? 'active' : ''}`} onClick={() => setTab('followup2')}>Follow-up 2</button>
-                <button className={`tab-btn ${tab === 'followup3' ? 'active' : ''}`} onClick={() => setTab('followup3')}>Follow-up 3</button>
+                <button className={`tab-btn ${tab === 'followup' ? 'active' : ''}`} onClick={() => setTab('followup')}>Follow-up{sOutreach.length > 0 ? ` · ${sOutreach.length} touches` : ''}</button>
               </div>
             </div>
 
-            {/* Step 3: Event reference */}
+            {/* Advanced toggle */}
+            <div style={{ marginBottom: showAdvanced ? 12 : 4 }}>
+              <button onClick={() => setShowAdvanced(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--globant-muted)', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 10 }}>{showAdvanced ? '▼' : '▶'}</span>
+                <span>{showAdvanced ? 'Hide advanced options' : '+ Event / Solution (optional)'}</span>
+              </button>
+            </div>
+
+            {showAdvanced && <>
+            {/* Event reference */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>3. EVENT REFERENCE <span style={{ fontWeight: 400 }}>(optional)</span></label>
+              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>EVENT REFERENCE <span style={{ fontWeight: 400 }}>(optional)</span></label>
               <select className="input-field" style={{ width: '100%', fontSize: 12 }}
                 value={selectedEventId} onChange={e => { setSelectedEventId(e.target.value); setEventMode('invite'); }}>
                 <option value="">— No event (general outreach) —</option>
@@ -1807,9 +1820,9 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               )}
             </div>
 
-            {/* Step 4: Solution to pitch */}
+            {/* Solution to pitch */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>4. SOLUTION TO PITCH <span style={{ fontWeight: 400 }}>(optional — select a solution to position in the message)</span></label>
+              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>SOLUTION TO PITCH <span style={{ fontWeight: 400 }}>(optional)</span></label>
               <select className="input-field" style={{ width: '100%', fontSize: 12 }}
                 value={selectedSolutionId} onChange={e => setSelectedSolutionId(e.target.value)}>
                 <option value="">— No specific solution —</option>
@@ -1825,9 +1838,11 @@ ${COMPANY_PROFILE.goals ? `COMPANY STRATEGIC CONTEXT: ${COMPANY_PROFILE.goals}\n
               )}
             </div>
 
-            {/* Step 5: Extra context */}
+            </>}
+
+            {/* Your context */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>5. YOUR CONTEXT <span style={{ fontWeight: 400 }}>(optional — add anything the AI should know)</span></label>
+              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>3. YOUR CONTEXT <span style={{ fontWeight: 400 }}>(optional — anything extra the AI should know)</span></label>
               <textarea
                 className="input-field"
                 style={{ width: '100%', minHeight: 50, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
