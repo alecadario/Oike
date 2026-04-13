@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Propuesta Oike × Appex</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #8CC63F;
+      --green-dim: rgba(140,198,63,0.12);
+      --green-mid: rgba(140,198,63,0.25);
+      --dark: #0D0D14;
+      --dark2: #13131E;
+      --dark3: #1A1A2E;
+      --card: #16161F;
+      --border: rgba(255,255,255,0.07);
+      --text: #F0F0F5;
+      --muted: #7A7A9A;
+      --white: #ffffff;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--dark);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 48px;
+      background: rgba(13,13,20,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { font-size: 20px; font-weight: 800; color: var(--green); letter-spacing: -0.5px; }
+    .nav-tag { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: 1px; text-transform: uppercase; }
+
+    /* ── SECTIONS ── */
+    section { padding: 100px 48px; max-width: 900px; margin: 0 auto; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; justify-content: center;
+      padding-top: 120px; padding-bottom: 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -200px; right: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(140,198,63,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-label {
+      display: inline-block;
+      font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--green); background: var(--green-dim);
+      padding: 6px 14px; border-radius: 100px;
+      border: 1px solid rgba(140,198,63,0.3);
+      margin-bottom: 32px; width: fit-content;
+    }
+    .hero h1 {
+      font-size: clamp(48px, 7vw, 80px);
+      font-weight: 900; line-height: 1.05;
+      letter-spacing: -2px; color: var(--white);
+      margin-bottom: 16px;
+    }
+    .hero h1 span { color: var(--green); }
+    .hero-sub {
+      font-size: 20px; color: var(--muted); font-weight: 400;
+      max-width: 520px; margin-bottom: 56px; line-height: 1.5;
+    }
+    .hero-meta {
+      display: flex; gap: 40px; flex-wrap: wrap;
+    }
+    .hero-meta-item { display: flex; flex-direction: column; gap: 4px; }
+    .hero-meta-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .hero-meta-value { font-size: 15px; color: var(--text); font-weight: 500; }
+
+    /* ── DIVIDER ── */
+    .divider { height: 1px; background: var(--border); max-width: 900px; margin: 0 auto; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;
+      color: var(--green); margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(32px, 5vw, 48px); font-weight: 800;
+      letter-spacing: -1px; color: var(--white); margin-bottom: 16px; line-height: 1.1;
+    }
+    .section-intro {
+      font-size: 17px; color: var(--muted); max-width: 600px; margin-bottom: 56px; line-height: 1.6;
+    }
+
+    /* ── CONTEXT GRID ── */
+    .context-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+      background: var(--border); border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+    }
+    .context-cell {
+      background: var(--card); padding: 28px 32px;
+    }
+    .context-cell-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+    .context-cell-value { font-size: 16px; color: var(--text); font-weight: 500; line-height: 1.4; }
+
+    /* ── PAIN POINTS ── */
+    .pain-list { display: flex; flex-direction: column; gap: 16px; }
+    .pain-item {
+      display: flex; align-items: flex-start; gap: 20px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px 28px;
+      transition: border-color 0.2s;
+    }
+    .pain-item:hover { border-color: rgba(140,198,63,0.3); }
+    .pain-number {
+      font-size: 11px; font-weight: 800; letter-spacing: 1px;
+      color: var(--green); background: var(--green-dim);
+      border: 1px solid rgba(140,198,63,0.25);
+      border-radius: 6px; padding: 4px 10px;
+      min-width: fit-content; margin-top: 2px;
+    }
+    .pain-text { font-size: 17px; color: var(--text); font-weight: 500; line-height: 1.5; }
+
+    /* ── QUOTE ── */
+    .quote-block {
+      border-left: 3px solid var(--green);
+      padding: 32px 40px;
+      background: var(--green-dim);
+      border-radius: 0 16px 16px 0;
+    }
+    .quote-text {
+      font-size: clamp(22px, 3vw, 32px); font-weight: 700;
+      color: var(--white); line-height: 1.3; letter-spacing: -0.5px;
+      margin-bottom: 16px;
+    }
+    .quote-attr { font-size: 13px; color: var(--muted); }
+
+    /* ── DIAGNOSIS ── */
+    .diagnosis-box {
+      background: var(--dark3); border: 1px solid var(--border);
+      border-radius: 20px; padding: 48px; text-align: center;
+    }
+    .diagnosis-big {
+      font-size: clamp(18px, 3vw, 24px); font-weight: 700;
+      color: var(--white); line-height: 1.4; max-width: 640px; margin: 0 auto 24px;
+    }
+    .diagnosis-big em { color: var(--green); font-style: normal; }
+    .diagnosis-sub { font-size: 16px; color: var(--muted); max-width: 560px; margin: 0 auto; line-height: 1.6; }
+
+    /* ── FEATURES ── */
+    .features-grid { display: flex; flex-direction: column; gap: 12px; }
+    .feature-row {
+      display: flex; align-items: flex-start; gap: 20px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px 28px;
+    }
+    .feature-icon {
+      font-size: 20px; min-width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--green-dim); border-radius: 8px;
+      border: 1px solid rgba(140,198,63,0.2);
+    }
+    .feature-content { flex: 1; }
+    .feature-title { font-size: 15px; font-weight: 700; color: var(--white); margin-bottom: 4px; }
+    .feature-desc { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+    /* ── PROPUESTA ── */
+    .proposal-card {
+      background: linear-gradient(135deg, var(--dark3) 0%, rgba(140,198,63,0.05) 100%);
+      border: 1px solid rgba(140,198,63,0.3);
+      border-radius: 20px; padding: 48px;
+      margin-bottom: 24px;
+    }
+    .proposal-badge {
+      display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--green);
+      background: var(--green-dim); border: 1px solid rgba(140,198,63,0.3);
+      padding: 5px 12px; border-radius: 100px; margin-bottom: 20px;
+    }
+    .proposal-name {
+      font-size: clamp(28px, 4vw, 40px); font-weight: 800;
+      color: var(--white); letter-spacing: -1px; margin-bottom: 12px;
+    }
+    .proposal-desc { font-size: 17px; color: var(--muted); line-height: 1.6; max-width: 600px; }
+
+    /* ── WHY GRID ── */
+    .why-grid { display: flex; flex-direction: column; gap: 16px; }
+    .why-item {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px;
+    }
+    .why-pain { font-size: 14px; color: var(--muted); line-height: 1.4; }
+    .why-arrow { font-size: 18px; color: var(--green); text-align: center; }
+    .why-solution { font-size: 14px; color: var(--text); font-weight: 500; line-height: 1.4; }
+
+    /* ── STEPS ── */
+    .steps-list { display: flex; flex-direction: column; gap: 0; }
+    .step-item {
+      display: flex; align-items: flex-start; gap: 24px;
+      padding: 28px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step-item:last-child { border-bottom: none; }
+    .step-num {
+      font-size: 13px; font-weight: 800; color: var(--green);
+      background: var(--green-dim); border: 1px solid rgba(140,198,63,0.25);
+      border-radius: 8px; padding: 6px 12px; min-width: fit-content; margin-top: 2px;
+    }
+    .step-content { flex: 1; }
+    .step-title { font-size: 18px; font-weight: 700; color: var(--white); margin-bottom: 6px; }
+    .step-desc { font-size: 15px; color: var(--muted); line-height: 1.5; }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: var(--dark2); border-top: 1px solid var(--border);
+      padding: 100px 48px; text-align: center;
+    }
+    .cta-label { font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--green); margin-bottom: 24px; font-weight: 700; }
+    .cta-title {
+      font-size: clamp(40px, 6vw, 72px); font-weight: 900;
+      color: var(--white); letter-spacing: -2px; line-height: 1.05; margin-bottom: 16px;
+    }
+    .cta-sub { font-size: 18px; color: var(--muted); margin-bottom: 48px; }
+    .cta-email {
+      display: inline-block;
+      font-size: clamp(18px, 3vw, 28px); font-weight: 700;
+      color: var(--green); text-decoration: none;
+      border-bottom: 2px solid rgba(140,198,63,0.4);
+      padding-bottom: 4px;
+      transition: border-color 0.2s;
+    }
+    .cta-email:hover { border-color: var(--green); }
+    .cta-note { font-size: 13px; color: var(--muted); margin-top: 20px; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 32px 48px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-logo { font-size: 16px; font-weight: 800; color: var(--green); }
+    .footer-note { font-size: 12px; color: var(--muted); }
+
+    @media (max-width: 640px) {
+      nav { padding: 16px 24px; }
+      section { padding: 72px 24px; }
+      .context-grid { grid-template-columns: 1fr; }
+      .why-item { grid-template-columns: 1fr; }
+      .why-arrow { display: none; }
+      .hero h1 { letter-spacing: -1px; }
+      .proposal-card { padding: 32px 24px; }
+      footer { padding: 24px; }
+      .cta-section { padding: 72px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <span class="nav-logo">oike</span>
+    <span class="nav-tag">Propuesta para Appex</span>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-label">Propuesta Comercial · Confidencial</div>
+    <h1>Una propuesta<br/>para <span>Appex</span></h1>
+    <p class="hero-sub">Preparada para Jorge tras nuestra conversación. Lo que sigue es lo que escuchamos, lo que identificamos y lo que proponemos.</p>
+    <div class="hero-meta">
+      <div class="hero-meta-item">
+        <span class="hero-meta-label">Para</span>
+        <span class="hero-meta-value">Jorge Hidalgo · Partner & CEO, Appex</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="hero-meta-label">De parte de</span>
+        <span class="hero-meta-value">Ale Cadario · Oike</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="hero-meta-label">Fecha</span>
+        <span class="hero-meta-value">Abril 2026</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- LO QUE ESCUCHAMOS -->
+  <section>
+    <div class="section-label">01 · Discovery</div>
+    <h2 class="section-title">Lo que escuchamos</h2>
+    <p class="section-intro">Esto es lo que nos contaron en la reunión. Si algo no refleja su realidad, me avisan.</p>
+    <div class="context-grid">
+      <div class="context-cell">
+        <div class="context-cell-label">Industria</div>
+        <div class="context-cell-value">Implementación de ERP (ODOO) — B2B</div>
+      </div>
+      <div class="context-cell">
+        <div class="context-cell-label">Posición en el mercado</div>
+        <div class="context-cell-value">Partner #1 de ODOO en Bolivia · Certificación Silver</div>
+      </div>
+      <div class="context-cell">
+        <div class="context-cell-label">Operaciones actuales</div>
+        <div class="context-cell-value">Bolivia · Paraguay · República Dominicana · EEUU</div>
+      </div>
+      <div class="context-cell">
+        <div class="context-cell-label">Equipo comercial</div>
+        <div class="context-cell-value">2 personas gestionando más de 40 prospectos activos</div>
+      </div>
+      <div class="context-cell">
+        <div class="context-cell-label">Canales de adquisición actuales</div>
+        <div class="context-cell-value">Plataforma de partners ODOO · Account Managers · Aliados · Web · WhatsApp</div>
+      </div>
+      <div class="context-cell">
+        <div class="context-cell-label">Oportunidades no explotadas</div>
+        <div class="context-cell-value">México (invitación directa de ODOO) · República Dominicana · Outbound propio</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- DESAFÍOS -->
+  <section>
+    <div class="section-label">02 · Diagnóstico</div>
+    <h2 class="section-title">Los desafíos que identificamos</h2>
+    <p class="section-intro">Más allá de lo que dijeron, esto es lo que vimos entre líneas.</p>
+    <div class="pain-list">
+      <div class="pain-item">
+        <span class="pain-number">01</span>
+        <span class="pain-text">Son 100% inbound. Todo el pipeline depende de que ODOO, los aliados o la web les traigan clientes. No hay ningún mecanismo para ir a buscar proactivamente las empresas que más les convienen.</span>
+      </div>
+      <div class="pain-item">
+        <span class="pain-number">02</span>
+        <span class="pain-text">Tienen dos mercados nuevos en la mano — México y República Dominicana — pero no pueden avanzar porque dos personas ya están desbordadas con los 40+ prospectos de Bolivia y Paraguay.</span>
+      </div>
+      <div class="pain-item">
+        <span class="pain-number">03</span>
+        <span class="pain-text">La capacidad operativa del área comercial es el techo del negocio. No es falta de producto, ni falta de reputación. Es falta de sistema y palanca para que dos personas operen como si fueran cinco.</span>
+      </div>
+      <div class="pain-item">
+        <span class="pain-number">04</span>
+        <span class="pain-text">Los intentos de LinkedIn y email marketing no dieron resultado — no porque el canal sea malo, sino porque sin inteligencia de cuentas y mensajes personalizados, el outreach genérico no convierte.</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- OBJETIVO -->
+  <section>
+    <div class="section-label">03 · Objetivo</div>
+    <h2 class="section-title">Tu objetivo</h2>
+    <p class="section-intro">Esto es lo que quieren lograr. Lo ponemos acá para que sea claro — y compartido.</p>
+    <div class="quote-block">
+      <div class="quote-text">"Somos el partner #1 en Bolivia y tenemos la credibilidad para entrar a México y República Dominicana. El único límite es la capacidad comercial. Necesitamos el sistema para crecer sin tener que triplicar el equipo."</div>
+      <div class="quote-attr">Jorge Hidalgo · Partner & CEO, Appex</div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- PROBLEMA DE FONDO -->
+  <section>
+    <div class="section-label">04 · El problema real</div>
+    <h2 class="section-title">El problema de fondo</h2>
+    <div class="diagnosis-box">
+      <div class="diagnosis-big">Pasaron de ser el partner #10 al #1 siendo <em>reactivos</em>. Lo que sigue requiere ser <em>proactivos</em>.</div>
+      <div class="diagnosis-sub">El inbound funciona cuando el mercado viene a vos. El outbound inteligente funciona cuando vos elegís a quién ir a buscar — y llegás con el mensaje correcto antes que la competencia. Esa es la diferencia entre esperar México y conquistar México.</div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- QUÉ HACE OIKE -->
+  <section>
+    <div class="section-label">05 · La plataforma</div>
+    <h2 class="section-title">Qué hace Oike</h2>
+    <p class="section-intro">Un sistema de inteligencia de ventas que le da palanca a tu equipo comercial para operar con más impacto — sin crecer en headcount.</p>
+    <div class="features-grid">
+      <div class="feature-row">
+        <div class="feature-icon">🧠</div>
+        <div class="feature-content">
+          <div class="feature-title">Inteligencia de cuentas</div>
+          <div class="feature-desc">Mapa de stakeholders, noticias relevantes, pain points y executive summary generado con IA por cada empresa objetivo. Antes de contactar a alguien en México, ya sabés todo lo que necesitás saber.</div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-icon">✉️</div>
+        <div class="feature-content">
+          <div class="feature-title">Mensajes personalizados con IA</div>
+          <div class="feature-desc">Outreach por email, LinkedIn y WhatsApp generado en base al perfil del contacto y el contexto de la cuenta. No templates — mensajes que suenan humanos y que tienen razón de ser.</div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-icon">📊</div>
+        <div class="feature-content">
+          <div class="feature-title">Gestión de pipeline</div>
+          <div class="feature-desc">Oportunidades, etapas, forecast y calificación por cuenta. Esos 40+ prospectos en proceso con visibilidad real de qué necesita atención hoy — y qué puede esperar.</div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-icon">🔁</div>
+        <div class="feature-content">
+          <div class="feature-title">Centro de seguimientos</div>
+          <div class="feature-desc">El sistema dice cuándo volver, a quién y con qué mensaje. Dos personas pueden gestionar 60, 80 cuentas sin que se escape ninguna. La disciplina en piloto automático.</div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-icon">📈</div>
+        <div class="feature-content">
+          <div class="feature-title">Insights y KPIs en tiempo real</div>
+          <div class="feature-desc">Actividad, conversión de reuniones, velocidad de pipeline. Saben qué está funcionando en Bolivia, qué ajustar en Paraguay, y cómo entrar con el pie derecho a México.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- PROPUESTA -->
+  <section>
+    <div class="section-label">06 · La propuesta</div>
+    <h2 class="section-title">Nuestra propuesta</h2>
+    <p class="section-intro">Basado en lo que escuchamos, esto es lo que recomendamos para Appex.</p>
+    <div class="proposal-card">
+      <div class="proposal-badge">Solución recomendada</div>
+      <div class="proposal-name">Oike | Done With You</div>
+      <div class="proposal-desc">No solo la plataforma — construimos el sistema con ustedes. Empezamos por organizar los 40+ prospectos actuales en un pipeline con inteligencia real. Después diseñamos la primera estrategia de outbound para República Dominicana o México — identificando las empresas objetivo, armando los mensajes y ejecutando el primer ciclo de prospección. En 7 días tienen el sistema en marcha, los primeros mensajes saliendo, y un proceso que cualquier persona del equipo puede replicar.</div>
+      <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid rgba(140,198,63,0.2); font-size: 15px; color: #7A7A9A; line-height: 1.6;">
+        <span style="color: #8CC63F; font-weight: 600;">Sin riesgo:</span> Si en las primeras semanas no vemos conversaciones nuevas activadas en los mercados que priorizan, ajustamos el proceso hasta que funcione.
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- POR QUÉ -->
+  <section>
+    <div class="section-label">07 · La conexión</div>
+    <h2 class="section-title">Por qué esta solución</h2>
+    <p class="section-intro">Conectando lo que nos dijeron con lo que Oike resuelve.</p>
+    <div class="why-grid">
+      <div class="why-item">
+        <div class="why-pain">No hay outbound — todo depende de que ODOO o los aliados traigan los clientes.</div>
+        <div class="why-arrow">→</div>
+        <div class="why-solution">Oike les da el sistema para identificar empresas objetivo y llegar con el mensaje correcto antes que la competencia.</div>
+      </div>
+      <div class="why-item">
+        <div class="why-pain">México y República Dominicana están disponibles pero no tienen capacidad para atacarlos.</div>
+        <div class="why-arrow">→</div>
+        <div class="why-solution">Con el sistema de inteligencia y seguimientos de Oike, dos personas pueden ejecutar outbound en tres mercados simultáneamente.</div>
+      </div>
+      <div class="why-item">
+        <div class="why-pain">40+ prospectos activos sin visibilidad de qué necesita atención y cuándo.</div>
+        <div class="why-arrow">→</div>
+        <div class="why-solution">El pipeline de Oike organiza, prioriza y avisa. No más gestión por memoria — todo en un solo lugar.</div>
+      </div>
+      <div class="why-item">
+        <div class="why-pain">LinkedIn y email no funcionaron — los intentos anteriores no generaron respuesta.</div>
+        <div class="why-arrow">→</div>
+        <div class="why-solution">Porque el problema no era el canal, era el mensaje. Con inteligencia de cuenta real, el outreach se vuelve relevante — y la respuesta cambia.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- PRÓXIMOS PASOS -->
+  <section>
+    <div class="section-label">08 · Siguientes pasos</div>
+    <h2 class="section-title">Próximos pasos</h2>
+    <p class="section-intro">Simple y sin fricción.</p>
+    <div class="steps-list">
+      <div class="step-item">
+        <span class="step-num">01</span>
+        <div class="step-content">
+          <div class="step-title">Me confirman que esto tiene sentido</div>
+          <div class="step-desc">Un mensaje es suficiente. No hace falta una reunión para decir sí — aunque podemos tenerla si quieren ver el sistema en vivo.</div>
+        </div>
+      </div>
+      <div class="step-item">
+        <span class="step-num">02</span>
+        <div class="step-content">
+          <div class="step-title">Definimos el alcance</div>
+          <div class="step-desc">¿Arrancamos ordenando el pipeline actual? ¿Primer mercado nuevo: México o República Dominicana? Eso define la propuesta económica — sin sorpresas.</div>
+        </div>
+      </div>
+      <div class="step-item">
+        <span class="step-num">03</span>
+        <div class="step-content">
+          <div class="step-title">Arrancamos</div>
+          <div class="step-desc">En 7 días el sistema está en marcha, los primeros mensajes saliendo, y Appex deja de ser solo inbound.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <div class="cta-label">¿Arrancamos?</div>
+    <div class="cta-title">Un mensaje<br/>es suficiente.</div>
+    <div class="cta-sub">Sin formularios. Sin fricción. Escribime directo o agendá 15 minutos.</div>
+    <a href="mailto:ale@alecadario.com" class="cta-email">ale@alecadario.com</a>
+    <div style="margin-top: 32px;">
+      <a href="https://calendar.app.google/QHk3Z639cxvRxmhb7" target="_blank" style="display: inline-block; background: #8CC63F; color: #0D0D14; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 8px; text-decoration: none; letter-spacing: 0.3px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+        📅 Agendemos la reunión
+      </a>
+    </div>
+    <div class="cta-note">Esta propuesta fue preparada exclusivamente para Jorge Hidalgo · Appex · Abril 2026</div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <span class="footer-logo">oike</span>
+    <span class="footer-note">Sales Intelligence Platform · oike.app</span>
+  </footer>
+
+</body>
+</html>
