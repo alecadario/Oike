@@ -2913,6 +2913,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           'Phone number': values['Phone number'],
           'LinkedIn': values['LinkedIn'],
           'Campaign': values['Campaign'],
+          'Country': values['Country'] || null,
           'Level of Influence': values['Level of Influence'] || null,
           'Source': values['Source'] || null,
         };
@@ -3226,6 +3227,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
                 { key: 'Phone number', label: 'Phone' },
                 { key: 'LinkedIn', label: 'LinkedIn URL' },
                 { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
+                { key: 'Country', label: 'Country' },
                 { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
                 { key: 'Campaign', label: 'Campaign (if inbound)' },
               ]}
@@ -4264,16 +4266,46 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
       };
 
       // File upload for Intel Notes
+      const loadPdfJs = () => new Promise((resolve, reject) => {
+        if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.onload = () => {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          resolve(window.pdfjsLib);
+        };
+        script.onerror = () => reject(new Error('Failed to load PDF.js'));
+        document.head.appendChild(script);
+      });
+
       const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file || !account) return;
         setUploadingFile(true);
         try {
           let content = '';
-          try {
-            content = await file.text();
-          } catch (readErr) {
-            throw new Error(`Could not read file "${file.name}". Supported types: .txt, .csv, .json, .md, .html`);
+          const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+          if (isPdf) {
+            try {
+              const pdfjsLib = await loadPdfJs();
+              const arrayBuffer = await file.arrayBuffer();
+              const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+              const pages = [];
+              for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                pages.push(textContent.items.map(item => item.str).join(' '));
+              }
+              content = pages.join('\n');
+            } catch (pdfErr) {
+              throw new Error(`Could not read PDF "${file.name}": ${pdfErr.message}`);
+            }
+          } else {
+            try {
+              content = await file.text();
+            } catch (readErr) {
+              throw new Error(`Could not read file "${file.name}". Supported types: .txt, .csv, .json, .md, .html, .pdf`);
+            }
           }
           if (!content.trim()) throw new Error('File appears to be empty or unreadable.');
           const truncated = content.slice(0, 4000);
@@ -4959,7 +4991,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           <span className="action-btn" style={{ fontSize: 10, padding: '3px 10px', background: 'rgba(96,165,250,0.12)', color: 'var(--globant-info)', border: '1px solid rgba(96,165,250,0.3)', display: 'inline-block' }}>
                             {uploadingFile ? '⏳ Processing...' : '📎 Upload File'}
                           </span>
-                          <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml" onChange={handleFileUpload} style={{ display: 'none' }} disabled={uploadingFile} />
+                          <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml,.pdf" onChange={handleFileUpload} style={{ display: 'none' }} disabled={uploadingFile} />
                         </label>
                       </div>
                     </div>
@@ -5547,6 +5579,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 { key: 'Account Name', label: 'Account Name' },
                 { key: 'Website', label: 'Website' },
                 { key: 'Industry', label: 'Industry' },
+                { key: 'Country', label: 'Country' },
                 { key: 'Inside Sales Status', label: 'Inside Sales Status', type: 'select', options: ['Prospect', 'Active Outreach', 'Meeting Booked', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'On Hold', 'Dormant'] },
                 { key: 'Company Description', label: 'Company Description', type: 'textarea', fullWidth: true },
               ]}
@@ -6002,7 +6035,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                         )}
                       </div>
                     )}
-                    {dealsGap === 0 && <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>🎉 ¡Target alcanzado!</div>}
+                    {dealsGap === 0 && <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>🎉 Target reached!</div>}
                   </div>
                 )}
               </div>
@@ -6012,13 +6045,13 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                 <div className="card-header">
                   <h3>🤖 AI Sales Coach</h3>
                   <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateProjection} disabled={loadingProjection}>
-                    {loadingProjection ? '⏳ Analizando...' : aiProjection ? '🔄 Regenerar' : '✨ Generar proyección'}
+                    {loadingProjection ? '⏳ Analyzing...' : aiProjection ? '🔄 Regenerate' : '✨ Generate Projection'}
                   </button>
                 </div>
                 {aiProjection ? (
                   <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', padding: '4px 0' }}>{aiProjection}</div>
                 ) : (
-                  <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Generá una proyección personalizada basada en tu ritmo actual y tus metas.</div>
+                  <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Generate a personalized projection based on your current activity and goals.</div>
                 )}
               </div>
             </div>
@@ -8830,8 +8863,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#12121F', color: '#E8E8F0', fontFamily: 'Inter, sans-serif', padding: 40 }}>
               <div style={{ maxWidth: 480, textAlign: 'center' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12, color: '#BFD730' }}>Algo salió mal</h2>
-                <p style={{ fontSize: 13, color: '#8888A8', marginBottom: 24 }}>La aplicación encontró un error inesperado. Intentá recargar la página.</p>
+                <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12, color: '#BFD730' }}>Something went wrong</h2>
+                <p style={{ fontSize: 13, color: '#8888A8', marginBottom: 24 }}>The application encountered an unexpected error. Try reloading the page.</p>
                 <pre style={{ fontSize: 11, color: '#F87171', background: '#1E1E32', padding: '12px 16px', borderRadius: 8, textAlign: 'left', overflowX: 'auto', marginBottom: 20 }}>
                   {this.state.error.message}
                 </pre>
