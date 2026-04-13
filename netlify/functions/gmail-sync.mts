@@ -133,12 +133,33 @@ function getHeader(headers: any[], name: string): string {
   return headers?.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 }
 
+// ── Fetch already-synced Gmail message IDs from outreach table ──
+// IDs are stored as a hidden prefix in the Notes field: [gmsg:MESSAGE_ID]
+async function fetchSyncedMessageIds(baseId: string, outreachTableId: string, airtableKey: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let offset: string | null = null;
+  do {
+    const url = `${AIRTABLE_BASE}/${baseId}/${outreachTableId}?fields%5B%5D=Notes&pageSize=100${offset ? `&offset=${encodeURIComponent(offset)}` : ''}`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${airtableKey}` } });
+    if (!res.ok) break;
+    const data = await res.json();
+    for (const r of (data.records || [])) {
+      const notes: string = r.fields?.Notes || '';
+      const match = notes.match(/^\[gmsg:([^\]]+)\]/);
+      if (match) ids.add(match[1]);
+    }
+    offset = data.offset || null;
+  } while (offset);
+  return ids;
+}
+
 // ── Log an email as outreach activity in Airtable ──
 async function logEmailActivity(
   baseId: string,
   outreachTableId: string,
   stakeholderId: string,
   accountIds: string[],
+  messageId: string,
   subject: string,
   snippet: string,
   date: string,
@@ -148,7 +169,7 @@ async function logEmailActivity(
   const fields: Record<string, any> = {
     'Channel':     'Email',
     'Status':      direction === 'sent' ? 'Sent' : 'Received',
-    'Notes':       `${subject}\n\n${snippet}`,
+    'Notes':       `[gmsg:${messageId}]\n${subject}\n\n${snippet}`,
     'Stakeholder': [stakeholderId],
     'Date':        date,
   };
@@ -229,12 +250,19 @@ export default async (req: Request, context: Context) => {
       console.error('[gmail-sync] Profile fetch exception:', e);
     }
 
-    // 4. Fetch recent emails
+    // 4. Load already-synced message IDs to avoid duplicates
+    const syncedIds = await fetchSyncedMessageIds(baseId, outreachTableId, airtableKey);
+
+    // 5. Fetch recent emails
     const emails = await fetchRecentEmails(accessToken, daysBack);
 
-    // 5. Match and log
+    // 6. Match and log (skipping already-synced)
     let synced = 0;
+    let skipped = 0;
     for (const msg of emails) {
+      // Skip if already logged
+      if (syncedIds.has(msg.id)) { skipped++; continue; }
+
       const headers = msg.payload?.headers || [];
       const from    = getHeader(headers, 'From');
       const to      = getHeader(headers, 'To');
@@ -244,7 +272,6 @@ export default async (req: Request, context: Context) => {
 
       const fromEmails = extractEmails(from);
       const toEmails   = extractEmails(to);
-      const allEmails  = [...fromEmails, ...toEmails];
 
       // Find if any email matches a stakeholder
       let matchedStakeholder: typeof stakeholders[0] | undefined;
@@ -269,7 +296,8 @@ export default async (req: Request, context: Context) => {
         baseId,
         outreachTableId,
         matchedStakeholder.id,
-        [], // account IDs — stakeholder has them but we'd need another lookup; skip for V1
+        [],
+        msg.id,
         subject,
         snippet,
         isoDate,
@@ -280,12 +308,14 @@ export default async (req: Request, context: Context) => {
     }
 
     const diagMsg = synced > 0
-      ? `✅ ${synced} email(s) logged. (Gmail: ${gmailAccountEmail}, scanned ${emails.length} messages)`
-      : emails.length === 0
-        ? `Gmail account "${gmailAccountEmail}" — 0 messages found in last ${daysBack} days. Check that this is the right Gmail account and that it has sent/received emails recently.`
-        : `No matches. Gmail "${gmailAccountEmail}" had ${emails.length} message(s) but none matched ${stakeholders.length} contact email(s) in your CRM.`;
+      ? `✅ ${synced} new email(s) logged.${skipped > 0 ? ` (${skipped} already synced, skipped)` : ''} Gmail: ${gmailAccountEmail}, scanned ${emails.length} messages.`
+      : skipped > 0
+        ? `✅ All up to date — ${skipped} email(s) already synced, nothing new to log.`
+        : emails.length === 0
+          ? `Gmail "${gmailAccountEmail}" — 0 messages found in last ${daysBack} days.`
+          : `No matches. Gmail "${gmailAccountEmail}" had ${emails.length} message(s) but none matched your ${stakeholders.length} contacts' emails.`;
 
-    return new Response(JSON.stringify({ synced, total: emails.length, contacts: stakeholders.length, message: diagMsg }), {
+    return new Response(JSON.stringify({ synced, skipped, total: emails.length, contacts: stakeholders.length, message: diagMsg }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
 
