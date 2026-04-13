@@ -9029,7 +9029,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             if (gmailParam) {
               setGmailReturnStatus(gmailParam);
               setShowSettings(true);
-              window.history.replaceState({}, '', window.location.pathname);
+              window.history.replaceState({}, '', window.location.pathname || '/app');
             }
           } catch (e) {
             console.error('Init failed:', e);
