@@ -22,7 +22,9 @@ async function verifyToken(token: string, secret: string): Promise<Record<string
 const AIRTABLE_BASE = 'https://api.airtable.com/v0';
 
 function getJwtSecret(): string {
-  return Netlify.env.get('JWT_SECRET') || 'oike-default-secret-change-me-2026';
+  const secret = Netlify.env.get('JWT_SECRET');
+  if (!secret) throw new Error('JWT_SECRET environment variable is not configured');
+  return secret;
 }
 
 export default async (req: Request, context: Context) => {
@@ -87,8 +89,9 @@ export default async (req: Request, context: Context) => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error(`[airtable-proxy] ${response.status} on ${method} ${url}`, JSON.stringify(data));
-      return new Response(JSON.stringify({ ...data, _debug: { baseId, tableId, url, method } }), {
+      console.error(`[airtable-proxy] ${response.status} on ${method} ${tableId}`, JSON.stringify(data));
+      const errorMsg = data?.error?.message || data?.error || 'Airtable request failed';
+      return new Response(JSON.stringify({ error: errorMsg }), {
         status: response.status, headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -97,7 +100,8 @@ export default async (req: Request, context: Context) => {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('[airtable-proxy] Unhandled error:', error);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }

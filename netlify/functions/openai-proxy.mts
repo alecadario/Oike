@@ -20,7 +20,9 @@ async function verifyToken(token: string, secret: string): Promise<Record<string
 }
 
 function getJwtSecret(): string {
-  return Netlify.env.get('JWT_SECRET') || 'oike-default-secret-change-me-2026';
+  const secret = Netlify.env.get('JWT_SECRET');
+  if (!secret) throw new Error('JWT_SECRET environment variable is not configured');
+  return secret;
 }
 
 export default async (req: Request, context: Context) => {
@@ -69,7 +71,9 @@ export default async (req: Request, context: Context) => {
     const data = await response.json();
 
     if (!response.ok) {
-      return new Response(JSON.stringify(data), {
+      console.error('[openai-proxy] OpenAI error:', response.status, JSON.stringify(data));
+      const errorMsg = data?.error?.message || 'AI request failed';
+      return new Response(JSON.stringify({ error: errorMsg }), {
         status: response.status, headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -79,7 +83,8 @@ export default async (req: Request, context: Context) => {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('[openai-proxy] Unhandled error:', error);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }

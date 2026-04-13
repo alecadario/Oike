@@ -91,7 +91,9 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
 }
 
 function getJwtSecret(): string {
-  return Netlify.env.get('JWT_SECRET') || 'oike-default-secret-change-me-2026';
+  const secret = Netlify.env.get('JWT_SECRET');
+  if (!secret) throw new Error('JWT_SECRET environment variable is not configured');
+  return secret;
 }
 
 // ── Airtable user lookup ──
@@ -191,7 +193,8 @@ export default async (req: Request, context: Context) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('[auth] Unhandled error:', error);
+    return new Response(JSON.stringify({ error: 'Authentication failed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
