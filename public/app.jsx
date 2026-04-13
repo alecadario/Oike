@@ -307,7 +307,7 @@
       const [sendingQuickMsg, setSendingQuickMsg] = useState(false);
       const [showAIGenerator, setShowAIGenerator] = useState(false);
 
-      const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Lart name') ? ` ${F(stakeholder, 'Lart name')}` : '');
+      const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Last name') ? ` ${F(stakeholder, 'Last name')}` : '');
       const accNames = resolveLinked(stakeholder, 'Account', accounts, 'Account Name');
       const role = F(stakeholder, 'Role');
       const sOutreach = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(stakeholder.id))
@@ -1454,7 +1454,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const currentMessage = generatedMessages[tab] || '';
 
       // Gather rich context
-      const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Lart name') ? ` ${F(stakeholder, 'Lart name')}` : '');
+      const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Last name') ? ` ${F(stakeholder, 'Last name')}` : '');
       const role = F(stakeholder, 'Role');
       const pain = F(stakeholder, 'Pain Points (Generated)') || F(stakeholder, 'Pain points') || '';
       const painText = typeof pain === 'string' ? pain.slice(0, 400) : String(pain).slice(0, 400);
@@ -2088,7 +2088,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const fuCreateStakeholder = async () => {
         if (!fuNewName.trim() || !fuNewAccountId) return;
         const fields = { 'Name': fuNewName.trim(), 'Account': [fuNewAccountId] };
-        if (fuNewLast.trim()) fields['Lart name'] = fuNewLast.trim();
+        if (fuNewLast.trim()) fields['Last name'] = fuNewLast.trim();
         if (fuNewRole.trim()) fields['Role'] = fuNewRole.trim();
         if (fuNewEmail.trim()) fields['Email'] = fuNewEmail.trim();
         if (fuNewPhone.trim()) fields['Phone number'] = fuNewPhone.trim();
@@ -2119,7 +2119,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         return (
           <tr key={s.id}>
             <td>
-              <div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}</div>
+              <div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role')}</div>
             </td>
             <td style={{ fontSize: 12 }}>{accountNames.join(', ')}</td>
@@ -2300,7 +2300,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
                               const nameMatch = stakeholders.find(s => {
                                 const sAcc = linkedIds(s, 'Account');
                                 return (F(s, 'Name') || '').toLowerCase() === firstName.toLowerCase()
-                                  && (F(s, 'Lart name') || '').toLowerCase() === lastName.toLowerCase()
+                                  && (F(s, 'Last name') || '').toLowerCase() === lastName.toLowerCase()
                                   && sAcc.includes(matchedAccount.id);
                               });
                               if (nameMatch) { isDuplicate = true; duplicateReason = 'Name + Account match'; }
@@ -2371,7 +2371,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
                             try {
                               const fields = {
                                 'Name': row.firstName,
-                                'Lart name': row.lastName,
+                                'Last name': row.lastName,
                                 'Role': row.role,
                                 'Email': row.email || undefined,
                                 'Phone number': row.phone || undefined,
@@ -2455,7 +2455,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
                       {/* Header */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <div>
-                          <span style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}</span>
+                          <span style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</span>
                           <span style={{ fontSize: 12, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} · {accNames.join(', ')}</span>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -2559,7 +2559,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           {/* Meeting Modal */}
           {meetingModal && (() => {
             const ms = meetingModal.stakeholder;
-            const msName = F(ms, 'Name') + (F(ms, 'Lart name') ? ` ${F(ms, 'Lart name')}` : '');
+            const msName = F(ms, 'Name') + (F(ms, 'Last name') ? ` ${F(ms, 'Last name')}` : '');
             const msEmail = F(ms, 'Email');
             const msAccNames = resolveLinked(ms, 'Account', accounts, 'Account Name');
             const msRole = F(ms, 'Role');
@@ -2764,7 +2764,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const createContact = async () => {
         if (!ctxNewName.trim() || !ctxNewAccountId) return;
         const fields = { 'Name': ctxNewName.trim(), 'Account': [ctxNewAccountId] };
-        if (ctxNewLast.trim()) fields['Lart name'] = ctxNewLast.trim();
+        if (ctxNewLast.trim()) fields['Last name'] = ctxNewLast.trim();
         if (ctxNewRole.trim()) fields['Role'] = ctxNewRole.trim();
         if (ctxNewEmail.trim()) fields['Email'] = ctxNewEmail.trim();
         if (ctxNewPhone.trim()) fields['Phone number'] = ctxNewPhone.trim();
@@ -2796,7 +2796,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           header: true, skipEmptyLines: true,
           complete: (result) => {
             const existingEmails = new Set(stakeholders.map(s => (F(s, 'Email') || '').toLowerCase()).filter(Boolean));
-            const existingFullNames = stakeholders.map(s => ((F(s, 'Name') || '') + ' ' + (F(s, 'Lart name') || '')).trim());
+            const existingFullNames = stakeholders.map(s => ((F(s, 'Name') || '') + ' ' + (F(s, 'Last name') || '')).trim());
             const rows = result.data.map(row => {
               const norm = {};
               Object.keys(row).forEach(k => {
@@ -2846,7 +2846,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             // Resolve account by name
             const matchedAcc = row.accountName ? accounts.find(ac => (F(ac, 'Account Name') || '').toLowerCase() === row.accountName.toLowerCase()) : null;
             const fields = { 'Name': row.firstName };
-            if (row.lastName) fields['Lart name'] = row.lastName;
+            if (row.lastName) fields['Last name'] = row.lastName;
             if (row.email) fields['Email'] = row.email;
             if (row.phone) fields['Phone number'] = row.phone;
             if (row.role) fields['Role'] = row.role;
@@ -2907,7 +2907,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         // Only send fields that have a value — Airtable rejects empty strings for Email, Phone, URL, and Single Select fields
         const raw = {
           'Name': values['Name'],
-          'Lart name': values['Lart name'],
+          'Last name': values['Last name'],
           'Role': values['Role'],
           'Email': values['Email'],
           'Phone number': values['Phone number'],
@@ -3161,7 +3161,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
                       <tr key={s.id}>
                         <td>
                           <div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>
-                            {F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}
+                            {F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role')}</div>
                         </td>
@@ -3218,10 +3218,10 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           )}
           {editingContact && (
             <EditModal
-              title={`${F(editingContact, 'Name')} ${F(editingContact, 'Lart name') || ''}`.trim()}
+              title={`${F(editingContact, 'Name')} ${F(editingContact, 'Last name') || ''}`.trim()}
               fields={[
                 { key: 'Name', label: 'First Name' },
-                { key: 'Lart name', label: 'Last Name' },
+                { key: 'Last name', label: 'Last Name' },
                 { key: 'Role', label: 'Role / Title' },
                 { key: 'Email', label: 'Email' },
                 { key: 'Phone number', label: 'Phone' },
@@ -3546,7 +3546,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const saveCpContactEdit = async (values) => {
         if (!cpEditingContact) return;
         const raw = {
-          'Name': values['Name'], 'Lart name': values['Lart name'],
+          'Name': values['Name'], 'Last name': values['Last name'],
           'Role': values['Role'], 'Email': values['Email'],
           'Phone number': values['Phone number'], 'LinkedIn': values['LinkedIn'],
           'Campaign': values['Campaign'],
@@ -3779,7 +3779,7 @@ Generate 4-5 items. No intro, no outro, just the formatted items.`;
       const stakeholderEngagement = useMemo(() => {
         if (!account) return [];
         return accStakeholders.map(s => {
-          const sName = F(s, 'Name') + (F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : '');
+          const sName = F(s, 'Name') + (F(s, 'Last name') ? ` ${F(s, 'Last name')}` : '');
           const sOutreach = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
             .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
           const lastTouch = sOutreach[0] || null;
@@ -3860,7 +3860,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           const stksStr = accStakeholders.map(s => {
             const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
             const painStr = pain ? ` | Pain Points: ${pain.slice(0, 200)}` : '';
-            return `- ${F(s,'Name')} ${F(s,'Lart name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}${painStr}`;
+            return `- ${F(s,'Name')} ${F(s,'Last name')||''} (${F(s,'Role')||'?'}) — Influence: ${F(s,'Level of Influence')||'?'}${painStr}`;
           }).join('\n') || 'No stakeholders mapped';
           const oppsStr = opps.map(o => `- ${F(o,'Deal/Opp name')}: Stage=${F(o,'Stage')}, Value=${o.fields?.['Value']||'N/A'}`).join('\n') || 'No opportunities';
           const prompt = `You are a senior B2B sales strategist. Based on the account context below, fill out a MEDDPICC qualification framework. Be specific and practical — use names, data, and signals from the context. If information is not available, write "Unknown — needs discovery" for that field.
@@ -4194,7 +4194,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
       const createStakeholder = async () => {
         if (!newStkName.trim() || !account) return;
         const fields = { 'Name': newStkName.trim(), 'Account': [account.id] };
-        if (newStkLastName.trim()) fields['Lart name'] = newStkLastName.trim();
+        if (newStkLastName.trim()) fields['Last name'] = newStkLastName.trim();
         if (newStkRole.trim()) fields['Role'] = newStkRole.trim();
         if (newStkEmail.trim()) fields['Email'] = newStkEmail.trim();
         if (newStkPhone.trim()) fields['Phone number'] = newStkPhone.trim();
@@ -5330,7 +5330,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                   <div>
                                     <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 6 }} value={oppStakeholder} onChange={e => { setOppStakeholder(e.target.value); setShowAddOppStk(false); }}>
                                       <option value="">— Select stakeholder —</option>
-                                      {accStakeholders.map(s => { const sFullName = F(s, 'Name') + (F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''); const sRole = F(s, 'Role') || ''; return <option key={s.id} value={sFullName}>{sFullName}{sRole ? ` — ${sRole}` : ''}</option>; })}
+                                      {accStakeholders.map(s => { const sFullName = F(s, 'Name') + (F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''); const sRole = F(s, 'Role') || ''; return <option key={s.id} value={sFullName}>{sFullName}{sRole ? ` — ${sRole}` : ''}</option>; })}
                                     </select>
                                     <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 8px', marginBottom: 6 }} onClick={() => setShowAddOppStk(!showAddOppStk)}>{showAddOppStk ? '✕ Cancel' : '➕ New Contact'}</button>
                                     {showAddOppStk && (
@@ -5338,7 +5338,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
                                         <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }} disabled={!newOppStkName.trim() || creatingOppStk}
-                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; await api.createRecord(TABLE_IDS.stakeholders, { 'Name': firstName, ...(lastName ? { 'Lart name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [{ id: account.id }] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to create stakeholder'); } setCreatingOppStk(false); }}>
+                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; await api.createRecord(TABLE_IDS.stakeholders, { 'Name': firstName, ...(lastName ? { 'Last name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [{ id: account.id }] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to create stakeholder'); } setCreatingOppStk(false); }}>
                                           {creatingOppStk ? '⏳' : '✨ Create'}
                                         </button>
                                       </div>
@@ -5456,10 +5456,10 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           {/* Edit Contact Modal (from Account view) */}
           {cpEditingContact && (
             <EditModal
-              title={`${F(cpEditingContact, 'Name')} ${F(cpEditingContact, 'Lart name') || ''}`.trim()}
+              title={`${F(cpEditingContact, 'Name')} ${F(cpEditingContact, 'Last name') || ''}`.trim()}
               fields={[
                 { key: 'Name', label: 'First Name' },
-                { key: 'Lart name', label: 'Last Name' },
+                { key: 'Last name', label: 'Last Name' },
                 { key: 'Role', label: 'Role / Title' },
                 { key: 'Email', label: 'Email' },
                 { key: 'Phone number', label: 'Phone' },
@@ -5487,7 +5487,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           {/* Meeting Modal */}
           {cpMeetingModal && (() => {
             const ms = cpMeetingModal.stakeholder;
-            const msName = F(ms, 'Name') + (F(ms, 'Lart name') ? ` ${F(ms, 'Lart name')}` : '');
+            const msName = F(ms, 'Name') + (F(ms, 'Last name') ? ` ${F(ms, 'Last name')}` : '');
             const msRole = F(ms, 'Role') || '';
             const msEmail = F(ms, 'Email') || '';
             const msAccNames = resolveLinked(ms, 'Account', accounts, 'Account Name');
@@ -5540,7 +5540,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
                 <h3>📞 Log Call</h3>
                 <div style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 12 }}>
-                  {F(cpCallModal, 'Name')}{F(cpCallModal, 'Lart name') ? ` ${F(cpCallModal, 'Lart name')}` : ''} · {F(cpCallModal, 'Role')}
+                  {F(cpCallModal, 'Name')}{F(cpCallModal, 'Last name') ? ` ${F(cpCallModal, 'Last name')}` : ''} · {F(cpCallModal, 'Role')}
                 </div>
                 <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>CALL NOTES</label>
                 <textarea className="input-field" style={{ width: '100%', minHeight: 90, resize: 'vertical', marginBottom: 14, fontFamily: 'inherit', fontSize: 12 }}
@@ -6259,7 +6259,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                   const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
                   return (
                     <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
-                      <span><span style={{ fontWeight: 600 }}>{F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}</span> <span style={{ color: 'var(--globant-muted)' }}>({F(s, 'Role')})</span></span>
+                      <span><span style={{ fontWeight: 600 }}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</span> <span style={{ color: 'var(--globant-muted)' }}>({F(s, 'Role')})</span></span>
                       <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>{accNames.join(', ')}</span>
                     </div>
                   );
@@ -6428,7 +6428,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
             const accIndustries = linkedIds(s, 'Account').map(id => accounts.find(a => a.id === id)).filter(Boolean).map(a => F(a, 'Industry') || '').filter(Boolean);
             const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
             const painStr = typeof pain === 'string' ? pain.slice(0, 150) : '';
-            return `ID:${s.id} | ${F(s, 'Name')} ${F(s, 'Lart name') || ''} | ${F(s, 'Role') || '?'} at ${accNames.join(', ')} | Industry: ${accIndustries.join(', ')} | Influence: ${F(s, 'Level of Influence') || '?'} | Pain: ${painStr}`;
+            return `ID:${s.id} | ${F(s, 'Name')} ${F(s, 'Last name') || ''} | ${F(s, 'Role') || '?'} at ${accNames.join(', ')} | Industry: ${accIndustries.join(', ')} | Influence: ${F(s, 'Level of Influence') || '?'} | Pain: ${painStr}`;
           }).join('\n');
 
           const prompt = `You are a B2B sales strategist for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
@@ -6654,7 +6654,7 @@ Return ONLY the JSON array, nothing else.`;
                       <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, background: 'rgba(91,191,181,0.04)', borderRadius: 6 }}>
                         <div>
                           <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
-                            {F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}
+                            {F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}
                           </span>
                           <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')}</span>
                           {invSent && <span className="badge badge-green" style={{ marginLeft: 8, fontSize: 9 }}>Invite Sent</span>}
@@ -6714,7 +6714,7 @@ Return ONLY the JSON array, nothing else.`;
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: reason ? 4 : 0 }}>
                             <div>
                               <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
-                                {F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}
+                                {F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}
                               </span>
                               <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} · {accNames.join(', ')}</span>
                               <span className="badge badge-accent" style={{ marginLeft: 8, fontSize: 9 }}>{F(s, 'Level of Influence')}</span>
@@ -6754,7 +6754,7 @@ Return ONLY the JSON array, nothing else.`;
                         <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, background: 'rgba(251,191,36,0.06)', borderRadius: 6 }}>
                           <div>
                             <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
-                              {F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}
+                              {F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}
                             </span>
                             <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} · {accNames.join(', ')}</span>
                             <span className="badge badge-accent" style={{ marginLeft: 8, fontSize: 9 }}>{F(s, 'Level of Influence')}</span>
@@ -8040,7 +8040,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                           const daysSince = lastTouch ? Math.floor((now - new Date(lastTouch.fields?.['Date'])) / (1000*60*60*24)) : null;
                           return (
                             <tr key={s.id}>
-                              <td style={{ fontWeight: 600, fontSize: 12 }}>{F(s, 'Name')}{F(s, 'Lart name') ? ` ${F(s, 'Lart name')}` : ''}</td>
+                              <td style={{ fontWeight: 600, fontSize: 12 }}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</td>
                               <td style={{ fontSize: 11 }}>{F(s, 'Role')}</td>
                               <td style={{ fontSize: 11 }}>{F(account, 'Account Name')}</td>
                               <td>{F(s, 'Level of Influence') ? <span className="badge badge-accent" style={{ fontSize: 9 }}>{F(s, 'Level of Influence')}</span> : '—'}</td>
