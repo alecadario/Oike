@@ -702,7 +702,16 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
         {showAIGenerator && (
           <AIMessageModal
-            stakeholder={stakeholder}
+            stakeholder={{
+              ...stakeholder,
+              fields: {
+                ...stakeholder.fields,
+                // Merge locally generated values so AI sees fresh pain points & LinkedIn news
+                // even before a full refresh (field names may differ from Airtable schema)
+                'Pain points': localPain || F(stakeholder, 'Pain Points (Generated)') || F(stakeholder, 'Pain points') || '',
+                'Linkedin lates news': localLinkedin || F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '',
+              }
+            }}
             onClose={() => setShowAIGenerator(false)}
             onSend={() => setShowAIGenerator(false)}
             data={{ ...allData, outreach: allData?.outreach || [] }}
