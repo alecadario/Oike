@@ -1545,6 +1545,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         const eSummary = F(selectedEvent, 'Attachment Summary') || '';
         return `EVENT: ${eName}${eStart ? ` | Date: ${eStart}${eEnd ? ` – ${eEnd}` : ''}` : ''}${eUrl ? ` | URL: ${eUrl}` : ''}${eAdditional ? `\nEvent Context: ${eAdditional.slice(0, 300)}` : ''}${eSummary ? `\nEvent Summary: ${(typeof eSummary === 'string' ? eSummary : '').slice(0, 300)}` : ''}`;
       })() : '';
+      const isEventFollowup = !!(eventContext && eventMode === 'followup');
+      const isEventInvite = !!(eventContext && eventMode === 'invite');
 
       // Solution reference
       const allSolutions = data.solutions || [];
@@ -1607,34 +1609,48 @@ Keep it natural — write for the ear, not the eye.`,
         setLoadingAI(true);
         try {
           const chGuide = channelPrompts[selectedChannel];
-
-          // Determine mission based on context
-          const isEventFollowup = eventContext && eventMode === 'followup';
-          const isEventInvite = eventContext && eventMode === 'invite';
           const touchCount = sOutreach.length;
 
-          const mission = isEventFollowup
-            ? `MISSION: Write a warm follow-up after meeting ${sName} in person at an event. The relationship has started. Skip introductions entirely. Reference the meeting briefly and naturally. ONE clear next step.`
-            : isEventInvite
-            ? `MISSION: Use an upcoming event as a natural excuse to reach out to ${sName}. Casual tone — ask if they're attending, express you'd love to meet there. NOT a formal invitation, NOT a pitch.`
-            : tab === 'first'
-            ? `MISSION: Write a FIRST CONTACT message to ${sName}. This is cold outreach — they don't know you yet. Goal: open a conversation, earn a reply. Do NOT pitch or sell. Create genuine curiosity. Include a brief natural self-introduction (one sentence: who you are, your role, ${COMPANY_PROFILE.companyName}).`
-            : tab === 'breakup'
-            ? `MISSION: This is the LAST message you will ever send to ${sName} — after ${touchCount} touches with no reply. Make it count. TWO options, pick the one that fits best: (A) BREAKUP — acknowledge you've reached out a few times, say you won't keep pushing, leave one sharp value statement or insight they can keep. No guilt, no pressure, warm tone. (B) PATTERN INTERRUPT — forget the silence, open with a bold specific trigger from their world (news, challenge, industry shift), end with a hyper-specific ask (a date, a binary question). Ultra-short. Either way: this message must feel FINAL and human, not like attempt #${touchCount + 1}.`
-            : `MISSION: This is a follow-up after ${touchCount} previous touch${touchCount !== 1 ? 'es' : ''} with no reply. Re-engage with a COMPLETELY DIFFERENT angle than before. New hook, new value, new trigger. Do NOT repeat anything from previous messages. Do NOT write as if this is a first contact.`;
+          // Build context blocks per mode
+          const historyBlock = sOutreach.length > 0
+            ? `━━━ CONVERSATION HISTORY (${touchCount} message${touchCount !== 1 ? 's' : ''} sent — no replies) ━━━
+${sOutreach.slice(0, 6).map(o => `${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'} · ${F(o,'Channel')||'?'}: "${(F(o,'Message')||'').slice(0,120)}"`).join('\n')}`
+            : '';
 
-          // Available context — only what's actually populated
-          const availableContext = [
-            painText && `• Their pain points: ${painText.slice(0, 300)}`,
-            newsText && `• Recent company news: ${newsText.slice(0, 350)}`,
-            linkedinText && `• LinkedIn/recent activity: ${linkedinText.slice(0, 200)}`,
-            intelNotesText && `• BDR sales intel: ${intelNotesText.slice(0, 250)}`,
-            focusText && `• Their focus area: ${focusText}`,
-            solNames.length && `• Solutions mapped: ${solNames.join(', ')}`,
-            oppSummary && `• Active pipeline: ${oppSummary}`,
+          const firstContactBlock = [
+            painText && `• Their pain points: ${painText.slice(0, 400)}`,
+            newsText && `• Recent company news: ${newsText.slice(0, 400)}`,
+            linkedinText && `• LinkedIn activity: ${linkedinText.slice(0, 200)}`,
+            intelNotesText && `• Sales intel: ${intelNotesText.slice(0, 250)}`,
+            solutionContext && `━━━ SOLUTION TO REFERENCE ━━━\n${solutionContext}\nHint at relevance — don't pitch.`,
           ].filter(Boolean).join('\n');
 
-          const prompt = `You are a senior B2B sales copywriter. Your job: write ONE highly personalized outreach message that sounds like a real human wrote it — not a template.
+          const eventBlock = eventContext
+            ? `━━━ EVENT ━━━\n${eventContext}`
+            : '';
+
+          // Mission + context per tab
+          let mission = '';
+          let contextBlock = '';
+
+          if (isEventInvite) {
+            mission = `MISSION: Invite ${sName} to this event. Casual and direct — ask if they're attending, mention you'd like to meet there. No pitch. No formalities. One question, done.`;
+            contextBlock = eventBlock;
+          } else if (isEventFollowup) {
+            mission = `MISSION: Follow up after meeting ${sName} in person at an event. Skip intro. Reference the meeting naturally. ONE clear next step.`;
+            contextBlock = eventBlock;
+          } else if (tab === 'first') {
+            mission = `MISSION: First message to ${sName} — they don't know you yet. Open a conversation, earn a reply. No pitch. Genuine curiosity. One sentence intro: who you are, your role, ${COMPANY_PROFILE.companyName}.`;
+            contextBlock = firstContactBlock ? `━━━ CONTEXT (use this, don't invent) ━━━\n${firstContactBlock}` : '→ No specific data. Infer from role and industry.';
+          } else if (tab === 'followup') {
+            mission = `MISSION: Follow-up #${touchCount} to ${sName} — no reply yet. Read every previous message below and write something completely different. New angle, new hook. Must feel like a natural continuation, not a reset.`;
+            contextBlock = historyBlock || '→ No previous messages found.';
+          } else if (tab === 'breakup') {
+            mission = `MISSION: Last message to ${sName} — ${touchCount} attempts, no reply. Ultra-short (max 3 sentences). Read the history, pick one honest observation from it, and close the loop with zero pressure. Leave a door open but make it clear you won't reach out again. No guilt-tripping, no final pitch. Human, warm, final.`;
+            contextBlock = historyBlock || '→ No previous messages found.';
+          }
+
+          const prompt = `You are a senior B2B sales copywriter. Write ONE message that sounds like a real human — not a template.
 
 ${mission}
 
@@ -1645,32 +1661,21 @@ ${COMPANY_PROFILE.goals ? `Company focus: ${COMPANY_PROFILE.goals}` : ''}
 ━━━ RECIPIENT ━━━
 ${sName} | ${role || 'Unknown role'} at ${accountName} | ${industry || 'Unknown industry'}${influence ? ` | ${influence}` : ''}
 
-━━━ AVAILABLE CONTEXT (USE THIS — don't make things up) ━━━
-${availableContext || '→ No specific data available. Infer from role and industry.'}
-
-${touchCount > 0 ? `━━━ PREVIOUS OUTREACH (${touchCount} touch${touchCount !== 1 ? 'es' : ''} — no replies) ━━━
-${sOutreach.slice(0, 5).map(o => `${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'} · ${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'}${F(o,'Message') ? ' → "' + String(F(o,'Message')).slice(0, 100) + '"' : ''}${F(o,'Notes') ? ' | note: ' + String(F(o,'Notes')).slice(0, 80) : ''}`).join('\n')}` : ''}
-${isEventInvite ? `\n━━━ EVENT ━━━\n${eventContext}\n` : ''}
-${isEventFollowup ? `\n━━━ EVENT WHERE YOU MET ━━━\n${eventContext}\n` : ''}
-${solutionContext ? `\n━━━ SOLUTION TO POSITION ━━━\n${solutionContext}\nConnect it to their pain — don't pitch, hint at relevance.\n` : ''}
-${extraContext ? `\n━━━ SENDER'S PERSONAL CONTEXT (HIGHEST PRIORITY) ━━━\n"${extraContext}"\nThis MUST appear naturally in the message.\n` : ''}
+${contextBlock}
+${extraContext ? `\n━━━ EXTRA CONTEXT — HIGHEST PRIORITY ━━━\n"${extraContext}"\nThis MUST be reflected naturally in the message.\n` : ''}
 ━━━ CHANNEL & FORMAT ━━━
 Channel: ${selectedChannel}
 Tone: ${chGuide.tone}
 ${chGuide.format}
 ${suggestedLanguage ? `\nLanguage: ${suggestedLanguage} (account in ${accountCountry})` : ''}
-${COMPANY_PROFILE.voiceTone ? `\nSender's voice — MUST sound like this person:\n- ${COMPANY_PROFILE.voiceTone}${COMPANY_PROFILE.voiceAvoid ? `\n- Never: ${COMPANY_PROFILE.voiceAvoid}` : ''}${COMPANY_PROFILE.voiceExample ? `\n- Example from sender: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
-${COMPANY_PROFILE.market ? `\nMarket: ${COMPANY_PROFILE.market}` : ''}
+${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}${COMPANY_PROFILE.voiceAvoid ? `\n- Never: ${COMPANY_PROFILE.voiceAvoid}` : ''}${COMPANY_PROFILE.voiceExample ? `\n- Example: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
 
 ━━━ RULES ━━━
-1. OPEN with something specific about THEM — their news, a challenge, a trigger. NOT about ${COMPANY_PROFILE.companyName}.
-2. If pain points are available: connect ${COMPANY_PROFILE.companyName}'s value to ONE specific pain point. Never list services generically.
-3. If follow-up: you MUST write something noticeably different from a first-contact message. The reader should feel this is NOT the first time.
-4. First name only — never full name in the body.
-5. ONE micro-CTA — specific and low friction. Not "let me know if you're interested."
-6. BANNED PHRASES: "I hope this finds you well" / "I came across your profile" / "I wanted to reach out" / "I'd love to connect" / "just checking in" / "following up" / "touching base" / "as a leader in" / "congratulations on" (too generic) / "I noticed that"
-7. If it sounds like an AI wrote it, rewrite it.
-8. Output ONLY the message — no intro, no explanation, no subject line prefix unless Email format requires it.`;
+1. First name only — never full name in the body.
+2. ONE micro-CTA — specific, low friction.
+3. BANNED: "I hope this finds you well" / "I wanted to reach out" / "just checking in" / "following up" / "touching base" / "I'd love to connect" / "as a leader in" / "I noticed that"
+4. If it sounds like AI wrote it, rewrite it.
+5. Output ONLY the message — no intro, no explanation. Email: include Subject line first.`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 500 });
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
