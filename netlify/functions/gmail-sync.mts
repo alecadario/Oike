@@ -1,0 +1,268 @@
+import type { Context, Config } from "@netlify/functions";
+
+// ── Inline JWT verify (no cross-file imports) ──
+async function verifyToken(token: string, secret: string): Promise<Record<string, any> | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const data = `${headerB64}.${payloadB64}`;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const sigStr = atob(sigB64.replace(/-/g, '+').replace(/_/g, '/'));
+    const sigBytes = new Uint8Array([...sigStr].map((c) => c.charCodeAt(0)));
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(data));
+    if (!valid) return null;
+    const payloadStr = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(payloadStr);
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function getJwtSecret(): string {
+  const secret = Netlify.env.get('JWT_SECRET');
+  if (!secret) throw new Error('JWT_SECRET not configured');
+  return secret;
+}
+
+// ── Constants ──
+const USERS_TABLE_ID  = 'tblBMyzKhFKmPFX25';
+const USERS_BASE_ID   = 'app3plkFpOx28hhmH';
+const AIRTABLE_BASE   = 'https://api.airtable.com/v0';
+
+// ── Get a fresh access token using the stored refresh token ──
+async function getAccessToken(refreshToken: string): Promise<string | null> {
+  const clientId     = Netlify.env.get('GOOGLE_CLIENT_ID');
+  const clientSecret = Netlify.env.get('GOOGLE_CLIENT_SECRET');
+  if (!clientId || !clientSecret) return null;
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type:    'refresh_token',
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.access_token || null;
+}
+
+// ── Fetch user's Gmail refresh token from Airtable ──
+async function getUserRefreshToken(email: string, airtableKey: string): Promise<string | null> {
+  const formula = encodeURIComponent(`{Email}='${email}'`);
+  const url = `${AIRTABLE_BASE}/${USERS_BASE_ID}/${USERS_TABLE_ID}?filterByFormula=${formula}&maxRecords=1`;
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${airtableKey}` } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.records?.[0]?.fields?.['Gmail Refresh Token'] || null;
+}
+
+// ── Fetch all stakeholders with emails from a given Airtable base ──
+async function fetchStakeholders(baseId: string, tableId: string, airtableKey: string): Promise<Array<{ id: string; email: string; name: string }>> {
+  const url = `${AIRTABLE_BASE}/${baseId}/${tableId}?pageSize=100`;
+  const stakeholders: Array<{ id: string; email: string; name: string }> = [];
+  let nextOffset: string | null = null;
+
+  do {
+    const fetchUrl = nextOffset ? `${url}&offset=${nextOffset}` : url;
+    const res = await fetch(fetchUrl, { headers: { 'Authorization': `Bearer ${airtableKey}` } });
+    if (!res.ok) break;
+    const data = await res.json();
+    for (const r of (data.records || [])) {
+      const email = r.fields?.['Email'] || '';
+      if (email) {
+        stakeholders.push({
+          id:    r.id,
+          email: email.trim().toLowerCase(),
+          name:  `${r.fields?.['First name'] || ''} ${r.fields?.['Last name'] || ''}`.trim(),
+        });
+      }
+    }
+    nextOffset = data.offset || null;
+  } while (nextOffset);
+
+  return stakeholders;
+}
+
+// ── Fetch recent emails from Gmail ──
+async function fetchRecentEmails(accessToken: string, daysBack = 7): Promise<any[]> {
+  const after = Math.floor((Date.now() - daysBack * 24 * 3600 * 1000) / 1000);
+  const query = encodeURIComponent(`after:${after}`);
+  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`;
+
+  const listRes = await fetch(listUrl, {
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  if (!listRes.ok) return [];
+  const listData = await listRes.json();
+  if (!listData.messages || listData.messages.length === 0) return [];
+
+  // Fetch metadata for each message in parallel (batched)
+  const messages = await Promise.all(
+    listData.messages.map(async (m: { id: string }) => {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      if (!msgRes.ok) return null;
+      return await msgRes.json();
+    })
+  );
+
+  return messages.filter(Boolean);
+}
+
+// ── Extract email addresses from Gmail header value ──
+function extractEmails(headerValue: string): string[] {
+  const matches = headerValue.match(/[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}/g) || [];
+  return matches.map(e => e.toLowerCase());
+}
+
+// ── Parse Gmail message headers ──
+function getHeader(headers: any[], name: string): string {
+  return headers?.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+}
+
+// ── Log an email as outreach activity in Airtable ──
+async function logEmailActivity(
+  baseId: string,
+  outreachTableId: string,
+  stakeholderId: string,
+  accountIds: string[],
+  subject: string,
+  snippet: string,
+  date: string,
+  direction: 'sent' | 'received',
+  airtableKey: string
+): Promise<boolean> {
+  const fields: Record<string, any> = {
+    'Channel':     'Email',
+    'Status':      direction === 'sent' ? 'Sent' : 'Received',
+    'Notes':       `${subject}\n\n${snippet}`,
+    'Stakeholder': [stakeholderId],
+    'Date':        date,
+  };
+  if (accountIds.length > 0) fields['Account'] = accountIds;
+
+  const res = await fetch(`${AIRTABLE_BASE}/${baseId}/${outreachTableId}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ records: [{ fields }], typecast: true }),
+  });
+  return res.ok;
+}
+
+export default async (req: Request, context: Context) => {
+  if (req.method === 'OPTIONS') return new Response('', { status: 204 });
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Verify JWT
+  const authHeader = req.headers.get('authorization') || '';
+  const token = authHeader.replace('Bearer ', '');
+  const payload = await verifyToken(token, getJwtSecret());
+  if (!payload) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  const airtableKey = Netlify.env.get('AIRTABLE_API_KEY');
+  if (!airtableKey) {
+    return new Response(JSON.stringify({ error: 'Airtable not configured' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  try {
+    const body = await req.json();
+    const { baseId, stakeholdersTableId, outreachTableId, daysBack = 7 } = body;
+
+    if (!baseId || !stakeholdersTableId || !outreachTableId) {
+      return new Response(JSON.stringify({ error: 'Missing baseId, stakeholdersTableId, or outreachTableId' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // 1. Get user's Gmail refresh token
+    const refreshToken = await getUserRefreshToken(payload.email, airtableKey);
+    if (!refreshToken) {
+      return new Response(JSON.stringify({ error: 'Gmail not connected. Connect Gmail first.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // 2. Get a fresh access token
+    const accessToken = await getAccessToken(refreshToken);
+    if (!accessToken) {
+      return new Response(JSON.stringify({ error: 'Could not refresh Gmail access. Please reconnect Gmail.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // 3. Fetch stakeholders with emails
+    const stakeholders = await fetchStakeholders(baseId, stakeholdersTableId, airtableKey);
+    if (stakeholders.length === 0) {
+      return new Response(JSON.stringify({ synced: 0, message: 'No contacts with email addresses found.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Build a lookup map: email → stakeholder
+    const emailMap = new Map<string, typeof stakeholders[0]>();
+    for (const s of stakeholders) emailMap.set(s.email, s);
+
+    // 4. Fetch recent emails
+    const emails = await fetchRecentEmails(accessToken, daysBack);
+
+    // 5. Match and log
+    let synced = 0;
+    for (const msg of emails) {
+      const headers = msg.payload?.headers || [];
+      const from    = getHeader(headers, 'From');
+      const to      = getHeader(headers, 'To');
+      const subject = getHeader(headers, 'Subject') || '(no subject)';
+      const dateStr = getHeader(headers, 'Date');
+      const snippet = (msg.snippet || '').slice(0, 300);
+
+      const fromEmails = extractEmails(from);
+      const toEmails   = extractEmails(to);
+      const allEmails  = [...fromEmails, ...toEmails];
+
+      // Find if any email matches a stakeholder
+      let matchedStakeholder: typeof stakeholders[0] | undefined;
+      let direction: 'sent' | 'received' = 'received';
+
+      for (const e of toEmails) {
+        if (emailMap.has(e)) { matchedStakeholder = emailMap.get(e); direction = 'sent'; break; }
+      }
+      if (!matchedStakeholder) {
+        for (const e of fromEmails) {
+          if (emailMap.has(e)) { matchedStakeholder = emailMap.get(e); direction = 'received'; break; }
+        }
+      }
+
+      if (!matchedStakeholder) continue;
+
+      // Parse date
+      let isoDate = new Date().toISOString().split('T')[0];
+      try { isoDate = new Date(dateStr).toISOString().split('T')[0]; } catch {}
+
+      const logged = await logEmailActivity(
+        baseId,
+        outreachTableId,
+        matchedStakeholder.id,
+        [], // account IDs — stakeholder has them but we'd need another lookup; skip for V1
+        subject,
+        snippet,
+        isoDate,
+        direction,
+        airtableKey
+      );
+      if (logged) synced++;
+    }
+
+    return new Response(JSON.stringify({ synced, total: emails.length, message: `${synced} email(s) logged from the last ${daysBack} days.` }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+
+  } catch (e: any) {
+    console.error('[gmail-sync] Error:', e);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+};
+
+export const config: Config = { path: '/api/gmail/sync' };
