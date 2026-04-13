@@ -287,11 +287,17 @@
       if (!stakeholder) return null;
       const [genLoading, setGenLoading] = useState(''); // 'pain' | 'linkedin' | ''
       const PAIN_TS_LS_KEY = 'oike_pain_timestamps';
-      const [localPain, setLocalPain] = useState(F(stakeholder, 'Pain Points (Generated)') || F(stakeholder, 'Pain points') || '');
+      const PAIN_CACHE_KEY = `oike_pain_content_${stakeholder.id}`;
+      const LINKEDIN_CACHE_KEY = `oike_linkedin_content_${stakeholder.id}`;
+      const [localPain, setLocalPain] = useState(
+        localStorage.getItem(PAIN_CACHE_KEY) ||
+        F(stakeholder, 'Pain Points (Generated)') || F(stakeholder, 'Pain points') || '');
       const [localPainTs, setLocalPainTs] = useState(() => {
         try { return JSON.parse(localStorage.getItem(PAIN_TS_LS_KEY) || '{}')[stakeholder.id] || null; } catch { return null; }
       });
-      const [localLinkedin, setLocalLinkedin] = useState(F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '');
+      const [localLinkedin, setLocalLinkedin] = useState(
+        localStorage.getItem(LINKEDIN_CACHE_KEY) ||
+        F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '');
       const [quickAction, setQuickAction] = useState(''); // 'bounced' | 'reply' | 'meeting' | 'notinterested' | ''
       const [quickNote, setQuickNote] = useState('');
       const [quickDate, setQuickDate] = useState('');
@@ -337,8 +343,10 @@ Generate 3-5 specific, actionable pain points for this person based on their rol
 Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain points, no intro or summary.`;
 
           const generated = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
-          // Show result immediately — save to Airtable in background (graceful fail)
+          // Show result immediately
           setLocalPain(generated);
+          // Persist to localStorage so it survives page refresh even if Airtable write fails
+          try { localStorage.setItem(PAIN_CACHE_KEY, generated); } catch {}
           const painTs = new Date().toISOString();
           setLocalPainTs(painTs);
           try {
@@ -346,11 +354,12 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             painTsMap[stakeholder.id] = painTs;
             localStorage.setItem(PAIN_TS_LS_KEY, JSON.stringify(painTsMap));
           } catch {}
+          // Also try to save to Airtable (graceful fail — localStorage is the source of truth)
           if (!stakeholder.id.startsWith('tmp_')) {
             const a = new AirtableAPI();
             a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Pain points': generated })
               .then(() => { if (onRefresh) onRefresh(); })
-              .catch(e => console.warn('Could not persist pain points to Airtable:', e.message));
+              .catch(e => console.warn('Could not persist pain points to Airtable (cached locally):', e.message));
           }
         } catch (e) {
           console.error(e);
@@ -399,6 +408,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
           if (freshText) {
             setLocalLinkedin(freshText);
+            try { localStorage.setItem(LINKEDIN_CACHE_KEY, freshText); } catch {}
             console.log('[LinkedIn] Success! Got', freshText.length, 'chars');
           } else {
             // Maybe AI is still generating — try again after 10 more seconds
@@ -412,6 +422,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             const text2 = rawVal2?.value || (typeof rawVal2 === 'string' ? rawVal2 : '');
             if (text2) {
               setLocalLinkedin(text2);
+              try { localStorage.setItem(LINKEDIN_CACHE_KEY, text2); } catch {};
             } else {
               alert('LinkedIn AI is still generating. Wait a moment and try Refresh Data, then open the contact again.');
             }
@@ -1424,7 +1435,11 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
     // ============ AI MESSAGE MODAL ============
     function AIMessageModal({ stakeholder, onClose, onSend, data }) {
-      const [tab, setTab] = useState('first');
+      const [tab, setTab] = useState(() => {
+        // Auto-select tab based on outreach history — don't let "First Contact" run when there's history
+        const touchCount = (data.outreach || []).filter(o => linkedIds(o, 'Stakeholder').includes(stakeholder.id)).length;
+        return touchCount >= 5 ? 'followup3' : touchCount >= 1 ? 'followup2' : 'first';
+      });
       const [generatedMessages, setGeneratedMessages] = useState({ first: '', followup2: '', followup3: '' });
       const [loadingAI, setLoadingAI] = useState(false);
       const [selectedChannel, setSelectedChannel] = useState('');
