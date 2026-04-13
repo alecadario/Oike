@@ -94,7 +94,7 @@ async function fetchRecentEmails(accessToken: string, daysBack = 30): Promise<an
   const afterDate = new Date(Date.now() - daysBack * 24 * 3600 * 1000);
   const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
   // Only INBOX — log received emails from contacts, not outbound sent
-  const query = encodeURIComponent(`after:${afterStr}`);
+  const query = encodeURIComponent(`in:inbox after:${afterStr}`);
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`;
 
   const listRes = await fetch(listUrl, {
@@ -165,6 +165,7 @@ async function logEmailActivity(
   snippet: string,
   date: string,
   direction: 'sent' | 'received',
+  loggedBy: string,
   airtableKey: string
 ): Promise<boolean> {
   const fields: Record<string, any> = {
@@ -173,6 +174,7 @@ async function logEmailActivity(
     'Notes':       `[gmsg:${messageId}]\n${subject}\n\n${snippet}`,
     'Stakeholder': [stakeholderId],
     'Date':        date,
+    'Logged By':   loggedBy,
   };
   if (accountIds.length > 0) fields['Account'] = accountIds;
 
@@ -303,6 +305,7 @@ export default async (req: Request, context: Context) => {
         snippet,
         isoDate,
         direction,
+        payload.email || '',
         airtableKey
       );
       if (logged) synced++;
