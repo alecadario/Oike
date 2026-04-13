@@ -48,6 +48,7 @@
       localStorage.removeItem('oike_token');
       localStorage.removeItem('oike_user');
       localStorage.removeItem('oike_base_id');
+      localStorage.removeItem('oike_gmail_connected');
       window.location.reload();
     }
 
@@ -8410,7 +8411,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [saved, setSaved] = useState(false);
 
       // ── Gmail integration state ──
-      const [gmailConnected, setGmailConnected] = useState(gmailReturnStatus === 'connected');
+      const [gmailConnected, setGmailConnected] = useState(
+        gmailReturnStatus === 'connected' || localStorage.getItem('oike_gmail_connected') === 'true'
+      );
       const [gmailConnecting, setGmailConnecting] = useState(false);
       const [gmailSyncing, setGmailSyncing] = useState(false);
       const [gmailSyncResult, setGmailSyncResult] = useState(
@@ -8418,7 +8421,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           ? 'Gmail connection failed. Please try again.'
           : ''
       );
-      const [gmailDaysBack, setGmailDaysBack] = useState(7);
+      const [gmailDaysBack, setGmailDaysBack] = useState(30);
 
       const handleConnectGmail = async () => {
         setGmailConnecting(true);
@@ -9027,6 +9030,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             const urlParams = new URLSearchParams(window.location.search);
             const gmailParam = urlParams.get('gmail');
             if (gmailParam) {
+              if (gmailParam === 'connected') localStorage.setItem('oike_gmail_connected', 'true');
               setGmailReturnStatus(gmailParam);
               setShowSettings(true);
               window.history.replaceState({}, '', window.location.pathname || '/app');
