@@ -89,15 +89,21 @@ async function fetchStakeholders(baseId: string, tableId: string, airtableKey: s
 }
 
 // ── Fetch recent emails from Gmail ──
-async function fetchRecentEmails(accessToken: string, daysBack = 7): Promise<any[]> {
-  const after = Math.floor((Date.now() - daysBack * 24 * 3600 * 1000) / 1000);
-  const query = encodeURIComponent(`after:${after}`);
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`;
+async function fetchRecentEmails(accessToken: string, daysBack = 30): Promise<any[]> {
+  // Gmail `after:` operator requires YYYY/MM/DD format, not Unix timestamps
+  const afterDate = new Date(Date.now() - daysBack * 24 * 3600 * 1000);
+  const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
+  const query = encodeURIComponent(`after:${afterStr}`);
+  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`;
 
   const listRes = await fetch(listUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` },
   });
-  if (!listRes.ok) return [];
+  if (!listRes.ok) {
+    const errText = await listRes.text();
+    console.error('[gmail-sync] Gmail list error:', listRes.status, errText);
+    return [];
+  }
   const listData = await listRes.json();
   if (!listData.messages || listData.messages.length === 0) return [];
 
