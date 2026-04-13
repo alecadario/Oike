@@ -1483,7 +1483,17 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       };
       const suggestedLanguage = accountCountry ? (countryLanguageMap[accountCountry] || 'English') : '';
       const recentNews = account ? (F(account, 'Recent News') || '') : '';
-      const newsText = typeof recentNews === 'string' ? recentNews.slice(0, 400) : '';
+      // Also check localStorage news generated in Account Intel view (stored under oike_news_ai)
+      const localAccountNews = (() => {
+        try {
+          const cache = JSON.parse(localStorage.getItem('oike_news_ai') || '{}');
+          return account ? (cache[account.id]?.text || '') : '';
+        } catch { return ''; }
+      })();
+      const newsText = (() => {
+        const src = (typeof recentNews === 'string' && recentNews) ? recentNews : localAccountNews;
+        return typeof src === 'string' ? src.slice(0, 800) : '';
+      })();
       const intelPlan = account ? (F(account, 'Inside sales plan') || '') : '';
       const planText = typeof intelPlan === 'string' ? intelPlan.slice(0, 300) : '';
       // Note: planText still used as fallback context in AI Message Generator
