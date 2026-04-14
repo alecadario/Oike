@@ -2050,7 +2050,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         return [...levels].sort();
       }, [stakeholders]);
 
-      const useMessage = (stakeholder, channel, message, ccList = [], _eventId = null) => {
+      const useMessage = (stakeholder, channel, message, ccList = [], eventId = null) => {
         const name = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -2085,6 +2085,20 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.outreach, outreachFields)
           .then(() => activateAccountIfNeeded(a, companyIds, data.accounts))
+          .then(async () => {
+            // If sent as event invite, register stakeholder as invited in the event
+            if (eventId) {
+              const ev = data.events?.find(e => e.id === eventId);
+              if (ev) {
+                const currentInvited = linkedIds(ev, 'Stakeholders invited');
+                if (!currentInvited.includes(stakeholder.id)) {
+                  await a.updateRecord(TABLE_IDS.events, eventId, {
+                    'Stakeholders invited': [...currentInvited, stakeholder.id],
+                  });
+                }
+              }
+            }
+          })
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => console.error('Auto-log failed:', e));
       };
@@ -2872,7 +2886,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         if (onLogActivity) onLogActivity();
       };
 
-      const useMessage = (stakeholder, channel, message, ccList = [], _eventId = null) => {
+      const useMessage = (stakeholder, channel, message, ccList = [], eventId = null) => {
         const name = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -2903,6 +2917,19 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         if (onAddRecord) onAddRecord('outreach', outreachFields);
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.outreach, outreachFields)
+          .then(async () => {
+            if (eventId) {
+              const ev = data.events?.find(e => e.id === eventId);
+              if (ev) {
+                const currentInvited = linkedIds(ev, 'Stakeholders invited');
+                if (!currentInvited.includes(stakeholder.id)) {
+                  await a.updateRecord(TABLE_IDS.events, eventId, {
+                    'Stakeholders invited': [...currentInvited, stakeholder.id],
+                  });
+                }
+              }
+            }
+          })
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => console.error(e));
       };
