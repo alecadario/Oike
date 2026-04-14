@@ -3586,6 +3586,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [filterSolutionId, setFilterSolutionId] = useState('');
       const [filterIndustry, setFilterIndustry] = useState('');
       const [filterCountry, setFilterCountry] = useState('');
+      const [filterCPId, setFilterCPId] = useState('');
       const [editingOpp, setEditingOpp] = useState(null);   // null | { opp: record | null, isNew: bool }
       const [oppForm, setOppForm] = useState({});
       const [oppFormSolIds, setOppFormSolIds] = useState([]);
@@ -3684,8 +3685,13 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         if (filterCountry) {
           list = list.filter(a => (F(a, 'Country') || '') === filterCountry);
         }
+        if (filterCPId) {
+          const cp = (data.clientPartners || []).find(c => c.id === filterCPId);
+          const cpAccIds = cp ? linkedIds(cp, 'Accounts') : [];
+          list = list.filter(a => cpAccIds.includes(a.id));
+        }
         return list;
-      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry]);
+      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId, data.clientPartners]);
 
       const account = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) : null;
 
@@ -4643,10 +4649,23 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-            {(filterSolutionId || filterIndustry || filterCountry) && (
+            {(data.clientPartners || []).length > 0 && (
+              <select
+                className="input-field"
+                style={{ maxWidth: 180, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterCPId ? '#a78bfa' : 'var(--globant-muted)', borderRadius: 8 }}
+                value={filterCPId}
+                onChange={e => { setFilterCPId(e.target.value); selectAccount(''); }}
+              >
+                <option value="">🤝 All CPs</option>
+                {(data.clientPartners || []).filter(cp => F(cp, 'Name')).sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(cp => (
+                  <option key={cp.id} value={cp.id}>{F(cp, 'Name')}</option>
+                ))}
+              </select>
+            )}
+            {(filterSolutionId || filterIndustry || filterCountry || filterCPId) && (
               <span
                 style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, cursor: 'pointer', padding: '4px 8px', background: 'rgba(91,191,181,0.1)', borderRadius: 5 }}
-                onClick={() => { setFilterSolutionId(''); setFilterIndustry(''); setFilterCountry(''); }}
+                onClick={() => { setFilterSolutionId(''); setFilterIndustry(''); setFilterCountry(''); setFilterCPId(''); }}
                 title="Clear all filters"
               >
                 {filteredAccounts.length} result{filteredAccounts.length !== 1 ? 's' : ''} · ✕ clear
@@ -7284,10 +7303,13 @@ Return ONLY the JSON array, nothing else.`;
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
       const isAdmin = CURRENT_USER?.role === 'admin';
       const [selectedSolId, setSelectedSolId] = useState('');
-      const [repliesModalSolId, setRepliesModalSolId] = useState(''); // ID of solution whose replies to show
+      const [repliesModalSolId, setRepliesModalSolId] = useState('');
+      const [solHistoryStakeholder, setSolHistoryStakeholder] = useState(null);
+      const [solStkFilterAccount, setSolStkFilterAccount] = useState(''); // ID of solution whose replies to show
       // Wrapper that keeps URL in sync with the selected solution
       const selectSol = useCallback((id) => {
         setSelectedSolId(id || '');
+        setSolStkFilterAccount('');
         navSetUrl('solutionshub', id || null);
       }, []);
 
@@ -7452,7 +7474,12 @@ Return ONLY the JSON array, nothing else.`;
           const solAccounts = accounts.filter(a => solAccIds.includes(a.id));
           const solStakeholderIds = new Set();
           solAccounts.forEach(a => linkedIds(a, 'Stakeholders').forEach(id => solStakeholderIds.add(id)));
-          const solOutreach = outreach.filter(o => linkedIds(o, 'Account').some(aid => solAccIds.includes(aid)));
+          const solStakeholderIdSet = new Set();
+          solAccounts.forEach(a => linkedIds(a, 'Stakeholders').forEach(id => solStakeholderIdSet.add(id)));
+          const solOutreach = outreach.filter(o =>
+            linkedIds(o, 'Account').some(aid => solAccIds.includes(aid)) ||
+            linkedIds(o, 'Stakeholder').some(sid => solStakeholderIdSet.has(sid))
+          );
           const openOpps = solOpps.filter(o => !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage')));
           const pipeline = openOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
           const replied = solOutreach.filter(o => F(o, 'Status') === 'Replied').length;
@@ -7772,6 +7799,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         const typeColor = solType === 'Service' ? '#60a5fa' : solType === 'Product' ? '#4ade80' : solType === 'Retainer' ? 'var(--globant-accent)' : solType === 'Consulting' ? '#fbbf24' : '#60a5fa';
 
         return (
+          <React.Fragment>
           <div>
             {/* Edit Solution Modal (admin only) */}
             {showEditSol && isAdmin && (() => {
@@ -7860,7 +7888,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             )}
 
             {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 14, marginBottom: 24 }}>
               <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{selectedMetrics.accountCount}</div>
                 <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Accounts</div>
@@ -7872,6 +7900,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-success)', lineHeight: 1 }}>{selectedMetrics.outreachCount}</div>
                 <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Outreach</div>
+              </div>
+              <div className="card" style={{ textAlign: 'center', padding: '16px 12px', cursor: selectedMetrics.replied > 0 ? 'pointer' : 'default' }}
+                onClick={() => selectedMetrics.replied > 0 && setRepliesModalSolId(selectedSolId)}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: selectedMetrics.replied > 0 ? '#4ade80' : 'var(--globant-muted)', lineHeight: 1 }}>{selectedMetrics.replied}</div>
+                <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Replies {selectedMetrics.replied > 0 && <span style={{ color: '#4ade80' }}>↗</span>}</div>
               </div>
               <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-warning)', lineHeight: 1 }}>{selectedMetrics.openOppCount}</div>
@@ -8103,7 +8136,22 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {/* Stakeholders */}
               <div className="card">
-                <div className="card-header"><h3>👥 Stakeholders ({solStakeholders.length})</h3></div>
+                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3>👥 Stakeholders ({solStakeholders.length})</h3>
+                  {solAccounts.length > 1 && (
+                    <select
+                      className="input-field"
+                      style={{ fontSize: 11, padding: '4px 8px', maxWidth: 200 }}
+                      value={solStkFilterAccount}
+                      onChange={e => setSolStkFilterAccount(e.target.value)}
+                    >
+                      <option value="">All accounts</option>
+                      {solAccounts.map(a => (
+                        <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
                 {solStakeholders.length === 0 ? (
                   <p style={{ color: 'var(--globant-muted)', fontSize: 12 }}>No stakeholders in mapped accounts.</p>
                 ) : (
@@ -8111,14 +8159,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     <table className="data-table">
                       <thead><tr><th>Name</th><th>Role</th><th>Account</th><th>Influence</th><th>Last Contact</th></tr></thead>
                       <tbody>
-                        {solStakeholders.map(({ s, account }) => {
+                        {solStakeholders.filter(({ account }) => !solStkFilterAccount || account.id === solStkFilterAccount).map(({ s, account }) => {
                           const sOut = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
                             .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
                           const lastTouch = sOut[0];
                           const daysSince = lastTouch ? Math.floor((now - new Date(lastTouch.fields?.['Date'])) / (1000*60*60*24)) : null;
                           return (
-                            <tr key={s.id}>
-                              <td style={{ fontWeight: 600, fontSize: 12 }}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</td>
+                            <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => setSolHistoryStakeholder(s)}>
+                              <td style={{ fontWeight: 600, fontSize: 12, color: 'var(--globant-green)' }}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</td>
                               <td style={{ fontSize: 11 }}>{F(s, 'Role')}</td>
                               <td style={{ fontSize: 11 }}>{F(account, 'Account Name')}</td>
                               <td>{F(s, 'Level of Influence') ? <span className="badge badge-accent" style={{ fontSize: 9 }}>{F(s, 'Level of Influence')}</span> : '—'}</td>
@@ -8167,6 +8215,89 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </div>
             </div>
           </div>
+
+          {/* Stakeholder card modal */}
+          {solHistoryStakeholder && (
+            <StakeholderHistoryModal
+              stakeholder={solHistoryStakeholder}
+              outreach={outreach}
+              accounts={accounts}
+              onClose={() => setSolHistoryStakeholder(null)}
+              onRefresh={onLogActivity}
+              allData={data}
+              onSend={(s, ch, msg, cc, evId) => {
+                const companyIds = linkedIds(s, 'Account');
+                const name = F(s, 'Name') || '';
+                const a = api || new AirtableAPI();
+                a.createRecord(TABLE_IDS.outreach, {
+                  'Activity Name': `${ch} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
+                  'Account': companyIds, 'Stakeholder': [s.id],
+                  'Channel': ch, 'Date': new Date().toISOString(),
+                  'Status': 'Sent', 'Message': msg || '',
+                  'Notes': 'Sent from Solutions Hub',
+                  'Logged By': CURRENT_USER?.name || '',
+                }).then(() => { if (onLogActivity) onLogActivity(); }).catch(console.error);
+              }}
+            />
+          )}
+
+          {/* Replies modal — shared with list view */}
+          {repliesModalSolId && (() => {
+            const rSol = solutions.find(s => s.id === repliesModalSolId);
+            const rName = rSol ? (F(rSol, 'Name') || 'Solution') : 'Solution';
+            const rAccIds_exp = linkedIds(rSol, 'Accounts - New markets');
+            const rOpps2 = opportunities.filter(o => linkedIds(o, 'Solutions').includes(repliesModalSolId));
+            const rAccIds = [...new Set([...rAccIds_exp, ...rOpps2.flatMap(o => linkedIds(o, 'Account'))])];
+            const rStkIds2 = new Set();
+            accounts.filter(a => rAccIds.includes(a.id)).forEach(a => linkedIds(a, 'Stakeholders').forEach(id => rStkIds2.add(id)));
+            const rReplies = outreach
+              .filter(o => F(o, 'Status') === 'Replied' && (
+                linkedIds(o, 'Account').some(aid => rAccIds.includes(aid)) ||
+                linkedIds(o, 'Stakeholder').some(sid => rStkIds2.has(sid))
+              ))
+              .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+            return (
+              <div className="modal-overlay" onClick={() => setRepliesModalSolId('')}>
+                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620, maxHeight: '80vh', overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ margin: 0 }}>💬 Replies — {rName}</h3>
+                    <button onClick={() => setRepliesModalSolId('')} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                  </div>
+                  {rReplies.length === 0
+                    ? <p style={{ color: 'var(--globant-muted)', fontSize: 13 }}>No replied outreach found for this solution.</p>
+                    : rReplies.map(o => {
+                      const stkIds = linkedIds(o, 'Stakeholder');
+                      const stk = stakeholders.find(s => stkIds.includes(s.id));
+                      const stkName = stk ? `${F(stk, 'Name') || ''} ${F(stk, 'Last name') || ''}`.trim() : 'Unknown';
+                      const stkRole = stk ? (F(stk, 'Role') || '') : '';
+                      const accId2 = linkedIds(o, 'Account')[0];
+                      const acc2 = accId2 ? accounts.find(a => a.id === accId2) : null;
+                      const accName2 = acc2 ? (F(acc2, 'Account Name') || '') : '';
+                      const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                      const notes = F(o, 'Notes') || F(o, 'Message') || '';
+                      const channel = F(o, 'Channel') || '';
+                      return (
+                        <div key={o.id} style={{ padding: '12px 14px', marginBottom: 10, borderRadius: 8, background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                            <div>
+                              <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)' }}>{stkName}</span>
+                              {stkRole && <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{stkRole}</span>}
+                              {accName2 && <span style={{ fontSize: 11, color: 'var(--globant-green)', marginLeft: 8 }}>· {accName2}</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                              {channel && <span className="badge badge-accent" style={{ fontSize: 9 }}>{channel}</span>}
+                              <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{date}</span>
+                            </div>
+                          </div>
+                          {notes && <div style={{ fontSize: 12, color: 'var(--globant-text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto' }}>{notes.slice(0, 400)}{notes.length > 400 ? '…' : ''}</div>}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            );
+          })()}
+          </React.Fragment>
         );
       }
 
@@ -8321,9 +8452,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const rAccIds_exp = linkedIds(rSol, 'Accounts - New markets');
           const rOpps = opportunities.filter(o => linkedIds(o, 'Solutions').includes(repliesModalSolId));
           const rAccIds = [...new Set([...rAccIds_exp, ...rOpps.flatMap(o => linkedIds(o, 'Account'))])];
-          // Filter replied outreach linked to those accounts
+          // Stakeholder IDs for this solution's accounts
+          const rStkIds = new Set();
+          accounts.filter(a => rAccIds.includes(a.id)).forEach(a => linkedIds(a, 'Stakeholders').forEach(id => rStkIds.add(id)));
+          // Filter replied outreach: linked to solution accounts OR to stakeholders of those accounts
           const rReplies = outreach
-            .filter(o => F(o, 'Status') === 'Replied' && linkedIds(o, 'Account').some(aid => rAccIds.includes(aid)))
+            .filter(o => F(o, 'Status') === 'Replied' && (
+              linkedIds(o, 'Account').some(aid => rAccIds.includes(aid)) ||
+              linkedIds(o, 'Stakeholder').some(sid => rStkIds.has(sid))
+            ))
             .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
           return (
             <div className="modal-overlay" onClick={() => setRepliesModalSolId('')}>
