@@ -1729,7 +1729,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
 
       return (
         <div className="modal-overlay" onClick={onClose}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 580 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h3 style={{ margin: 0 }}>AI Message Generator</h3>
               <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{sName} · {role}</span>
@@ -7378,12 +7378,15 @@ Return ONLY the JSON array, nothing else.`;
       // Compute metrics per solution
       const solutionMetrics = useMemo(() => {
         return solutions.map(sol => {
-          const solAccIds = linkedIds(sol, 'Accounts - New markets');
+          const solAccIds_explicit = linkedIds(sol, 'Accounts - New markets');
+          const solOpps = opportunities.filter(o => linkedIds(o, 'Solutions').includes(sol.id));
+          // Auto-derive accounts from linked opportunities + explicitly mapped accounts
+          const oppAccIds = solOpps.flatMap(o => linkedIds(o, 'Account'));
+          const solAccIds = [...new Set([...solAccIds_explicit, ...oppAccIds])];
           const solAccounts = accounts.filter(a => solAccIds.includes(a.id));
           const solStakeholderIds = new Set();
           solAccounts.forEach(a => linkedIds(a, 'Stakeholders').forEach(id => solStakeholderIds.add(id)));
           const solOutreach = outreach.filter(o => linkedIds(o, 'Account').some(aid => solAccIds.includes(aid)));
-          const solOpps = opportunities.filter(o => linkedIds(o, 'Solutions').includes(sol.id));
           const openOpps = solOpps.filter(o => !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage')));
           const pipeline = openOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
           const replied = solOutreach.filter(o => F(o, 'Status') === 'Replied').length;
@@ -7555,7 +7558,9 @@ Be specific. Use real names from the data. No generic advice. Under 350 words to
         if (!selectedSol || !selectedMetrics) return;
         setLoadingRecs(true);
         try {
-          const solAccIds = linkedIds(selectedSol, 'Accounts - New markets');
+          const solAccIds_exp = linkedIds(selectedSol, 'Accounts - New markets');
+          const solOpps_ai = opportunities.filter(o => linkedIds(o, 'Solutions').includes(selectedSol.id));
+          const solAccIds = [...new Set([...solAccIds_exp, ...solOpps_ai.flatMap(o => linkedIds(o, 'Account'))])];
           const solAccounts = accounts.filter(a => solAccIds.includes(a.id));
           const solDetail = F(selectedSol, 'Service | Solution Detail') || '';
           const solDetailText = typeof solDetail === 'string' ? solDetail.slice(0, 500) : '';
@@ -7664,7 +7669,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       // ─── DETAIL VIEW ───
       if (selectedSol && selectedMetrics) {
-        const solAccIds = linkedIds(selectedSol, 'Accounts - New markets');
+        const solAccIds_explicit = linkedIds(selectedSol, 'Accounts - New markets');
+        const solOpps = opportunities.filter(o => linkedIds(o, 'Solutions').includes(selectedSol.id));
+        // Auto-derive accounts from linked opportunities + explicitly mapped accounts
+        const oppAccIds = solOpps.flatMap(o => linkedIds(o, 'Account'));
+        const solAccIds = [...new Set([...solAccIds_explicit, ...oppAccIds])];
         const solAccounts = accounts.filter(a => solAccIds.includes(a.id));
         const solStakeholders = [];
         solAccounts.forEach(a => {
@@ -7674,7 +7683,6 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           });
         });
         const solOutreach = outreach.filter(o => linkedIds(o, 'Account').some(aid => solAccIds.includes(aid)));
-        const solOpps = opportunities.filter(o => linkedIds(o, 'Solutions').includes(selectedSol.id));
         const openOpps = solOpps.filter(o => !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage')));
 
         // Notes rendering
