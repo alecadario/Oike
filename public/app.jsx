@@ -8564,7 +8564,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [filterAccountId, setFilterAccountId] = useState('');
       const [searchTerm, setSearchTerm]   = useState('');
       const [saving, setSaving]           = useState(false);
-      const [form, setForm] = useState({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', validUntil:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'', documentUrl:'' });
+      const [form, setForm] = useState({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'', documentUrl:'' });
       const [accSearch, setAccSearch]     = useState('');
       const [solSearch, setSolSearch]     = useState('');
       const [stkSearch, setStkSearch]     = useState('');
@@ -8609,7 +8609,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         return list.sort((a,b) => new Date(b.fields?.['Created']||0) - new Date(a.fields?.['Created']||0));
       }, [proposals, searchTerm, filterStatus, filterAccountId]);
 
-      const resetForm = () => setForm({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', validUntil:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'' });
+      const resetForm = () => setForm({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'', documentUrl:'' });
 
       const handleCreate = async () => {
         if (!form.title.trim()) return;
@@ -8619,12 +8619,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (form.amount)        fields['Amount'] = parseFloat(form.amount);
           if (form.description.trim()) fields['Description'] = form.description.trim();
           if (form.presentedDate) fields['Presented Date'] = form.presentedDate;
-          if (form.validUntil)    fields['Valid Until'] = form.validUntil;
           if (form.accountId)     fields['Account'] = [{ id: form.accountId }];
           if (form.stakeholderIds.length) fields['Stakeholders'] = form.stakeholderIds.map(id => ({ id }));
           if (form.solutionIds.length)    fields['Solutions'] = form.solutionIds.map(id => ({ id }));
           if (form.opportunityId) fields['Opportunity'] = [{ id: form.opportunityId }];
-          if (form.documentUrl?.trim()) fields['Document'] = [{ url: form.documentUrl.trim() }];
+          if (form.documentUrl?.trim()) fields['Document'] = form.documentUrl.trim();
           const a = api || new AirtableAPI();
           const rec = await a.createRecord(TABLE_IDS.proposals, fields);
           if (onAddRecord) onAddRecord('proposals', fields);
@@ -8645,11 +8644,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           amount: p.fields?.['Amount'] ? String(p.fields['Amount']) : '',
           description: F(p,'Description') || '',
           presentedDate: F(p,'Presented Date') || '',
-          validUntil: F(p,'Valid Until') || '',
           accountId: accId,
           stakeholderIds: linkedIds(p,'Stakeholders'),
           solutionIds: linkedIds(p,'Solutions'),
-          documentUrl: '',
+          documentUrl: F(p,'Document') || '',
         });
         setEditAccSearch(acc ? (F(acc,'Account Name')||'') : '');
         setEditSolSearch(''); setEditStkSearch('');
@@ -8664,13 +8662,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (editForm.amount)           fields['Amount'] = parseFloat(editForm.amount);
           if (editForm.description.trim()) fields['Description'] = editForm.description.trim();
           if (editForm.presentedDate)    fields['Presented Date'] = editForm.presentedDate;
-          if (editForm.validUntil)       fields['Valid Until'] = editForm.validUntil;
           fields['Account']      = editForm.accountId ? [{ id: editForm.accountId }] : [];
           fields['Stakeholders'] = editForm.stakeholderIds.map(id => ({ id }));
           fields['Solutions']    = editForm.solutionIds.map(id => ({ id }));
-          if (editForm.documentUrl.trim()) {
-            fields['Document'] = [{ url: editForm.documentUrl.trim() }];
-          }
+          if (editForm.documentUrl.trim()) fields['Document'] = editForm.documentUrl.trim();
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.proposals, selected.id, fields);
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, fields);
@@ -8727,15 +8722,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <input style={inputStyle} type="number" value={editForm.amount} onChange={e => setEditForm(p=>({...p,amount:e.target.value}))} />
                     </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    <div>
-                      <label style={labelStyle}>Presented Date</label>
-                      <input style={inputStyle} type="date" value={editForm.presentedDate} onChange={e => setEditForm(p=>({...p,presentedDate:e.target.value}))} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Valid Until</label>
-                      <input style={inputStyle} type="date" value={editForm.validUntil} onChange={e => setEditForm(p=>({...p,validUntil:e.target.value}))} />
-                    </div>
+                  <div>
+                    <label style={labelStyle}>Presented Date</label>
+                    <input style={inputStyle} type="date" value={editForm.presentedDate} onChange={e => setEditForm(p=>({...p,presentedDate:e.target.value}))} />
                   </div>
                   {/* Account */}
                   <div style={{ position:'relative' }}>
@@ -8865,8 +8854,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Presented</div>
               </div>
               <div className="card" style={{ textAlign:'center', padding:'16px 12px' }}>
-                <div style={{ fontSize:22, fontWeight:800, color:'var(--globant-warning)' }}>{F(selected,'Valid Until') ? formatDate(F(selected,'Valid Until')) : '—'}</div>
-                <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Valid Until</div>
+                <div style={{ fontSize:22, fontWeight:800, color:'var(--globant-accent)' }}>{solList.length}</div>
+                <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Solutions</div>
               </div>
               <div className="card" style={{ textAlign:'center', padding:'16px 12px' }}>
                 <div style={{ fontSize:22, fontWeight:800, color:'var(--globant-text)' }}>{stkList.length}</div>
@@ -8886,18 +8875,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 {/* PDF / Document */}
                 <div className="card">
                   <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📎 Document</div>
-                  {docs && Array.isArray(docs) && docs.length > 0 ? docs.map((att,i) => (
-                    <a key={i} href={att.url} target="_blank" rel="noopener noreferrer"
-                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(96,165,250,0.06)', borderRadius:6, border:'1px solid rgba(96,165,250,0.2)', marginBottom:6, textDecoration:'none', color:'var(--globant-text)', fontSize:12 }}>
-                      <span style={{ fontSize:16 }}>📄</span>
-                      <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{att.filename || 'Document'}</span>
-                      <span style={{ fontSize:10, color:'var(--globant-info)', flexShrink:0 }}>Open ↗</span>
+                  {docs ? (
+                    <a href={docs} target="_blank" rel="noopener noreferrer"
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', background:'rgba(96,165,250,0.06)', borderRadius:6, border:'1px solid rgba(96,165,250,0.2)', textDecoration:'none', color:'var(--globant-text)', fontSize:12 }}>
+                      <span style={{ fontSize:18 }}>📄</span>
+                      <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{docs}</span>
+                      <span style={{ fontSize:11, color:'var(--globant-info)', flexShrink:0, fontWeight:600 }}>Open ↗</span>
                     </a>
-                  )) : (
-                    <div>
-                      <p style={{ color:'var(--globant-muted)', fontSize:12, marginBottom:8 }}>No document attached.</p>
-                      <p style={{ color:'var(--globant-muted)', fontSize:11 }}>Click <strong style={{ color:'var(--globant-green)' }}>✏️ Edit</strong> above → paste a public link to your PDF (Google Drive, Dropbox, etc.).</p>
-                    </div>
+                  ) : (
+                    <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No document URL. Click <strong style={{ color:'var(--globant-green)' }}>✏️ Edit</strong> to add one.</p>
                   )}
                 </div>
               </div>
@@ -8988,15 +8974,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <input style={inputStyle} type="number" value={form.amount} onChange={e => setForm(p=>({...p,amount:e.target.value}))} placeholder="5000" />
                     </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    <div>
-                      <label style={labelStyle}>Presented Date</label>
-                      <input style={inputStyle} type="date" value={form.presentedDate} onChange={e => setForm(p=>({...p,presentedDate:e.target.value}))} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Valid Until</label>
-                      <input style={inputStyle} type="date" value={form.validUntil} onChange={e => setForm(p=>({...p,validUntil:e.target.value}))} />
-                    </div>
+                  <div>
+                    <label style={labelStyle}>Presented Date</label>
+                    <input style={inputStyle} type="date" value={form.presentedDate} onChange={e => setForm(p=>({...p,presentedDate:e.target.value}))} />
                   </div>
                   {/* ── Account combobox ── */}
                   <div style={{ position:'relative' }}>
@@ -9159,7 +9139,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   <th>Solutions</th>
                   <th style={{ textAlign:'right' }}>Amount</th>
                   <th>Presented</th>
-                  <th>Valid Until</th>
+                  <th>Document</th>
                 </tr></thead>
                 <tbody>
                   {filtered.length === 0 ? (
@@ -9177,7 +9157,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         <td style={{ fontSize:11, color:'var(--globant-muted)' }}>{solNames.length ? solNames.join(', ') : '—'}</td>
                         <td style={{ textAlign:'right', fontWeight:700, color:'var(--globant-green)' }}>{amount ? formatCurrency(amount) : '—'}</td>
                         <td style={{ fontSize:12 }}>{F(p,'Presented Date') ? formatDate(F(p,'Presented Date')) : '—'}</td>
-                        <td style={{ fontSize:12 }}>{F(p,'Valid Until') ? formatDate(F(p,'Valid Until')) : '—'}</td>
+                        <td style={{ fontSize:12 }}>{F(p,'Document') ? <a href={F(p,'Document')} target="_blank" rel="noopener noreferrer" style={{ color:'var(--globant-info)' }} onClick={e=>e.stopPropagation()}>Open ↗</a> : '—'}</td>
                       </tr>
                     );
                   })}
