@@ -6391,8 +6391,9 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
 
       const selectedEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
 
-      // Invite function
-      const inviteStakeholder = async (stakeholder, event, channel) => {
+      // Invite function — window.open MUST be called synchronously (before any await)
+      // so we open the channel first, then fire async API work in background
+      const inviteStakeholder = (stakeholder, event, channel) => {
         const sName = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -6404,6 +6405,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
         const message = aiInvite || fallbackInvite;
         const subject = `Invitation: ${evName} — ${evDate}`;
 
+        // Open channel synchronously — must happen before any async call
         if (channel === 'WhatsApp' && phone) {
           window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
         } else if (channel === 'Email' && email) {
@@ -6415,8 +6417,9 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
           window.open(`tel:${phone}`, '_self');
         }
 
-        const companyIds = linkedIds(stakeholder, 'Account');
-        try {
+        // Fire API calls in background (no await at top level)
+        const doAsync = async () => {
+          const companyIds = linkedIds(stakeholder, 'Account');
           const a = api || new AirtableAPI();
           // 1. Log outreach activity
           await a.createRecord(TABLE_IDS.outreach, {
@@ -6436,12 +6439,13 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
           const currentInvited = linkedIds(event, 'Stakeholders invited');
           if (!currentInvited.includes(stakeholder.id)) {
             await a.updateRecord(TABLE_IDS.events, event.id, {
-              'Stakeholders invited': [...currentInvited, stakeholder.id]
+              'Stakeholders invited': [...currentInvited, stakeholder.id],
             });
           }
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error('Event invite log failed:', e); }
+        };
+        doAsync().catch(e => console.error('Event invite log failed:', e));
       };
 
       // AI-powered suggestion for event invitations
