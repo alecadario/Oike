@@ -7284,6 +7284,7 @@ Return ONLY the JSON array, nothing else.`;
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
       const isAdmin = CURRENT_USER?.role === 'admin';
       const [selectedSolId, setSelectedSolId] = useState('');
+      const [repliesModalSolId, setRepliesModalSolId] = useState(''); // ID of solution whose replies to show
       // Wrapper that keeps URL in sync with the selected solution
       const selectSol = useCallback((id) => {
         setSelectedSolId(id || '');
@@ -8171,7 +8172,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       // ─── LIST VIEW ───
       return (
-        <div>
+        <React.Fragment>
           <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <h1>Solutions Hub</h1>
@@ -8296,7 +8297,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         <td style={{ textAlign: 'center' }}>{m.accountCount}</td>
                         <td style={{ textAlign: 'center' }}>{m.stakeholderCount}</td>
                         <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, color: m.outreachCount > 0 ? 'var(--globant-green)' : 'var(--globant-muted)' }}>{m.outreachCount}</span></td>
-                        <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, color: m.replied > 0 ? 'var(--globant-success)' : 'var(--globant-muted)' }}>{m.replied}</span></td>
+                        <td style={{ textAlign: 'center' }}>
+                          {m.replied > 0
+                            ? <span onClick={e => { e.stopPropagation(); setRepliesModalSolId(m.id); }} style={{ fontWeight: 700, color: 'var(--globant-success)', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}>{m.replied}</span>
+                            : <span style={{ color: 'var(--globant-muted)' }}>0</span>}
+                        </td>
                         <td style={{ textAlign: 'center' }}>{m.openOppCount > 0 ? <span className="badge badge-blue">{m.openOppCount}</span> : '—'}</td>
                         <td style={{ textAlign: 'right' }}>{m.pipeline > 0 ? '$' + (m.pipeline / 1000).toFixed(0) + 'K' : '—'}</td>
                       </tr>
@@ -8307,6 +8312,61 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             </div>
           </div>
         </div>
+
+        {/* ── Replies Modal ── */}
+        {repliesModalSolId && (() => {
+          const rSol = solutions.find(s => s.id === repliesModalSolId);
+          const rName = rSol ? (F(rSol, 'Name') || 'Solution') : 'Solution';
+          // Get accounts for this solution (explicit + from opps)
+          const rAccIds_exp = linkedIds(rSol, 'Accounts - New markets');
+          const rOpps = opportunities.filter(o => linkedIds(o, 'Solutions').includes(repliesModalSolId));
+          const rAccIds = [...new Set([...rAccIds_exp, ...rOpps.flatMap(o => linkedIds(o, 'Account'))])];
+          // Filter replied outreach linked to those accounts
+          const rReplies = outreach
+            .filter(o => F(o, 'Status') === 'Replied' && linkedIds(o, 'Account').some(aid => rAccIds.includes(aid)))
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+          return (
+            <div className="modal-overlay" onClick={() => setRepliesModalSolId('')}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620, maxHeight: '80vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3 style={{ margin: 0 }}>💬 Replies — {rName}</h3>
+                  <button onClick={() => setRepliesModalSolId('')} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                </div>
+                {rReplies.length === 0
+                  ? <p style={{ color: 'var(--globant-muted)', fontSize: 13 }}>No replied outreach found for this solution.</p>
+                  : rReplies.map(o => {
+                    const stkIds = linkedIds(o, 'Stakeholder');
+                    const stk = stakeholders.find(s => stkIds.includes(s.id));
+                    const stkName = stk ? `${F(stk, 'Name') || ''} ${F(stk, 'Last name') || ''}`.trim() : 'Unknown';
+                    const stkRole = stk ? (F(stk, 'Role') || '') : '';
+                    const accIds = linkedIds(o, 'Account');
+                    const acc = accounts.find(a => accIds.includes(a.id));
+                    const accName = acc ? (F(acc, 'Account Name') || '') : '';
+                    const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                    const notes = F(o, 'Notes') || F(o, 'Message') || '';
+                    const channel = F(o, 'Channel') || '';
+                    return (
+                      <div key={o.id} style={{ padding: '12px 14px', marginBottom: 10, borderRadius: 8, background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)' }}>{stkName}</span>
+                            {stkRole && <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{stkRole}</span>}
+                            {accName && <span style={{ fontSize: 11, color: 'var(--globant-green)', marginLeft: 8 }}>· {accName}</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                            {channel && <span className="badge badge-accent" style={{ fontSize: 9 }}>{channel}</span>}
+                            <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{date}</span>
+                          </div>
+                        </div>
+                        {notes && <div style={{ fontSize: 12, color: 'var(--globant-text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto' }}>{notes.slice(0, 400)}{notes.length > 400 ? '…' : ''}</div>}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          );
+        })()}
+        </React.Fragment>
       );
     }
 
@@ -8351,7 +8411,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--globant-darker)' }}>
           <div style={{ width: 400, background: 'var(--globant-card)', border: '1px solid var(--globant-border)', borderRadius: 16, padding: 40, textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg, #BFD730, #8fa824)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 24, color: 'var(--globant-dark)', margin: '0 auto 20px' }}>O</div>
+            <div style={{ width: 56, height: 56, background: '#5BBFB5', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 24, color: 'var(--globant-dark)', margin: '0 auto 20px' }}>O</div>
             <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Activate your account</h2>
             <p style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 24 }}>Enter the invite code you received</p>
 
@@ -8428,7 +8488,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--globant-darker)' }}>
           <div style={{ width: 380, background: 'var(--globant-card)', border: '1px solid var(--globant-border)', borderRadius: 16, padding: 40, textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg, #BFD730, #8fa824)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 24, color: 'var(--globant-dark)', margin: '0 auto 20px' }}>O</div>
+            <div style={{ width: 56, height: 56, background: '#5BBFB5', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 24, color: 'var(--globant-dark)', margin: '0 auto 20px' }}>O</div>
             <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Welcome to Oike</h2>
             <p style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 28 }}>Sales Intelligence Platform</p>
 
@@ -9142,7 +9202,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       if (configError) return (
         <div className="config-screen">
           <div className="config-box">
-            <div className="logo-big" style={{ background: 'linear-gradient(135deg, #BFD730, #8fa824)' }}>O</div>
+            <div className="logo-big" style={{ background: '#5BBFB5' }}>O</div>
             <h2 style={{ marginBottom: 8 }}>Oike Sales Intelligence</h2>
             <p style={{ color: 'var(--globant-danger)', fontSize: 13 }}>{configError}</p>
             <button className="action-btn btn-primary" style={{ marginTop: 16, padding: '12px 24px' }} onClick={() => window.location.reload()}>Retry</button>
@@ -9195,7 +9255,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               style={{ background: 'none', border: 'none', color: 'var(--globant-text)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: '4px 6px' }}
             >&#9776;</button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #BFD730, #8fa824)', width: 28, height: 28, fontSize: 14 }}>O</div>
+              <div className="logo-icon" style={{ background: '#5BBFB5', width: 28, height: 28, fontSize: 14 }}>O</div>
               <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--globant-text)' }}>{currentPageLabel}</span>
             </div>
           </div>
@@ -9206,7 +9266,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           />
           <div className={'sidebar' + (sidebarOpen ? ' mob-open' : '')}>
             <div className="sidebar-logo">
-              <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #BFD730, #8fa824)' }}>O</div>
+              <div className="logo-icon" style={{ background: '#5BBFB5' }}>O</div>
               <div>
                 <span>{CLIENT_CONFIG.name || 'Oike'}</span>
                 <small>Sales Intel</small>
