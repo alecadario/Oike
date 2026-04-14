@@ -8564,7 +8564,23 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [filterAccountId, setFilterAccountId] = useState('');
       const [searchTerm, setSearchTerm]   = useState('');
       const [saving, setSaving]           = useState(false);
-      const [form, setForm] = useState({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', validUntil:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'' });
+      const [form, setForm] = useState({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', validUntil:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'', documentUrl:'' });
+      const [accSearch, setAccSearch]     = useState('');
+      const [solSearch, setSolSearch]     = useState('');
+      const [stkSearch, setStkSearch]     = useState('');
+      const [accOpen, setAccOpen]         = useState(false);
+      const [solOpen, setSolOpen]         = useState(false);
+      const [stkOpen, setStkOpen]         = useState(false);
+      // Edit states
+      const [showEdit, setShowEdit]       = useState(false);
+      const [editForm, setEditForm]       = useState({});
+      const [editSaving, setEditSaving]   = useState(false);
+      const [editAccSearch, setEditAccSearch] = useState('');
+      const [editSolSearch, setEditSolSearch] = useState('');
+      const [editStkSearch, setEditStkSearch] = useState('');
+      const [editAccOpen, setEditAccOpen] = useState(false);
+      const [editSolOpen, setEditSolOpen] = useState(false);
+      const [editStkOpen, setEditStkOpen] = useState(false);
 
       const STATUSES = ['Draft','Presented','Under Review','Accepted','Rejected','Expired'];
       const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
@@ -8608,6 +8624,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (form.stakeholderIds.length) fields['Stakeholders'] = form.stakeholderIds.map(id => ({ id }));
           if (form.solutionIds.length)    fields['Solutions'] = form.solutionIds.map(id => ({ id }));
           if (form.opportunityId) fields['Opportunity'] = [{ id: form.opportunityId }];
+          if (form.documentUrl?.trim()) fields['Document'] = [{ url: form.documentUrl.trim() }];
           const a = api || new AirtableAPI();
           const rec = await a.createRecord(TABLE_IDS.proposals, fields);
           if (onAddRecord) onAddRecord('proposals', fields);
@@ -8617,6 +8634,50 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onLogActivity) onLogActivity();
         } catch(e) { console.error(e); alert('Error creating proposal'); }
         setSaving(false);
+      };
+
+      const openEdit = (p) => {
+        const accId = linkedIds(p,'Account')[0] || '';
+        const acc = accounts.find(a => a.id === accId);
+        setEditForm({
+          title: F(p,'Title') || '',
+          status: F(p,'Status') || 'Draft',
+          amount: p.fields?.['Amount'] ? String(p.fields['Amount']) : '',
+          description: F(p,'Description') || '',
+          presentedDate: F(p,'Presented Date') || '',
+          validUntil: F(p,'Valid Until') || '',
+          accountId: accId,
+          stakeholderIds: linkedIds(p,'Stakeholders'),
+          solutionIds: linkedIds(p,'Solutions'),
+          documentUrl: '',
+        });
+        setEditAccSearch(acc ? (F(acc,'Account Name')||'') : '');
+        setEditSolSearch(''); setEditStkSearch('');
+        setShowEdit(true);
+      };
+
+      const handleEdit = async () => {
+        if (!selected || !editForm.title.trim()) return;
+        setEditSaving(true);
+        try {
+          const fields = { 'Title': editForm.title.trim(), 'Status': editForm.status };
+          if (editForm.amount)           fields['Amount'] = parseFloat(editForm.amount);
+          if (editForm.description.trim()) fields['Description'] = editForm.description.trim();
+          if (editForm.presentedDate)    fields['Presented Date'] = editForm.presentedDate;
+          if (editForm.validUntil)       fields['Valid Until'] = editForm.validUntil;
+          fields['Account']      = editForm.accountId ? [{ id: editForm.accountId }] : [];
+          fields['Stakeholders'] = editForm.stakeholderIds.map(id => ({ id }));
+          fields['Solutions']    = editForm.solutionIds.map(id => ({ id }));
+          if (editForm.documentUrl.trim()) {
+            fields['Document'] = [{ url: editForm.documentUrl.trim() }];
+          }
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.proposals, selected.id, fields);
+          if (onUpdateRecord) onUpdateRecord('proposals', selected.id, fields);
+          setShowEdit(false);
+          if (onLogActivity) onLogActivity();
+        } catch(e) { console.error(e); alert('Error saving proposal'); }
+        setEditSaving(false);
       };
 
       const handleStatusChange = async (proposal, newStatus) => {
@@ -8640,6 +8701,141 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         const docs = selected.fields?.['Document'];
         const status = F(selected,'Status') || 'Draft';
         return (
+          <React.Fragment>
+          {/* ── Edit Modal ── */}
+          {showEdit && (
+            <div className="modal-overlay" onClick={() => setShowEdit(false)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:580, maxHeight:'90vh', overflowY:'auto' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+                  <h3 style={{ margin:0 }}>✏️ Edit Proposal</h3>
+                  <button onClick={() => setShowEdit(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:18 }}>✕</button>
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                  <div>
+                    <label style={labelStyle}>Title *</label>
+                    <input style={inputStyle} value={editForm.title} onChange={e => setEditForm(p=>({...p,title:e.target.value}))} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={labelStyle}>Status</label>
+                      <select style={inputStyle} value={editForm.status} onChange={e => setEditForm(p=>({...p,status:e.target.value}))}>
+                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Amount (USD)</label>
+                      <input style={inputStyle} type="number" value={editForm.amount} onChange={e => setEditForm(p=>({...p,amount:e.target.value}))} />
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={labelStyle}>Presented Date</label>
+                      <input style={inputStyle} type="date" value={editForm.presentedDate} onChange={e => setEditForm(p=>({...p,presentedDate:e.target.value}))} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Valid Until</label>
+                      <input style={inputStyle} type="date" value={editForm.validUntil} onChange={e => setEditForm(p=>({...p,validUntil:e.target.value}))} />
+                    </div>
+                  </div>
+                  {/* Account */}
+                  <div style={{ position:'relative' }}>
+                    <label style={labelStyle}>Account</label>
+                    <input style={inputStyle} placeholder="Type to search account..."
+                      value={editForm.accountId ? (F(accounts.find(a=>a.id===editForm.accountId),'Account Name')||editAccSearch) : editAccSearch}
+                      onFocus={() => setEditAccOpen(true)}
+                      onBlur={() => setTimeout(() => setEditAccOpen(false), 150)}
+                      onChange={e => { setEditAccSearch(e.target.value); setEditForm(p=>({...p,accountId:''})); setEditAccOpen(true); }} />
+                    {editAccOpen && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:99, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:160, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                        {[...accounts].filter(a => (F(a,'Account Name')||'').toLowerCase().includes(editAccSearch.toLowerCase())).sort((a,b)=>(F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).slice(0,20).map(a => (
+                          <div key={a.id} onMouseDown={() => { setEditForm(p=>({...p,accountId:a.id})); setEditAccSearch(''); setEditAccOpen(false); }}
+                            style={{ padding:'8px 12px', cursor:'pointer', fontSize:13, background:editForm.accountId===a.id?'rgba(91,191,181,0.15)':'transparent' }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(91,191,181,0.1)'}
+                            onMouseLeave={e=>e.currentTarget.style.background=editForm.accountId===a.id?'rgba(91,191,181,0.15)':'transparent'}>
+                            {F(a,'Account Name')}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Solutions */}
+                  <div style={{ position:'relative' }}>
+                    <label style={labelStyle}>Solutions</label>
+                    {editForm.solutionIds?.length > 0 && (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                        {editForm.solutionIds.map(id => { const s = solutions.find(x=>x.id===id); return s ? (
+                          <span key={id} style={{ background:'rgba(91,191,181,0.15)', color:'var(--globant-green)', borderRadius:4, padding:'2px 8px', fontSize:11, display:'flex', alignItems:'center', gap:4 }}>
+                            {F(s,'Name')} <span style={{ cursor:'pointer', fontWeight:700 }} onMouseDown={e=>{e.preventDefault();setEditForm(p=>({...p,solutionIds:p.solutionIds.filter(x=>x!==id)}))}}>✕</span>
+                          </span>
+                        ) : null; })}
+                      </div>
+                    )}
+                    <input style={inputStyle} placeholder="Type to search solutions..." value={editSolSearch}
+                      onFocus={() => setEditSolOpen(true)} onBlur={() => setTimeout(() => setEditSolOpen(false), 150)}
+                      onChange={e => { setEditSolSearch(e.target.value); setEditSolOpen(true); }} />
+                    {editSolOpen && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:99, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:140, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                        {[...solutions].filter(s => (F(s,'Name')||'').toLowerCase().includes(editSolSearch.toLowerCase()) && !editForm.solutionIds?.includes(s.id)).sort((a,b)=>(F(a,'Name')||'').localeCompare(F(b,'Name')||'')).slice(0,15).map(s => (
+                          <div key={s.id} onMouseDown={() => { setEditForm(p=>({...p,solutionIds:[...(p.solutionIds||[]),s.id]})); setEditSolSearch(''); }}
+                            style={{ padding:'8px 12px', cursor:'pointer', fontSize:13 }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(91,191,181,0.1)'}
+                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            {F(s,'Name')}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Stakeholders */}
+                  <div style={{ position:'relative' }}>
+                    <label style={labelStyle}>Stakeholders</label>
+                    {editForm.stakeholderIds?.length > 0 && (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                        {editForm.stakeholderIds.map(id => { const s = stakeholders.find(x=>x.id===id); return s ? (
+                          <span key={id} style={{ background:'rgba(96,165,250,0.15)', color:'var(--globant-info)', borderRadius:4, padding:'2px 8px', fontSize:11, display:'flex', alignItems:'center', gap:4 }}>
+                            {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''} <span style={{ cursor:'pointer', fontWeight:700 }} onMouseDown={e=>{e.preventDefault();setEditForm(p=>({...p,stakeholderIds:p.stakeholderIds.filter(x=>x!==id)}))}}>✕</span>
+                          </span>
+                        ) : null; })}
+                      </div>
+                    )}
+                    <input style={inputStyle} placeholder="Type to search stakeholders..." value={editStkSearch}
+                      onFocus={() => setEditStkOpen(true)} onBlur={() => setTimeout(() => setEditStkOpen(false), 150)}
+                      onChange={e => { setEditStkSearch(e.target.value); setEditStkOpen(true); }} />
+                    {editStkOpen && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:99, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:140, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                        {[...stakeholders].filter(s => !editForm.stakeholderIds?.includes(s.id) && (!editForm.accountId || linkedIds(s,'Account').includes(editForm.accountId)) && (`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(editStkSearch.toLowerCase())).sort((a,b)=>(F(a,'Name')||'').localeCompare(F(b,'Name')||'')).slice(0,20).map(s => (
+                          <div key={s.id} onMouseDown={() => { setEditForm(p=>({...p,stakeholderIds:[...(p.stakeholderIds||[]),s.id]})); setEditStkSearch(''); }}
+                            style={{ padding:'8px 12px', cursor:'pointer', fontSize:13 }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(96,165,250,0.1)'}
+                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <span style={{ fontWeight:600 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</span>
+                            {F(s,'Role') && <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Document URL */}
+                  <div>
+                    <label style={labelStyle}>Document URL (PDF link)</label>
+                    <input style={inputStyle} type="url" placeholder="https://drive.google.com/... or Dropbox/OneDrive public link"
+                      value={editForm.documentUrl} onChange={e => setEditForm(p=>({...p,documentUrl:e.target.value}))} />
+                    <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>Paste a public link — Airtable will download and store the file. Leave blank to keep existing document.</div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Description</label>
+                    <textarea style={{ ...inputStyle, minHeight:70, resize:'vertical' }} value={editForm.description} onChange={e => setEditForm(p=>({...p,description:e.target.value}))} />
+                  </div>
+                  <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                    <button className="action-btn btn-ghost" onClick={() => setShowEdit(false)}>Cancel</button>
+                    <button className="action-btn btn-primary" onClick={handleEdit} disabled={editSaving || !editForm.title?.trim()}>
+                      {editSaving ? '⏳ Saving...' : '💾 Save Changes'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div>
             <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
@@ -8654,6 +8850,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 <select className="input-field" style={{ fontSize:12 }} value={status} onChange={e => handleStatusChange(selected, e.target.value)}>
                   {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+                <button className="action-btn btn-ghost" style={{ fontSize:12 }} onClick={() => openEdit(selected)}>✏️ Edit</button>
               </div>
             </div>
 
@@ -8696,7 +8893,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{att.filename || 'Document'}</span>
                       <span style={{ fontSize:10, color:'var(--globant-info)', flexShrink:0 }}>Open ↗</span>
                     </a>
-                  )) : <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No document attached. Upload a PDF directly in Airtable.</p>}
+                  )) : (
+                    <div>
+                      <p style={{ color:'var(--globant-muted)', fontSize:12, marginBottom:8 }}>No document attached.</p>
+                      <p style={{ color:'var(--globant-muted)', fontSize:11 }}>Click <strong style={{ color:'var(--globant-green)' }}>✏️ Edit</strong> above → paste a public link to your PDF (Google Drive, Dropbox, etc.).</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -8743,6 +8945,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </div>
             </div>
           </div>
+          </React.Fragment>
         );
       }
 
@@ -8795,34 +8998,108 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       <input style={inputStyle} type="date" value={form.validUntil} onChange={e => setForm(p=>({...p,validUntil:e.target.value}))} />
                     </div>
                   </div>
-                  <div>
+                  {/* ── Account combobox ── */}
+                  <div style={{ position:'relative' }}>
                     <label style={labelStyle}>Account</label>
-                    <select style={inputStyle} value={form.accountId} onChange={e => setForm(p=>({...p,accountId:e.target.value}))}>
-                      <option value="">— Select account —</option>
-                      {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
-                        <option key={a.id} value={a.id}>{F(a,'Account Name')}</option>
-                      ))}
-                    </select>
+                    <input style={inputStyle} placeholder="Type to search account..."
+                      value={form.accountId ? (F(accounts.find(a=>a.id===form.accountId),'Account Name')||accSearch) : accSearch}
+                      onFocus={() => setAccOpen(true)}
+                      onBlur={() => setTimeout(() => setAccOpen(false), 150)}
+                      onChange={e => { setAccSearch(e.target.value); setForm(p=>({...p,accountId:''})); setAccOpen(true); }} />
+                    {accOpen && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:99, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:180, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                        {[...accounts]
+                          .filter(a => (F(a,'Account Name')||'').toLowerCase().includes(accSearch.toLowerCase()))
+                          .sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||''))
+                          .slice(0,20).map(a => (
+                          <div key={a.id} onMouseDown={() => { setForm(p=>({...p,accountId:a.id,stakeholderIds:[]})); setAccSearch(''); setAccOpen(false); }}
+                            style={{ padding:'8px 12px', cursor:'pointer', fontSize:13, background:form.accountId===a.id?'rgba(91,191,181,0.15)':'transparent', color:form.accountId===a.id?'var(--globant-green)':'var(--globant-text)' }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(91,191,181,0.1)'}
+                            onMouseLeave={e=>e.currentTarget.style.background=form.accountId===a.id?'rgba(91,191,181,0.15)':'transparent'}>
+                            {F(a,'Account Name')}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Solutions combobox ── */}
+                  <div style={{ position:'relative' }}>
+                    <label style={labelStyle}>Solutions</label>
+                    {form.solutionIds.length > 0 && (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                        {form.solutionIds.map(id => { const s = solutions.find(x=>x.id===id); return s ? (
+                          <span key={id} style={{ background:'rgba(91,191,181,0.15)', color:'var(--globant-green)', borderRadius:4, padding:'2px 8px', fontSize:11, display:'flex', alignItems:'center', gap:4 }}>
+                            {F(s,'Name')}
+                            <span style={{ cursor:'pointer', fontWeight:700 }} onMouseDown={e=>{e.preventDefault();setForm(p=>({...p,solutionIds:p.solutionIds.filter(x=>x!==id)}))}}>✕</span>
+                          </span>
+                        ) : null; })}
+                      </div>
+                    )}
+                    <input style={inputStyle} placeholder="Type to search solutions..."
+                      value={solSearch}
+                      onFocus={() => setSolOpen(true)}
+                      onBlur={() => setTimeout(() => setSolOpen(false), 150)}
+                      onChange={e => { setSolSearch(e.target.value); setSolOpen(true); }} />
+                    {solOpen && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:99, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:160, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                        {[...solutions]
+                          .filter(s => (F(s,'Name')||'').toLowerCase().includes(solSearch.toLowerCase()) && !form.solutionIds.includes(s.id))
+                          .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||''))
+                          .slice(0,15).map(s => (
+                          <div key={s.id} onMouseDown={() => { setForm(p=>({...p,solutionIds:[...p.solutionIds,s.id]})); setSolSearch(''); }}
+                            style={{ padding:'8px 12px', cursor:'pointer', fontSize:13 }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(91,191,181,0.1)'}
+                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            {F(s,'Name')}{F(s,'Type') ? <span style={{ fontSize:10, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Type')}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Stakeholders combobox ── */}
+                  <div style={{ position:'relative' }}>
+                    <label style={labelStyle}>Stakeholders</label>
+                    {form.stakeholderIds.length > 0 && (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                        {form.stakeholderIds.map(id => { const s = stakeholders.find(x=>x.id===id); return s ? (
+                          <span key={id} style={{ background:'rgba(96,165,250,0.15)', color:'var(--globant-info)', borderRadius:4, padding:'2px 8px', fontSize:11, display:'flex', alignItems:'center', gap:4 }}>
+                            {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                            <span style={{ cursor:'pointer', fontWeight:700 }} onMouseDown={e=>{e.preventDefault();setForm(p=>({...p,stakeholderIds:p.stakeholderIds.filter(x=>x!==id)}))}}>✕</span>
+                          </span>
+                        ) : null; })}
+                      </div>
+                    )}
+                    <input style={inputStyle} placeholder="Type to search stakeholders..."
+                      value={stkSearch}
+                      onFocus={() => setStkOpen(true)}
+                      onBlur={() => setTimeout(() => setStkOpen(false), 150)}
+                      onChange={e => { setStkSearch(e.target.value); setStkOpen(true); }} />
+                    {stkOpen && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:99, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:160, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                        {[...stakeholders]
+                          .filter(s => !form.stakeholderIds.includes(s.id) &&
+                            (!form.accountId || linkedIds(s,'Account').includes(form.accountId)) &&
+                            (`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(stkSearch.toLowerCase()))
+                          .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||''))
+                          .slice(0,20).map(s => (
+                          <div key={s.id} onMouseDown={() => { setForm(p=>({...p,stakeholderIds:[...p.stakeholderIds,s.id]})); setStkSearch(''); }}
+                            style={{ padding:'8px 12px', cursor:'pointer', fontSize:13 }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(96,165,250,0.1)'}
+                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <span style={{ fontWeight:600 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</span>
+                            {F(s,'Role') && <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <label style={labelStyle}>Solutions (hold Ctrl/Cmd to select multiple)</label>
-                    <select style={{ ...inputStyle, height:90 }} multiple value={form.solutionIds}
-                      onChange={e => setForm(p=>({...p,solutionIds:[...e.target.selectedOptions].map(o=>o.value)}))}>
-                      {[...solutions].sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(s => (
-                        <option key={s.id} value={s.id}>{F(s,'Name')}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Stakeholders (hold Ctrl/Cmd to select multiple)</label>
-                    <select style={{ ...inputStyle, height:90 }} multiple value={form.stakeholderIds}
-                      onChange={e => setForm(p=>({...p,stakeholderIds:[...e.target.selectedOptions].map(o=>o.value)}))}>
-                      {[...stakeholders]
-                        .filter(s => !form.accountId || linkedIds(s,'Account').includes(form.accountId))
-                        .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(s => (
-                        <option key={s.id} value={s.id}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}{F(s,'Role') ? ` — ${F(s,'Role')}` : ''}</option>
-                      ))}
-                    </select>
+                    <label style={labelStyle}>Document URL (optional)</label>
+                    <input style={inputStyle} type="url" placeholder="https://drive.google.com/... or public Dropbox/OneDrive link"
+                      value={form.documentUrl} onChange={e => setForm(p=>({...p,documentUrl:e.target.value}))} />
+                    <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>Paste a public link to your PDF — Airtable will download and store it automatically.</div>
                   </div>
                   <div>
                     <label style={labelStyle}>Description</label>
