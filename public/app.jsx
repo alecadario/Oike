@@ -4834,7 +4834,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
               {/* ── TAB NAVIGATION ── */}
               <div style={{ display: 'flex', gap: 4, padding: '4px', background: 'var(--globant-darker)', borderRadius: 12, marginTop: 12, marginBottom: 16, border: '1px solid var(--globant-border)' }}>
-                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline']].map(([tab, label]) => (
+                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline'], ['proposals', '📋 Proposals']].map(([tab, label]) => (
                   <button key={tab} onClick={() => setAccDetailTab(tab)}
                     style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
                       background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(91,191,181,0.2) 0%, rgba(91,191,181,0.08) 100%)' : 'transparent',
@@ -5518,6 +5518,54 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                   })()}
                 </div>
               )}
+
+              {/* ══ PROPOSALS TAB ══ */}
+              {accDetailTab === 'proposals' && (() => {
+                const accProposals = (data.proposals || []).filter(p => linkedIds(p,'Account').includes(account.id))
+                  .sort((a,b) => new Date(b.fields?.['Created']||0) - new Date(a.fields?.['Created']||0));
+                const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
+                const STATUS_BG    = { Draft:'rgba(156,163,175,0.15)', Presented:'rgba(96,165,250,0.15)', 'Under Review':'rgba(251,146,60,0.15)', Accepted:'rgba(74,222,128,0.15)', Rejected:'rgba(248,113,113,0.15)', Expired:'rgba(107,114,128,0.15)' };
+                return (
+                  <div className="card">
+                    <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <h3>📋 Proposals ({accProposals.length})</h3>
+                      <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
+                        onClick={() => { setPageAndSave('proposals'); }}>
+                        + New in Proposals Hub
+                      </button>
+                    </div>
+                    {accProposals.length === 0 ? (
+                      <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No proposals for this account yet.</p>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                        {accProposals.map(p => {
+                          const status = F(p,'Status') || 'Draft';
+                          const solNames = linkedIds(p,'Solutions').map(id => { const s = (data.solutions||[]).find(x=>x.id===id); return s ? F(s,'Name') : null; }).filter(Boolean);
+                          const amount = p.fields?.['Amount'];
+                          const docs = p.fields?.['Document'];
+                          return (
+                            <div key={p.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)', cursor:'pointer' }}
+                              onClick={() => { setPageAndSave('proposals'); setNavigateToProposalId(p.id); }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
+                                <div style={{ fontWeight:700, fontSize:13 }}>{F(p,'Title')}</div>
+                                <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+                                  {amount && <span style={{ fontWeight:700, color:'var(--globant-green)', fontSize:12 }}>{formatCurrency(amount)}</span>}
+                                  <span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>{status}</span>
+                                </div>
+                              </div>
+                              <div style={{ display:'flex', gap:12, fontSize:11, color:'var(--globant-muted)' }}>
+                                {solNames.length > 0 && <span>🛠️ {solNames.join(', ')}</span>}
+                                {F(p,'Presented Date') && <span>📅 {formatDate(F(p,'Presented Date'))}</span>}
+                                {docs && Array.isArray(docs) && docs.length > 0 && <span>📎 {docs.length} doc{docs.length > 1 ? 's' : ''}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -8506,6 +8554,364 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
     }
 
+    // ============ PROPOSALS HUB ============
+    function ProposalsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navigateToProposalId, clearNavigateProposal }) {
+      const { accounts, stakeholders, solutions, opportunities, proposals = [] } = data;
+      const isAdmin = CURRENT_USER?.role === 'admin';
+      const [selectedId, setSelectedId]   = useState('');
+      const [showNew, setShowNew]         = useState(false);
+      const [filterStatus, setFilterStatus] = useState('');
+      const [filterAccountId, setFilterAccountId] = useState('');
+      const [searchTerm, setSearchTerm]   = useState('');
+      const [saving, setSaving]           = useState(false);
+      const [form, setForm] = useState({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', validUntil:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'' });
+
+      const STATUSES = ['Draft','Presented','Under Review','Accepted','Rejected','Expired'];
+      const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
+      const STATUS_BG    = { Draft:'rgba(156,163,175,0.15)', Presented:'rgba(96,165,250,0.15)', 'Under Review':'rgba(251,146,60,0.15)', Accepted:'rgba(74,222,128,0.15)', Rejected:'rgba(248,113,113,0.15)', Expired:'rgba(107,114,128,0.15)' };
+
+      const selected = selectedId ? proposals.find(p => p.id === selectedId) : null;
+
+      useEffect(() => {
+        if (navigateToProposalId) {
+          setSelectedId(navigateToProposalId);
+          navSetUrl('proposals', navigateToProposalId);
+          if (clearNavigateProposal) clearNavigateProposal();
+        }
+      }, [navigateToProposalId, clearNavigateProposal]);
+
+      const selectProposal = useCallback((id) => {
+        setSelectedId(id || '');
+        navSetUrl('proposals', id || null);
+      }, []);
+
+      const filtered = useMemo(() => {
+        let list = [...proposals];
+        if (searchTerm) list = list.filter(p => (F(p,'Title')||'').toLowerCase().includes(searchTerm.toLowerCase()));
+        if (filterStatus) list = list.filter(p => F(p,'Status') === filterStatus);
+        if (filterAccountId) list = list.filter(p => linkedIds(p,'Account').includes(filterAccountId));
+        return list.sort((a,b) => new Date(b.fields?.['Created']||0) - new Date(a.fields?.['Created']||0));
+      }, [proposals, searchTerm, filterStatus, filterAccountId]);
+
+      const resetForm = () => setForm({ title:'', status:'Draft', amount:'', description:'', presentedDate:'', validUntil:'', accountId:'', stakeholderIds:[], solutionIds:[], opportunityId:'' });
+
+      const handleCreate = async () => {
+        if (!form.title.trim()) return;
+        setSaving(true);
+        try {
+          const fields = { 'Title': form.title.trim(), 'Status': form.status };
+          if (form.amount)        fields['Amount'] = parseFloat(form.amount);
+          if (form.description.trim()) fields['Description'] = form.description.trim();
+          if (form.presentedDate) fields['Presented Date'] = form.presentedDate;
+          if (form.validUntil)    fields['Valid Until'] = form.validUntil;
+          if (form.accountId)     fields['Account'] = [{ id: form.accountId }];
+          if (form.stakeholderIds.length) fields['Stakeholders'] = form.stakeholderIds.map(id => ({ id }));
+          if (form.solutionIds.length)    fields['Solutions'] = form.solutionIds.map(id => ({ id }));
+          if (form.opportunityId) fields['Opportunity'] = [{ id: form.opportunityId }];
+          const a = api || new AirtableAPI();
+          const rec = await a.createRecord(TABLE_IDS.proposals, fields);
+          if (onAddRecord) onAddRecord('proposals', fields);
+          setShowNew(false);
+          resetForm();
+          if (rec?.id) selectProposal(rec.id);
+          if (onLogActivity) onLogActivity();
+        } catch(e) { console.error(e); alert('Error creating proposal'); }
+        setSaving(false);
+      };
+
+      const handleStatusChange = async (proposal, newStatus) => {
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.proposals, proposal.id, { 'Status': newStatus });
+          if (onUpdateRecord) onUpdateRecord('proposals', proposal.id, { 'Status': newStatus });
+          if (onLogActivity) onLogActivity();
+        } catch(e) { console.error(e); }
+      };
+
+      const inputStyle = { width:'100%', padding:'8px 10px', background:'var(--globant-input)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box' };
+      const labelStyle = { fontSize:11, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, textTransform:'uppercase', display:'block' };
+
+      // ── DETAIL VIEW ──
+      if (selected) {
+        const acc = accounts.find(a => linkedIds(selected,'Account').includes(a.id));
+        const stkList = linkedIds(selected,'Stakeholders').map(id => stakeholders.find(s=>s.id===id)).filter(Boolean);
+        const solList = linkedIds(selected,'Solutions').map(id => solutions.find(s=>s.id===id)).filter(Boolean);
+        const opp = opportunities.find(o => linkedIds(selected,'Opportunity').includes(o.id));
+        const docs = selected.fields?.['Document'];
+        const status = F(selected,'Status') || 'Draft';
+        return (
+          <div>
+            <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div>
+                <button className="action-btn btn-ghost" style={{ fontSize:11, marginBottom:8 }} onClick={() => selectProposal('')}>← Back to Proposals</button>
+                <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                  <h1 style={{ margin:0 }}>📋 {F(selected,'Title')}</h1>
+                  <span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], border:`1px solid ${STATUS_COLOR[status]}50`, borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:700 }}>{status}</span>
+                </div>
+                {acc && <div style={{ fontSize:13, color:'var(--globant-muted)', marginTop:4 }}>🏢 {F(acc,'Account Name')}</div>}
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <select className="input-field" style={{ fontSize:12 }} value={status} onChange={e => handleStatusChange(selected, e.target.value)}>
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* KPIs */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:24 }}>
+              <div className="card" style={{ textAlign:'center', padding:'16px 12px' }}>
+                <div style={{ fontSize:26, fontWeight:800, color:'var(--globant-green)' }}>{F(selected,'Amount') ? formatCurrency(F(selected,'Amount')) : '—'}</div>
+                <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Amount</div>
+              </div>
+              <div className="card" style={{ textAlign:'center', padding:'16px 12px' }}>
+                <div style={{ fontSize:22, fontWeight:800, color:'var(--globant-info)' }}>{F(selected,'Presented Date') ? formatDate(F(selected,'Presented Date')) : '—'}</div>
+                <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Presented</div>
+              </div>
+              <div className="card" style={{ textAlign:'center', padding:'16px 12px' }}>
+                <div style={{ fontSize:22, fontWeight:800, color:'var(--globant-warning)' }}>{F(selected,'Valid Until') ? formatDate(F(selected,'Valid Until')) : '—'}</div>
+                <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Valid Until</div>
+              </div>
+              <div className="card" style={{ textAlign:'center', padding:'16px 12px' }}>
+                <div style={{ fontSize:22, fontWeight:800, color:'var(--globant-text)' }}>{stkList.length}</div>
+                <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Stakeholders</div>
+              </div>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+              {/* Left — Description + Document */}
+              <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+                {F(selected,'Description') && (
+                  <div className="card">
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📋 Description</div>
+                    <div style={{ fontSize:13, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{F(selected,'Description')}</div>
+                  </div>
+                )}
+                {/* PDF / Document */}
+                <div className="card">
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📎 Document</div>
+                  {docs && Array.isArray(docs) && docs.length > 0 ? docs.map((att,i) => (
+                    <a key={i} href={att.url} target="_blank" rel="noopener noreferrer"
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(96,165,250,0.06)', borderRadius:6, border:'1px solid rgba(96,165,250,0.2)', marginBottom:6, textDecoration:'none', color:'var(--globant-text)', fontSize:12 }}>
+                      <span style={{ fontSize:16 }}>📄</span>
+                      <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{att.filename || 'Document'}</span>
+                      <span style={{ fontSize:10, color:'var(--globant-info)', flexShrink:0 }}>Open ↗</span>
+                    </a>
+                  )) : <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No document attached. Upload a PDF directly in Airtable.</p>}
+                </div>
+              </div>
+
+              {/* Right — Linked records */}
+              <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+                {/* Stakeholders */}
+                <div className="card">
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>👥 Stakeholders ({stkList.length})</div>
+                  {stkList.length === 0
+                    ? <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No stakeholders linked.</p>
+                    : stkList.map(s => (
+                      <div key={s.id} style={{ padding:'8px 10px', marginBottom:4, borderRadius:6, background:'rgba(255,255,255,0.04)', display:'flex', alignItems:'center', gap:8 }}>
+                        <div>
+                          <div style={{ fontWeight:600, fontSize:12 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</div>
+                          {F(s,'Role') && <div style={{ fontSize:10, color:'var(--globant-muted)' }}>{F(s,'Role')}</div>}
+                        </div>
+                        {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ fontSize:9, marginLeft:'auto' }}>{F(s,'Level of Influence')}</span>}
+                      </div>
+                    ))}
+                </div>
+                {/* Solutions */}
+                <div className="card">
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>🛠️ Solutions ({solList.length})</div>
+                  {solList.length === 0
+                    ? <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No solutions linked.</p>
+                    : solList.map(s => (
+                      <div key={s.id} style={{ padding:'6px 10px', marginBottom:4, borderRadius:6, background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.15)', fontSize:12 }}>
+                        <span style={{ fontWeight:600, color:'var(--globant-green)' }}>{F(s,'Name')}</span>
+                        {F(s,'Type') && <span className="badge badge-blue" style={{ fontSize:9, marginLeft:8 }}>{F(s,'Type')}</span>}
+                        {F(s,'Price') && <span style={{ marginLeft:8, fontSize:11, color:'var(--globant-muted)' }}>{F(s,'Price')}</span>}
+                      </div>
+                    ))}
+                </div>
+                {/* Opportunity */}
+                {opp && (
+                  <div className="card">
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>💰 Linked Opportunity</div>
+                    <div style={{ padding:'8px 10px', borderRadius:6, background:'rgba(251,191,36,0.06)', border:'1px solid rgba(251,191,36,0.2)', fontSize:12 }}>
+                      <div style={{ fontWeight:600 }}>{F(opp,'Deal/Opp name')}</div>
+                      <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:2 }}>{F(opp,'Stage')}{opp.fields?.['Value'] ? ` · ${formatCurrency(opp.fields['Value'])}` : ''}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ── LIST VIEW ──
+      return (
+        <div>
+          <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div>
+              <h1>Proposals</h1>
+              <p>Track commercial proposals — linked to accounts, stakeholders and solutions</p>
+            </div>
+            <button className="action-btn btn-primary" style={{ fontSize:12, padding:'8px 16px', marginTop:4 }}
+              onClick={() => { setShowNew(true); resetForm(); }}>
+              ➕ New Proposal
+            </button>
+          </div>
+
+          {/* New Proposal Modal */}
+          {showNew && (
+            <div className="modal-overlay" onClick={() => setShowNew(false)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:580, maxHeight:'90vh', overflowY:'auto' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+                  <h3 style={{ margin:0 }}>📋 New Proposal</h3>
+                  <button onClick={() => setShowNew(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:18 }}>✕</button>
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                  <div>
+                    <label style={labelStyle}>Title *</label>
+                    <input style={inputStyle} value={form.title} onChange={e => setForm(p=>({...p,title:e.target.value}))} placeholder="e.g. Oike Pro Proposal — Acme Corp" autoFocus />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={labelStyle}>Status</label>
+                      <select style={inputStyle} value={form.status} onChange={e => setForm(p=>({...p,status:e.target.value}))}>
+                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Amount (USD)</label>
+                      <input style={inputStyle} type="number" value={form.amount} onChange={e => setForm(p=>({...p,amount:e.target.value}))} placeholder="5000" />
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={labelStyle}>Presented Date</label>
+                      <input style={inputStyle} type="date" value={form.presentedDate} onChange={e => setForm(p=>({...p,presentedDate:e.target.value}))} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Valid Until</label>
+                      <input style={inputStyle} type="date" value={form.validUntil} onChange={e => setForm(p=>({...p,validUntil:e.target.value}))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Account</label>
+                    <select style={inputStyle} value={form.accountId} onChange={e => setForm(p=>({...p,accountId:e.target.value}))}>
+                      <option value="">— Select account —</option>
+                      {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
+                        <option key={a.id} value={a.id}>{F(a,'Account Name')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Solutions (hold Ctrl/Cmd to select multiple)</label>
+                    <select style={{ ...inputStyle, height:90 }} multiple value={form.solutionIds}
+                      onChange={e => setForm(p=>({...p,solutionIds:[...e.target.selectedOptions].map(o=>o.value)}))}>
+                      {[...solutions].sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(s => (
+                        <option key={s.id} value={s.id}>{F(s,'Name')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Stakeholders (hold Ctrl/Cmd to select multiple)</label>
+                    <select style={{ ...inputStyle, height:90 }} multiple value={form.stakeholderIds}
+                      onChange={e => setForm(p=>({...p,stakeholderIds:[...e.target.selectedOptions].map(o=>o.value)}))}>
+                      {[...stakeholders]
+                        .filter(s => !form.accountId || linkedIds(s,'Account').includes(form.accountId))
+                        .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(s => (
+                        <option key={s.id} value={s.id}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}{F(s,'Role') ? ` — ${F(s,'Role')}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Description</label>
+                    <textarea style={{ ...inputStyle, minHeight:70, resize:'vertical' }} value={form.description} onChange={e => setForm(p=>({...p,description:e.target.value}))} placeholder="Summary of what this proposal covers..." />
+                  </div>
+                  <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                    <button className="action-btn btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
+                    <button className="action-btn btn-primary" onClick={handleCreate} disabled={saving || !form.title.trim()}>
+                      {saving ? '⏳ Creating...' : '✅ Create Proposal'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* KPIs */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:14, marginBottom:24 }}>
+            {[['All', null], ...STATUSES.map(s => [s, s])].map(([label, statusKey]) => {
+              const count = statusKey ? proposals.filter(p => F(p,'Status') === statusKey).length : proposals.length;
+              const color = statusKey ? STATUS_COLOR[statusKey] : 'var(--globant-green)';
+              const isActive = filterStatus === (statusKey||'');
+              return (
+                <div key={label} className="card" style={{ textAlign:'center', padding:'12px 8px', cursor:'pointer', border:isActive ? `1px solid ${color}` : undefined, background:isActive ? `${STATUS_BG[statusKey]||'rgba(91,191,181,0.08)'}` : undefined }}
+                  onClick={() => setFilterStatus(statusKey||'')}>
+                  <div style={{ fontSize:24, fontWeight:800, color, lineHeight:1 }}>{count}</div>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>{label}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Filters */}
+          <div className="filters-row" style={{ display:'flex', gap:10, alignItems:'center', marginBottom:16 }}>
+            <input className="input-field" style={{ maxWidth:300 }} placeholder="Search proposals..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <select className="input-field" style={{ maxWidth:220, fontSize:12 }} value={filterAccountId} onChange={e => setFilterAccountId(e.target.value)}>
+              <option value="">🏢 All accounts</option>
+              {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
+                <option key={a.id} value={a.id}>{F(a,'Account Name')}</option>
+              ))}
+            </select>
+            {(searchTerm || filterStatus || filterAccountId) && (
+              <span style={{ fontSize:11, color:'var(--globant-green)', cursor:'pointer', padding:'4px 8px', background:'rgba(91,191,181,0.1)', borderRadius:5, fontWeight:600 }}
+                onClick={() => { setSearchTerm(''); setFilterStatus(''); setFilterAccountId(''); }}>✕ Clear</span>
+            )}
+            <span style={{ fontSize:12, color:'var(--globant-muted)', marginLeft:'auto' }}>{filtered.length} proposal{filtered.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Table */}
+          <div className="card">
+            <div style={{ overflowX:'auto' }}>
+              <table className="data-table">
+                <thead><tr>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Account</th>
+                  <th>Solutions</th>
+                  <th style={{ textAlign:'right' }}>Amount</th>
+                  <th>Presented</th>
+                  <th>Valid Until</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--globant-muted)', padding:24 }}>No proposals found.</td></tr>
+                  ) : filtered.map(p => {
+                    const status = F(p,'Status') || 'Draft';
+                    const acc = accounts.find(a => linkedIds(p,'Account').includes(a.id));
+                    const solNames = linkedIds(p,'Solutions').map(id => { const s = solutions.find(x=>x.id===id); return s ? F(s,'Name') : null; }).filter(Boolean);
+                    const amount = p.fields?.['Amount'];
+                    return (
+                      <tr key={p.id} onClick={() => selectProposal(p.id)} style={{ cursor:'pointer' }}>
+                        <td style={{ fontWeight:600 }}>{F(p,'Title')}</td>
+                        <td><span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], borderRadius:5, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{status}</span></td>
+                        <td style={{ fontSize:12 }}>{acc ? F(acc,'Account Name') : '—'}</td>
+                        <td style={{ fontSize:11, color:'var(--globant-muted)' }}>{solNames.length ? solNames.join(', ') : '—'}</td>
+                        <td style={{ textAlign:'right', fontWeight:700, color:'var(--globant-green)' }}>{amount ? formatCurrency(amount) : '—'}</td>
+                        <td style={{ fontSize:12 }}>{F(p,'Presented Date') ? formatDate(F(p,'Presented Date')) : '—'}</td>
+                        <td style={{ fontSize:12 }}>{F(p,'Valid Until') ? formatDate(F(p,'Valid Until')) : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ============ MAIN APP ============
     // ============ LOGIN SCREEN ============
     // ============ ACTIVATION SCREEN ============
@@ -9134,7 +9540,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         localStorage.setItem('oike_page', p);
         navSetUrl(p, null); // clear ?id when switching pages
       }, []);
-      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [] });
+      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
@@ -9144,6 +9550,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [navigateToAccountId, setNavigateToAccountId] = useState('');
       const [navigateToSolId, setNavigateToSolId] = useState('');
       const [navigateToEventId, setNavigateToEventId] = useState('');
+      const [navigateToProposalId, setNavigateToProposalId] = useState('');
       const [sidebarOpen, setSidebarOpen] = useState(false);
 
       const goToAccount = useCallback((accountId) => {
@@ -9188,8 +9595,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
@@ -9311,9 +9718,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             // Restore selected record from URL (e.g. after refresh)
             if (urlId) {
               const targetPage = urlPage || localStorage.getItem('oike_page') || 'overview';
-              if (targetPage === 'accounts')     setNavigateToAccountId(urlId);
+              if (targetPage === 'accounts')          setNavigateToAccountId(urlId);
               else if (targetPage === 'solutionshub') setNavigateToSolId(urlId);
-              else if (targetPage === 'events')  setNavigateToEventId(urlId);
+              else if (targetPage === 'events')       setNavigateToEventId(urlId);
+              else if (targetPage === 'proposals')    setNavigateToProposalId(urlId);
             }
             if (gmailParam) {
               if (gmailParam === 'connected') localStorage.setItem('oike_gmail_connected', 'true');
@@ -9355,6 +9763,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} goToAccount={goToAccount} />,
         activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
+        proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
@@ -9365,6 +9774,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         { icon: '📊', label: 'Strategy Overview', key: 'overview' },
         { icon: '🎯', label: 'ICP', key: 'icp' },
         { icon: '🛠️', label: 'Solutions Hub', key: 'solutionshub' },
+        { icon: '📋', label: 'Proposals', key: 'proposals' },
         { icon: '🏢', label: 'Accounts', key: 'accounts' },
         { icon: '👤', label: 'Contacts', key: 'contacts' },
         { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
