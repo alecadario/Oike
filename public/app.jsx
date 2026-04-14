@@ -1938,6 +1938,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [historyStakeholder, setHistoryStakeholder] = useState(null);
       const [showImport, setShowImport] = useState(false);
       const [csvRows, setCsvRows] = useState([]);
+      const [generatingFollowup, setGeneratingFollowup] = useState(null); // stakeholder.id being generated
       const [csvStatus, setCsvStatus] = useState(null);
       const [importResults, setImportResults] = useState(null);
       const [showFuNewStk, setShowFuNewStk] = useState(false);
@@ -2049,6 +2050,46 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         if (searchName && !(F(s, 'Name') || '').toLowerCase().includes(searchName.toLowerCase())) return false;
         return true;
       }), [stakeholders, accountSearch, accounts, selectedInfluence, searchName, recentlyContacted]);
+
+      // AI-powered quick follow-up — reads last message history and generates a new angle
+      const handleQuickFollowup = async (s, channel) => {
+        setGeneratingFollowup(s.id);
+        try {
+          const sName = F(s, 'Name') || '';
+          const role = F(s, 'Role') || '';
+          const accNames = (linkedIds(s, 'Account') || []).map(id => { const a = accounts.find(x => x.id === id); return a ? F(a, 'Account Name') : ''; }).filter(Boolean);
+          const history = outreach
+            .filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0))
+            .slice(0, 5)
+            .map(o => `[${F(o, 'Channel') || '?'} · ${o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?'}]\n${(F(o, 'Message') || F(o, 'Notes') || '').slice(0, 300)}`)
+            .join('\n\n');
+
+          const prompt = `You are a senior B2B sales rep. Write ONE short follow-up message to ${sName} (${role} at ${accNames[0] || 'their company'}).
+
+PREVIOUS MESSAGES SENT (no reply received):
+${history || '— No history found —'}
+
+MISSION: Write a follow-up that takes a completely different angle from the previous messages. Don't reference "following up". Don't be apologetic. Find something new — a new insight, a question, a trigger, a short observation. Max 3 sentences. Human, direct, no filler.
+
+Channel: ${channel}
+${channel === 'Email' ? 'First line must be "Subject: [subject]", then blank line, then body.' : ''}
+${channel === 'WhatsApp' ? 'Ultra short. Casual tone. No subject line.' : ''}
+${channel === 'LinkedIn' ? 'Short, professional but conversational.' : ''}
+
+BANNED: "just following up" / "checking in" / "touching base" / "I hope this finds you well" / "I wanted to reach out" / brackets or placeholders.
+
+Output ONLY the message, nothing else.`;
+
+          const generated = await callOpenAI({ prompt, temperature: 0.8, max_tokens: 300 });
+          useMessage(s, channel, generated.trim());
+        } catch (e) {
+          console.error('Quick followup generation failed:', e);
+          // Fallback: open channel with empty body so user can type manually
+          useMessage(s, channel, '');
+        }
+        setGeneratingFollowup(null);
+      };
 
       // Split into two groups
       const hasPregenMsg = (s) => !!(F(s, 'Personalized Email Introduction'));
@@ -2505,10 +2546,10 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
                       {/* Action buttons */}
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {/* Follow-up via channels */}
-                        {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Email', nextFollowup)}>✉️ Follow-up</button>}
-                        {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'WhatsApp', nextFollowup)}>💬 Follow-up</button>}
-                        {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'LinkedIn', nextFollowup)}>🔗 Follow-up</button>}
-                        {phone && <button className="action-btn btn-call" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Call', nextFollowup)}>📞 Call</button>}
+                        {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'Email')}>{generatingFollowup === s.id ? '⏳' : '✉️ Follow-up'}</button>}
+                        {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'WhatsApp')}>{generatingFollowup === s.id ? '⏳' : '💬 Follow-up'}</button>}
+                        {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'LinkedIn')}>{generatingFollowup === s.id ? '⏳' : '🔗 Follow-up'}</button>}
+                        {phone && <button className="action-btn btn-call" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Call', '')}>📞 Call</button>}
 
                         <div style={{ width: 1, background: 'var(--globant-border)', margin: '0 4px' }} />
 
