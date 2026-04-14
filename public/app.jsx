@@ -72,6 +72,18 @@
 
     const channelIcon = { WhatsApp: '💬', Email: '✉️', LinkedIn: '🔗', Call: '📞' };
 
+    // ============ URL NAV STATE ============
+    // Keeps ?v= (page) and ?id= (selected record) in sync with the browser URL
+    // so refreshing or sharing the link restores the exact view.
+    function navSetUrl(page, id) {
+      const params = new URLSearchParams(window.location.search);
+      if (page) params.set('v', page); else params.delete('v');
+      if (id)   params.set('id', id); else params.delete('id');
+      params.delete('gmail'); // never persist oauth params
+      const qs = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+    }
+
     // ============ COMPANY PROFILE (configurable per client) ============
     const COMPANY_PROFILE_KEY = 'oike_company_profile';
     const SOURCE_OPTIONS = ['Outbound', 'Inbound - Events', 'Inbound - Paid Media', 'Inbound - Referral', 'Inbound - Website', 'Inbound - Direct'];
@@ -3502,11 +3514,16 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
       const isAdmin = CURRENT_USER?.role === 'admin';
+      // Wrapper that keeps URL in sync with the selected account
+      const selectAccount = useCallback((id) => {
+        setSelectedAccountId(id || '');
+        navSetUrl('accounts', id || null);
+      }, []);
 
-      // Handle navigation from other pages
+      // Handle navigation from other pages (and URL restore on refresh)
       useEffect(() => {
         if (navigateToAccountId) {
-          setSelectedAccountId(navigateToAccountId);
+          selectAccount(navigateToAccountId);
           setSearchTerm('');
           if (clearNavigate) clearNavigate();
         }
@@ -4592,12 +4609,12 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           {/* Search + Import */}
           <div className="filters-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <input className="input-field" style={{ maxWidth: 300 }} placeholder="Search account..." value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setSelectedAccountId(''); }} />
+              onChange={e => { setSearchTerm(e.target.value); selectAccount(''); }} />
             <select
               className="input-field"
               style={{ maxWidth: 220, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterSolutionId ? 'var(--globant-green)' : 'var(--globant-muted)', borderRadius: 8 }}
               value={filterSolutionId}
-              onChange={e => { setFilterSolutionId(e.target.value); setSelectedAccountId(''); }}
+              onChange={e => { setFilterSolutionId(e.target.value); selectAccount(''); }}
             >
               <option value="">All Solutions</option>
               {(data.solutions || []).map(s => (
@@ -4608,7 +4625,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               className="input-field"
               style={{ maxWidth: 200, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterIndustry ? 'var(--globant-info)' : 'var(--globant-muted)', borderRadius: 8 }}
               value={filterIndustry}
-              onChange={e => { setFilterIndustry(e.target.value); setSelectedAccountId(''); }}
+              onChange={e => { setFilterIndustry(e.target.value); selectAccount(''); }}
             >
               <option value="">All Industries</option>
               {[...new Set(accounts.map(a => F(a, 'Industry')).filter(Boolean))].sort().map(ind => (
@@ -4619,7 +4636,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               className="input-field"
               style={{ maxWidth: 180, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterCountry ? '#f472b6' : 'var(--globant-muted)', borderRadius: 8 }}
               value={filterCountry}
-              onChange={e => { setFilterCountry(e.target.value); setSelectedAccountId(''); }}
+              onChange={e => { setFilterCountry(e.target.value); selectAccount(''); }}
             >
               <option value="">🌍 All Countries</option>
               {[...new Set(accounts.map(a => F(a, 'Country')).filter(Boolean))].sort().map(c => (
@@ -4733,7 +4750,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       const oCount = outreach.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
                       const oppCount = opportunities.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
                       return (
-                        <tr key={a.id} onClick={() => { setSelectedAccountId(a.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
+                        <tr key={a.id} onClick={() => { selectAccount(a.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
                           <td style={{ fontWeight: 600 }}>{F(a, 'Account Name')}</td>
                           <td style={{ textAlign: 'center' }}>{stCount}</td>
                           <td style={{ textAlign: 'center' }}>{oCount > 0 ? <span style={{ color: 'var(--globant-green)', fontWeight: 700 }}>{oCount}</span> : '—'}</td>
@@ -4758,7 +4775,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0, border: '1px solid rgba(91,191,181,0.2)', borderRadius: 12 }}>
                 <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(96,165,250,0.06) 55%, rgba(167,139,250,0.07) 100%)', padding: '18px 24px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                    <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setSelectedAccountId('')}>← Back</button>
+                    <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => selectAccount('')}>← Back</button>
                     <button className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setEditingAccount(account)}>✏️ Edit</button>
                     {F(account, 'Website') && (
                       <a href={String(F(account, 'Website')).startsWith('http') ? F(account, 'Website') : `https://${F(account, 'Website')}`} target="_blank" rel="noopener noreferrer"
@@ -6319,9 +6336,21 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
     }
 
     // ============ EVENTS HUB ============
-    function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord }) {
+    function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navigateToEventId, clearNavigateEvent }) {
       const { accounts, stakeholders, events, outreach } = data;
       const [selectedEventId, setSelectedEventId] = useState(null);
+      // Wrapper that keeps URL in sync with the selected event
+      const selectEvent = useCallback((id) => {
+        setSelectedEventId(id || null);
+        navSetUrl('events', id || null);
+      }, []);
+      // Restore from URL / external navigation
+      useEffect(() => {
+        if (navigateToEventId) {
+          selectEvent(navigateToEventId);
+          if (clearNavigateEvent) clearNavigateEvent();
+        }
+      }, [navigateToEventId, clearNavigateEvent]);
       const [aiSuggestions, setAiSuggestions] = useState([]);
       const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       const [suggestionReason, setSuggestionReason] = useState({});
@@ -6617,7 +6646,7 @@ Return ONLY the JSON array, nothing else.`;
             {/* Event Header */}
             <div className="card" style={{ borderLeft: `3px solid ${isPast ? 'var(--globant-muted)' : 'var(--globant-green)'}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setSelectedEventId(null)}>← Back to all events</button>
+                <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => selectEvent(null)}>← Back to all events</button>
                 <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingEvent(selectedEvent)}>✏️ Edit</button>
               </div>
               <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{evName}</h2>
@@ -6918,7 +6947,7 @@ Return ONLY the JSON array, nothing else.`;
                 const accSet = new Set();
                 invitedSh.forEach(s => resolveLinked(s, 'Account', accounts, 'Account Name').forEach(n => accSet.add(n)));
                 return (
-                  <div key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{ padding: '14px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(91,191,181,0.04)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(91,191,181,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(91,191,181,0.04)'}>
+                  <div key={ev.id} onClick={() => selectEvent(ev.id)} style={{ padding: '14px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(91,191,181,0.04)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(91,191,181,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(91,191,181,0.04)'}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <span style={{ fontWeight: 700, fontSize: 15 }}>{F(ev, 'Event Name')}</span>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -6946,7 +6975,7 @@ Return ONLY the JSON array, nothing else.`;
                 const invitedIds = linkedIds(ev, 'Stakeholders invited');
                 const invCount = invitedIds.length;
                 return (
-                  <div key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{ padding: '12px', marginBottom: 6, borderRadius: 8, background: 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}>
+                  <div key={ev.id} onClick={() => selectEvent(ev.id)} style={{ padding: '12px', marginBottom: 6, borderRadius: 8, background: 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{F(ev, 'Event Name')}</span>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -7255,10 +7284,15 @@ Return ONLY the JSON array, nothing else.`;
       const { accounts, stakeholders, opportunities, outreach, solutions } = data;
       const isAdmin = CURRENT_USER?.role === 'admin';
       const [selectedSolId, setSelectedSolId] = useState('');
+      // Wrapper that keeps URL in sync with the selected solution
+      const selectSol = useCallback((id) => {
+        setSelectedSolId(id || '');
+        navSetUrl('solutionshub', id || null);
+      }, []);
 
       React.useEffect(() => {
         if (navigateToSolId) {
-          setSelectedSolId(navigateToSolId);
+          selectSol(navigateToSolId);
           if (clearNavigateSol) clearNavigateSol();
         }
       }, [navigateToSolId]);
@@ -7396,7 +7430,7 @@ Return ONLY the JSON array, nothing else.`;
           setShowNewSol(false);
           setNewSolForm({ name: '', type: 'Service', description: '', price: '', keyMessage: '' });
           if (onLogActivity) onLogActivity();
-          if (newRec?.id) setSelectedSolId(newRec.id);
+          if (newRec?.id) selectSol(newRec.id);
         } catch (e) {
           console.error(e);
           alert('Failed to create solution: ' + e.message);
@@ -7788,7 +7822,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <button className="action-btn btn-ghost" style={{ fontSize: 11, marginBottom: 8 }} onClick={() => setSelectedSolId('')}>← Back to Solutions</button>
+                <button className="action-btn btn-ghost" style={{ fontSize: 11, marginBottom: 8 }} onClick={() => selectSol('')}>← Back to Solutions</button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <h1 style={{ margin: 0 }}>🛠️ {F(selectedSol, 'Name')}</h1>
                   {solType && <span style={{ background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}50`, borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{solType}</span>}
@@ -8248,7 +8282,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     const solPrice = F(m.sol, 'Price') || '';
                     const typeColor = solType === 'Service' ? 'badge-blue' : solType === 'Product' ? 'badge-green' : solType === 'Retainer' ? 'badge-accent' : solType === 'Consulting' ? 'badge-yellow' : 'badge-blue';
                     return (
-                      <tr key={m.id} onClick={() => { setSelectedSolId(m.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
+                      <tr key={m.id} onClick={() => { selectSol(m.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
                         <td style={{ fontWeight: 600 }}>
                           {m.name}
                           {F(m.sol, 'Service | Solution Detail') && (
@@ -8895,8 +8929,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
 
       const [ready, setReady] = useState(false);
-      const [page, setPage] = useState(() => localStorage.getItem('oike_page') || 'overview');
-      const setPageAndSave = useCallback((p) => { setPage(p); localStorage.setItem('oike_page', p); }, []);
+      const [page, setPage] = useState(() => {
+        const urlV = new URLSearchParams(window.location.search).get('v');
+        return urlV || localStorage.getItem('oike_page') || 'overview';
+      });
+      const setPageAndSave = useCallback((p) => {
+        setPage(p);
+        localStorage.setItem('oike_page', p);
+        navSetUrl(p, null); // clear ?id when switching pages
+      }, []);
       const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
@@ -8906,6 +8947,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [configError, setConfigError] = useState('');
       const [navigateToAccountId, setNavigateToAccountId] = useState('');
       const [navigateToSolId, setNavigateToSolId] = useState('');
+      const [navigateToEventId, setNavigateToEventId] = useState('');
       const [sidebarOpen, setSidebarOpen] = useState(false);
 
       const goToAccount = useCallback((accountId) => {
@@ -9068,11 +9110,21 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             // Detect Gmail OAuth return
             const urlParams = new URLSearchParams(window.location.search);
             const gmailParam = urlParams.get('gmail');
+            const urlId      = urlParams.get('id');
+            const urlPage    = urlParams.get('v');
+            // Restore selected record from URL (e.g. after refresh)
+            if (urlId) {
+              const targetPage = urlPage || localStorage.getItem('oike_page') || 'overview';
+              if (targetPage === 'accounts')     setNavigateToAccountId(urlId);
+              else if (targetPage === 'solutionshub') setNavigateToSolId(urlId);
+              else if (targetPage === 'events')  setNavigateToEventId(urlId);
+            }
             if (gmailParam) {
               if (gmailParam === 'connected') localStorage.setItem('oike_gmail_connected', 'true');
               setGmailReturnStatus(gmailParam);
               setShowSettings(true);
-              window.history.replaceState({}, '', window.location.pathname || '/app');
+              // Only remove the gmail param, preserve ?v= and ?id=
+              navSetUrl(urlPage || page, urlId || null);
             }
           } catch (e) {
             console.error('Init failed:', e);
@@ -9106,7 +9158,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} goToAccount={goToAccount} />,
         contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} goToAccount={goToAccount} />,
         activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
-        events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
+        events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
         insights: <InsightsView data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
