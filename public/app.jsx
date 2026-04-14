@@ -8442,7 +8442,6 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </table>
             </div>
           </div>
-        </div>
 
         {/* ── Replies Modal ── */}
         {repliesModalSolId && (() => {
