@@ -2840,7 +2840,7 @@ Output ONLY the message, nothing else.`;
         if (ctxNewLinkedin.trim()) fields['LinkedIn'] = ctxNewLinkedin.trim();
         if (ctxNewInfluence) fields['Level of Influence'] = ctxNewInfluence;
         if (ctxNewSource) fields['Source'] = ctxNewSource;
-        if (ctxNewCampaign.trim()) fields['Campaign'] = ctxNewCampaign.trim();
+        // Campaign/Camapaña is a linked record field — cannot set via text input, skip
         if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
         if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
         // Optimistic: show instantly
@@ -2921,7 +2921,7 @@ Output ONLY the message, nothing else.`;
             if (row.role) fields['Role'] = row.role;
             if (row.linkedin) fields['LinkedIn'] = row.linkedin;
             if (row.source) fields['Source'] = row.source;
-            if (row.campaign) fields['Campaign'] = row.campaign;
+            // Campaign is a linked record field in Airtable, cannot set via text — skip
             const resolvedCountry = row.country || (matchedAcc ? F(matchedAcc, 'Country') : '') || '';
             if (resolvedCountry) fields['Country'] = resolvedCountry;
             if (matchedAcc) fields['Account'] = [matchedAcc.id];
@@ -2990,7 +2990,7 @@ Output ONLY the message, nothing else.`;
           'Email': values['Email'],
           'Phone number': values['Phone number'],
           'LinkedIn': values['LinkedIn'],
-          'Campaign': values['Campaign'],
+          // 'Campaign' is a linked record field in Airtable — not editable via text form
           'Country': values['Country'] || null,
           'Level of Influence': values['Level of Influence'] || null,
           'Source': values['Source'] || null,
@@ -3633,7 +3633,7 @@ Output ONLY the message, nothing else.`;
           'Name': values['Name'], 'Last name': values['Last name'],
           'Role': values['Role'], 'Email': values['Email'],
           'Phone number': values['Phone number'], 'LinkedIn': values['LinkedIn'],
-          'Campaign': values['Campaign'],
+          // 'Campaign' is a linked record field in Airtable — not editable via text form
           'Country': values['Country'] || null,
           'Level of Influence': values['Level of Influence'] || null,
           'Source': values['Source'] || null,
