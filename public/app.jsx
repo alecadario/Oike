@@ -7080,44 +7080,31 @@ Return ONLY the JSON array, nothing else.`;
                     const evContext = F(selectedEvent,'Aditional context') || '';
                     const template = F(selectedEvent,'Stakeholder Invitation') || '';
                     const isInvite = mode === 'invite';
-                    const prompt = `You are a senior B2B sales rep writing a highly personalized message. Use ALL the context below.
+                    const prompt = `B2B sales rep. Write ONE short personalized message. Max 3 sentences + subject if email.
 
-━━━ SENDER ━━━
-${COMPANY_PROFILE.senderName || 'Alejandra Cadario'}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} at ${COMPANY_PROFILE.companyName || 'Oike'}
+CONTACT: ${sName} | ${role}${influence ? ` (${influence})` : ''} | ${accName}${industry ? ` — ${industry}` : ''}
+${pain ? `Pain: ${pain.slice(0,200)}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews.slice(0,150)}` : ''}${accNews ? `\nCompany news: ${accNews.slice(0,150)}` : ''}
+History: ${sOut || 'First contact'}
 
-━━━ CONTACT ━━━
-Name: ${sName}
-Role: ${role}${influence ? ` (${influence})` : ''}
-Company: ${accName}${industry ? ` | ${industry}` : ''}
-${pain ? `Pain points: ${pain}` : ''}
-${linkedinNews ? `LinkedIn activity: ${linkedinNews}` : ''}
-${accNews ? `Company news: ${accNews}` : ''}
+EVENT: ${evName}${evDate ? ` (${evDate})` : ''}${evContext ? ` — ${evContext.slice(0,100)}` : ''}
+${template ? `Template tone/angle to adapt (DO NOT copy verbatim — rewrite for this specific contact):\n"${template.slice(0,300)}"` : ''}
 
-━━━ OUTREACH HISTORY ━━━
-${sOut || 'No previous contact.'}
-
-━━━ EVENT ━━━
-${evName}${evDate ? ` — ${evDate}` : ''}
-${evContext ? `Context: ${evContext.slice(0,200)}` : ''}
-${template ? `\n━━━ INVITATION TEMPLATE — use this tone and angle, adapt to THIS specific contact ━━━\n${template}` : ''}
-
-━━━ MISSION ━━━
 ${isInvite
-  ? `Write a SHORT invite to ${evName} for ${sName}. Use the template as a base but personalize it — reference their specific role, pain points, or company context. Don't pitch. Just invite. Max 3 sentences.`
-  : `Write a SHORT follow-up after meeting ${sName} at ${evName}. Reference the meeting naturally. ONE clear next step tied to their role/pain. Max 3 sentences.`
+  ? `MISSION: Invite ${sName} to ${evName}. Personalize to their role/pain. Casual, direct. Ask if they're attending.`
+  : `MISSION: Follow up after meeting ${sName} at ${evName}. Reference meeting naturally. One clear next step.`
 }
-
-RULES:
-- First name only in body
-- NO: "following up" / "checking in" / "I hope this finds you well" / "touching base" / brackets / placeholders
-- Sound human, specific, not corporate
-- If email: first line = "Subject: [short subject]", blank line, then body
-Output ONLY the message.`;
+BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.
+Sender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}
+If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the message.`;
                     try {
                       const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
                       setInvitePreview({ id: s.id, mode, msg: msg.trim(), generating: false });
                     } catch(e) {
-                      setInvitePreview({ id: s.id, mode, msg: template || `Hi ${sName}, I'd love to invite you to ${evName}. Would you be joining?`, generating: false });
+                      console.error('generateInviteMsg failed:', e);
+                      const fallback = isInvite
+                        ? `Hi ${sName}, I wanted to personally invite you to ${evName}${evDate ? ` on ${evDate}` : ''}. Given your role at ${accName}, I think it could be a great opportunity to connect. Are you planning to attend?`
+                        : `Hi ${sName}, it was great meeting you at ${evName}. I'd love to continue our conversation — do you have time for a quick call this week?`;
+                      setInvitePreview({ id: s.id, mode, msg: fallback, generating: false });
                     }
                   };
 
