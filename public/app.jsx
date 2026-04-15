@@ -9364,7 +9364,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         return arr.findIndex(x => linkedIds(x, 'Stakeholder')[0] === stkId) === arr.indexOf(o);
       });
       const meetings      = periodOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status')));
-      const uniqueRepliers = repliedStkIds.size || replies.length;
+      const uniqueRepliers = replies.length; // already deduplicated by stakeholder above
       const replyRate     = totalSent > 0 ? Math.round(uniqueRepliers / totalSent * 100) : 0;
       const meetingRate   = totalSent > 0 ? Math.round(meetings.length / totalSent * 100) : 0;
       const accsContacted = new Set(periodOutreach.flatMap(o => linkedIds(o, 'Account'))).size;
@@ -9470,30 +9470,41 @@ Return ONLY a JSON object: {"1": "status...", "2": "status...", ...}`;
             </table>
           </td></tr>`;
 
+        // Group replies by account
+        const replyByAcc = {};
+        replyDetails.forEach(r => {
+          const key = r.acc ? (F(r.acc,'Account Name')||'No account') : 'No account';
+          if (!replyByAcc[key]) replyByAcc[key] = [];
+          replyByAcc[key].push(r);
+        });
+        const replyGroups = Object.entries(replyByAcc).sort((a,b) => b[1].length - a[1].length);
+
         const replySection = replyDetails.length === 0 ? '' : `
           <tr><td style="padding:24px 0 8px;">
             <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received (${uniqueRepliers} contact${uniqueRepliers !== 1 ? 's' : ''})</h2>
-            ${replyDetails.map(r=>{
-              const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
-              const role = r.stk ? (F(r.stk,'Role')||'') : '';
-              const company = r.acc ? (F(r.acc,'Account Name')||'') : '';
-              return `
-            <div style="margin-bottom:10px;padding:12px 16px;background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
+            ${replyGroups.map(([accName, rList]) => `
+            <div style="margin-bottom:16px;">
+              <div style="font-size:12px;font-weight:700;color:${G};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding:4px 0;border-bottom:1px solid #d1fae5;">
+                🏢 ${accName} <span style="font-weight:400;color:#9ca3af;">(${rList.length} contact${rList.length>1?'s':''})</span>
+              </div>
+              ${rList.map(r => {
+                const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
+                const role = r.stk ? (F(r.stk,'Role')||'') : '';
+                return `
+              <div style="margin-bottom:8px;padding:10px 14px;background:#f0fdf4;border-left:3px solid #10b981;border-radius:0 6px 6px 0;">
+                <table width="100%" cellpadding="0" cellspacing="0"><tr>
                   <td>
                     <div style="font-size:13px;font-weight:700;color:${T};">${name}</div>
-                    <div style="font-size:11px;color:#6b7280;margin-top:2px;">
-                      ${role}${role && company ? ' · ' : ''}${company ? `<span style="color:${G};font-weight:600;">${company}</span>` : ''}
-                    </div>
+                    ${role ? `<div style="font-size:11px;color:#6b7280;margin-top:1px;">${role}</div>` : ''}
                   </td>
                   <td style="text-align:right;vertical-align:top;white-space:nowrap;">
                     <span style="font-size:10px;color:#9ca3af;">${r.channel} · ${r.d}</span>
                   </td>
-                </tr>
-              </table>
-              ${r.summary ? `<div style="font-size:12px;color:${GR};margin-top:6px;line-height:1.5;font-style:italic;">"${r.summary}${r.summary.length>=180?'…':''}"</div>` : ''}
-            </div>`}).join('')}
+                </tr></table>
+                ${r.summary ? `<div style="font-size:12px;color:${GR};margin-top:5px;line-height:1.5;font-style:italic;">"${r.summary}${r.summary.length>=180?'…':''}"</div>` : ''}
+              </div>`;
+              }).join('')}
+            </div>`).join('')}
           </td></tr>`;
 
         const html = `<!DOCTYPE html>
