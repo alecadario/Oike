@@ -9233,6 +9233,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [reportHtml, setReportHtml] = useState('');
       const [copied, setCopied]       = useState(false);
       const [generating, setGenerating] = useState(false);
+      const [reportNotes, setReportNotes] = useState('');
 
       const fromTs = new Date(dateFrom).getTime();
       const toTs   = new Date(dateTo + 'T23:59:59').getTime();
@@ -9273,7 +9274,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const meetingRate   = totalSent > 0 ? Math.round(meetings.length / totalSent * 100) : 0;
       const accsContacted = new Set(periodOutreach.flatMap(o => linkedIds(o, 'Account'))).size;
 
+      const activeSolIds = activeSols.map(s => s.id);
       const activeOpps = opportunities.filter(o =>
+        linkedIds(o, 'Solutions').some(sid => activeSolIds.includes(sid)) &&
         linkedIds(o, 'Account').some(id => displayAccIds.includes(id)) &&
         !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage'))
       );
@@ -9300,15 +9303,22 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           return { sol, accs, sent: solOut.length, replies: solReplies.length, meetings: solMeetings.length, rr };
         }).filter(r => r.sent > 0 || r.accs.length > 0);
 
-        // Reply details
+        // Reply details — clean summary instead of raw message
         const replyDetails = replies.slice(0, 20).map(o => {
           const stkId = linkedIds(o,'Stakeholder')[0];
           const stk   = stakeholders.find(s => s.id === stkId);
           const accId = linkedIds(o,'Account')[0];
           const acc   = accounts.find(a => a.id === accId);
-          const msg   = (F(o,'Notes') || F(o,'Message') || '').replace(/\[gmsg:[^\]]+\]\n?/,'').slice(0,250);
+          // Clean the message: remove gmsg prefix, forwarded headers, trim
+          const rawMsg = (F(o,'Notes') || F(o,'Message') || '')
+            .replace(/\[gmsg:[^\]]+\]\n?/g, '')
+            .replace(/[-─]+\s*(Forwarded message|Original message|De:|From:).*/si, '')
+            .replace(/^Subject:\s*.*/im, '')
+            .trim();
+          // Extract first meaningful sentence as summary
+          const summary = rawMsg.split(/[.!?]\s+/)[0]?.trim().slice(0,180) || rawMsg.slice(0,180);
           const d     = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-          return { stk, acc, msg, d, channel: F(o,'Channel') || '' };
+          return { stk, acc, summary, d, channel: F(o,'Channel') || '' };
         });
 
         const kpiBox = (label, value, color) =>
@@ -9339,16 +9349,27 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         const replySection = replyDetails.length === 0 ? '' : `
           <tr><td style="padding:24px 0 8px;">
             <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received (${replies.length})</h2>
-            ${replyDetails.map(r=>`
-            <div style="margin-bottom:12px;padding:12px 16px;background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;">
-              <div style="font-size:13px;font-weight:700;color:${T};margin-bottom:4px;">
-                ${r.stk ? `${F(r.stk,'Name') || ''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown'}
-                ${r.stk && F(r.stk,'Role') ? `<span style="font-weight:400;color:#6b7280;"> · ${F(r.stk,'Role')}</span>` : ''}
-                ${r.acc ? `<span style="color:${G};"> · ${F(r.acc,'Account Name')}</span>` : ''}
-                <span style="float:right;font-size:11px;color:#9ca3af;">${r.channel} · ${r.d}</span>
-              </div>
-              ${r.msg ? `<div style="font-size:12px;color:${GR};font-style:italic;line-height:1.5;">"${r.msg.trim()}${r.msg.length>=250?'…':''}"</div>` : ''}
-            </div>`).join('')}
+            ${replyDetails.map(r=>{
+              const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
+              const role = r.stk ? (F(r.stk,'Role')||'') : '';
+              const company = r.acc ? (F(r.acc,'Account Name')||'') : '';
+              return `
+            <div style="margin-bottom:10px;padding:12px 16px;background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <div style="font-size:13px;font-weight:700;color:${T};">${name}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:2px;">
+                      ${role}${role && company ? ' · ' : ''}${company ? `<span style="color:${G};font-weight:600;">${company}</span>` : ''}
+                    </div>
+                  </td>
+                  <td style="text-align:right;vertical-align:top;white-space:nowrap;">
+                    <span style="font-size:10px;color:#9ca3af;">${r.channel} · ${r.d}</span>
+                  </td>
+                </tr>
+              </table>
+              ${r.summary ? `<div style="font-size:12px;color:${GR};margin-top:6px;line-height:1.5;font-style:italic;">"${r.summary}${r.summary.length>=180?'…':''}"</div>` : ''}
+            </div>`}).join('')}
           </td></tr>`;
 
         const html = `<!DOCTYPE html>
@@ -9408,6 +9429,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             </td>
           </tr>
         </table>
+      </td></tr>` : ''}
+
+      ${reportNotes.trim() ? `
+      <!-- Notes -->
+      <tr><td style="padding:24px 0 8px;">
+        <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Notes & Next Steps</h2>
+        <div style="padding:14px 16px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;font-size:13px;color:${GR};line-height:1.7;white-space:pre-wrap;">${reportNotes.trim().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
       </td></tr>` : ''}
 
       <!-- Footer -->
@@ -9529,6 +9557,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Notes */}
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📝 My Notes / Next Steps</div>
+                <textarea className="input-field"
+                  style={{ width:'100%', minHeight:90, resize:'vertical', fontSize:12, fontFamily:'inherit', lineHeight:1.5 }}
+                  placeholder="Add context, observations, or next steps to include in the report..."
+                  value={reportNotes}
+                  onChange={e => setReportNotes(e.target.value)}
+                />
               </div>
 
               <button className="action-btn btn-primary" style={{ width:'100%', padding:'12px', fontSize:14, fontWeight:700 }}
