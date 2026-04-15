@@ -7063,33 +7063,55 @@ Return ONLY the JSON array, nothing else.`;
                     setInvitePreview({ id: s.id, mode, msg: '', generating: true });
                     const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
                     const role = F(s,'Role') || '';
-                    const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,300);
+                    const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,400);
+                    const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,200);
                     const accId = linkedIds(s,'Account')[0];
                     const acc = accounts.find(a => a.id === accId);
                     const accName = acc ? F(acc,'Account Name') : '';
+                    const industry = acc ? (F(acc,'Industry') || '') : '';
+                    const accNews = acc ? (F(acc,'Recent News') || '').slice(0,200) : '';
+                    const influence = F(s,'Level of Influence') || '';
                     const sOut = outreach.filter(o => linkedIds(o,'Stakeholder').includes(s.id))
                       .sort((a,b) => new Date(b.fields?.['Date']||0)-new Date(a.fields?.['Date']||0))
-                      .slice(0,3)
-                      .map(o => `[${F(o,'Channel')||'?'}] ${(F(o,'Message')||'').slice(0,120)}`).join('\n');
+                      .slice(0,4)
+                      .map(o => `[${F(o,'Channel')||'?'} · ${o.fields?.['Date']?new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'?'}] ${(F(o,'Message')||'').slice(0,150)}`).join('\n');
                     const evName = F(selectedEvent,'Event Name') || '';
                     const evDate = selectedEvent.fields?.['Starting'] ? new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
+                    const evContext = F(selectedEvent,'Aditional context') || '';
                     const template = F(selectedEvent,'Stakeholder Invitation') || '';
                     const isInvite = mode === 'invite';
-                    const prompt = `You are a senior B2B sales rep. Write ONE short personalized message.
+                    const prompt = `You are a senior B2B sales rep writing a highly personalized message. Use ALL the context below.
 
-CONTACT: ${sName} | ${role} | ${accName}
-${pain ? `PAIN POINTS: ${pain}` : ''}
-${sOut ? `PREVIOUS OUTREACH:\n${sOut}` : ''}
+━━━ SENDER ━━━
+${COMPANY_PROFILE.senderName || 'Alejandra Cadario'}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} at ${COMPANY_PROFILE.companyName || 'Oike'}
 
-EVENT: ${evName}${evDate ? ` — ${evDate}` : ''}
-${template && isInvite ? `EVENT TEMPLATE (adapt this, don't copy):\n${template}` : ''}
+━━━ CONTACT ━━━
+Name: ${sName}
+Role: ${role}${influence ? ` (${influence})` : ''}
+Company: ${accName}${industry ? ` | ${industry}` : ''}
+${pain ? `Pain points: ${pain}` : ''}
+${linkedinNews ? `LinkedIn activity: ${linkedinNews}` : ''}
+${accNews ? `Company news: ${accNews}` : ''}
 
-MISSION: ${isInvite
-  ? `Invite ${sName} to ${evName}. Casual, direct. Reference their role/pain if relevant. Ask if they're attending. Max 3 sentences.`
-  : `Follow up after meeting ${sName} at ${evName}. Reference the meeting naturally. ONE clear next step. Max 3 sentences.`
+━━━ OUTREACH HISTORY ━━━
+${sOut || 'No previous contact.'}
+
+━━━ EVENT ━━━
+${evName}${evDate ? ` — ${evDate}` : ''}
+${evContext ? `Context: ${evContext.slice(0,200)}` : ''}
+${template ? `\n━━━ INVITATION TEMPLATE — use this tone and angle, adapt to THIS specific contact ━━━\n${template}` : ''}
+
+━━━ MISSION ━━━
+${isInvite
+  ? `Write a SHORT invite to ${evName} for ${sName}. Use the template as a base but personalize it — reference their specific role, pain points, or company context. Don't pitch. Just invite. Max 3 sentences.`
+  : `Write a SHORT follow-up after meeting ${sName} at ${evName}. Reference the meeting naturally. ONE clear next step tied to their role/pain. Max 3 sentences.`
 }
 
-BANNED: "following up" / "checking in" / "I hope this finds you well" / brackets / placeholders.
+RULES:
+- First name only in body
+- NO: "following up" / "checking in" / "I hope this finds you well" / "touching base" / brackets / placeholders
+- Sound human, specific, not corporate
+- If email: first line = "Subject: [short subject]", blank line, then body
 Output ONLY the message.`;
                     try {
                       const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
