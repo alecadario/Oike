@@ -9417,27 +9417,55 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           return { stk, acc, rawMsg, d, channel: F(o,'Channel') || '' };
         });
 
-        // Ask AI for one-liner status per contact
+        // Ask AI for one-liner status per contact + strategic thoughts
         let aiStatuses = {};
-        if (replyRaw.length > 0) {
+        let aiThoughts = '';
+        const solSummary = solRows.map(r => `${F(r.sol,'Name')}: ${r.sent} sent, ${r.replies} replies (${r.rr}%), ${r.meetings} meetings, accounts: ${r.accs.map(a=>F(a,'Account Name')).join(', ')}`).join('\n');
+        const replyLines = replyRaw.map((r, i) => {
+          const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
+          const company = r.acc ? F(r.acc,'Account Name') : '';
+          return `${i+1}. ${name} (${company}) [${r.d}]: "${r.rawMsg}"`;
+        }).join('\n');
+
+        if (replyRaw.length > 0 || solRows.length > 0) {
           try {
-            const lines = replyRaw.map((r, i) => {
-              const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
-              const company = r.acc ? F(r.acc,'Account Name') : '';
-              return `${i+1}. ${name} (${company}) [${r.d}]: "${r.rawMsg}"`;
-            }).join('\n');
-            const prompt = `You are summarizing sales reply emails for a bi-weekly report. For each reply below, write ONE SHORT LINE (max 12 words) describing the current conversation status — like "Interested, follow-up meeting being scheduled" or "Referred to procurement, waiting for contact" or "Busy this week, reconnect next month".
+            const prompt = `You are a senior sales intelligence analyst reviewing a bi-weekly sales report. Based on the data below, do TWO things:
 
-Be specific and action-oriented. NO generic phrases like "replied to email". Focus on WHERE THE DEAL IS GOING.
+1. For each reply (numbered), write ONE SHORT LINE (max 12 words) on WHERE the conversation stands. Be specific, action-oriented. NO "replied to email". Focus on momentum.
 
-Replies:
-${lines}
+2. Write 3-4 bullet points of STRATEGIC THOUGHTS — what's working, what's at risk, what needs immediate attention, suggested priorities. Be direct, specific, useful. Reference actual accounts/contacts when relevant.
+${reportNotes.trim() ? `\nSender's own notes for context:\n"${reportNotes.trim()}"\n` : ''}
+PERIOD: ${dateLabel}
+SOLUTIONS & METRICS:
+${solSummary || 'No solutions selected'}
 
-Return ONLY a JSON object: {"1": "status...", "2": "status...", ...}`;
-            const result = await callOpenAI({ prompt, temperature: 0.3, max_tokens: 300 });
+TOTAL: ${totalSent} messages sent, ${uniqueRepliers} unique replies (${replyRate}%), ${meetings.length} meetings
+
+REPLIES:
+${replyLines || 'None'}
+
+Return ONLY valid JSON:
+{
+  "statuses": {"1": "...", "2": "..."},
+  "thoughts": ["bullet 1", "bullet 2", "bullet 3", "bullet 4"]
+}`;
+
+            const result = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 600 });
             const cleaned = result.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
-            aiStatuses = JSON.parse(cleaned);
-          } catch(e) { console.error('AI summary failed:', e); }
+            const parsed = JSON.parse(cleaned);
+            aiStatuses = parsed.statuses || {};
+            aiThoughts = (parsed.thoughts || []).join('|||');
+          } catch(e) {
+            console.error('AI analysis failed:', e);
+            // Fallback: try just statuses
+            if (replyRaw.length > 0) {
+              try {
+                const p2 = `Summarize each reply in one line (max 12 words). Return JSON: {"1":"...", "2":"..."}\n\nReplies:\n${replyLines}`;
+                const r2 = await callOpenAI({ prompt: p2, temperature: 0.3, max_tokens: 300 });
+                aiStatuses = JSON.parse(r2.replace(/```json?\n?/g,'').replace(/```/g,'').trim());
+              } catch(e2) { console.error('Fallback failed:', e2); }
+            }
+          }
         }
 
         const replyDetails = replyRaw.map((r, i) => ({
@@ -9564,6 +9592,15 @@ Return ONLY a JSON object: {"1": "status...", "2": "status...", ...}`;
             </td>
           </tr>
         </table>
+      </td></tr>` : ''}
+
+      ${aiThoughts ? `
+      <!-- AI Thoughts -->
+      <tr><td style="padding:24px 0 8px;">
+        <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">🧠 Strategic Analysis</h2>
+        <div style="padding:14px 16px;background:#f8f4ff;border-left:4px solid #8b5cf6;border-radius:0 8px 8px 0;">
+          ${aiThoughts.split('|||').map(b => `<div style="display:flex;gap:10px;margin-bottom:8px;font-size:13px;color:#374151;line-height:1.6;"><span style="color:#8b5cf6;font-weight:700;flex-shrink:0;">▸</span><span>${b.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span></div>`).join('')}
+        </div>
       </td></tr>` : ''}
 
       ${reportNotes.trim() ? `
