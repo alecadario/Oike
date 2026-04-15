@@ -9218,6 +9218,363 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
     }
 
+    // ============ REPORT BUILDER ============
+    function ReportBuilder({ data }) {
+      const { accounts, stakeholders, outreach, solutions, opportunities } = data;
+      const now = new Date();
+      const fmt = (d) => d.toISOString().split('T')[0];
+      const defaultFrom = fmt(new Date(now - 14 * 86400000));
+      const defaultTo   = fmt(now);
+
+      const [dateFrom, setDateFrom]   = useState(defaultFrom);
+      const [dateTo, setDateTo]       = useState(defaultTo);
+      const [selSolIds, setSelSolIds] = useState([]);
+      const [selAccIds, setSelAccIds] = useState([]);
+      const [reportHtml, setReportHtml] = useState('');
+      const [copied, setCopied]       = useState(false);
+      const [generating, setGenerating] = useState(false);
+
+      const fromTs = new Date(dateFrom).getTime();
+      const toTs   = new Date(dateTo + 'T23:59:59').getTime();
+
+      // Solutions to show (all if none selected)
+      const activeSols = selSolIds.length > 0
+        ? solutions.filter(s => selSolIds.includes(s.id))
+        : solutions;
+
+      // Accounts for those solutions (derived from opps + explicit links)
+      const solAccMap = useMemo(() => {
+        const m = {};
+        for (const sol of activeSols) {
+          const expAccIds = linkedIds(sol, 'Accounts - New markets');
+          const oppAccIds = opportunities.filter(o => linkedIds(o, 'Solutions').includes(sol.id)).flatMap(o => linkedIds(o, 'Account'));
+          m[sol.id] = [...new Set([...expAccIds, ...oppAccIds])];
+        }
+        return m;
+      }, [activeSols, opportunities]);
+
+      const allSolAccIds = [...new Set(Object.values(solAccMap).flat())];
+      const activeAccounts = accounts.filter(a => allSolAccIds.includes(a.id));
+      const displayAccounts = selAccIds.length > 0
+        ? activeAccounts.filter(a => selAccIds.includes(a.id))
+        : activeAccounts;
+      const displayAccIds = displayAccounts.map(a => a.id);
+
+      // Outreach in period for selected accounts
+      const periodOutreach = outreach.filter(o => {
+        const ts = new Date(o.fields?.['Date'] || 0).getTime();
+        return ts >= fromTs && ts <= toTs && linkedIds(o, 'Account').some(id => displayAccIds.includes(id));
+      });
+
+      const totalSent     = periodOutreach.length;
+      const replies       = periodOutreach.filter(o => F(o, 'Status') === 'Replied');
+      const meetings      = periodOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status')));
+      const replyRate     = totalSent > 0 ? Math.round(replies.length / totalSent * 100) : 0;
+      const meetingRate   = totalSent > 0 ? Math.round(meetings.length / totalSent * 100) : 0;
+      const accsContacted = new Set(periodOutreach.flatMap(o => linkedIds(o, 'Account'))).size;
+
+      const activeOpps = opportunities.filter(o =>
+        linkedIds(o, 'Account').some(id => displayAccIds.includes(id)) &&
+        !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage'))
+      );
+      const pipeline = activeOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
+
+      // ── HTML generator ──
+      const generateHtml = () => {
+        setGenerating(true);
+        const T  = '#1A1A2E';
+        const G  = '#5BBFB5';
+        const GR = '#4A4A4A';
+        const LG = '#F5F5F5';
+
+        const dateLabel = `${new Date(dateFrom).toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(dateTo).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+
+        // Per-solution breakdown
+        const solRows = activeSols.map(sol => {
+          const accIds = (solAccMap[sol.id] || []).filter(id => displayAccIds.includes(id));
+          const accs = accounts.filter(a => accIds.includes(a.id));
+          const solOut = periodOutreach.filter(o => linkedIds(o,'Account').some(id => accIds.includes(id)));
+          const solReplies = solOut.filter(o => F(o,'Status') === 'Replied');
+          const solMeetings = solOut.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
+          const rr = solOut.length > 0 ? Math.round(solReplies.length/solOut.length*100) : 0;
+          return { sol, accs, sent: solOut.length, replies: solReplies.length, meetings: solMeetings.length, rr };
+        }).filter(r => r.sent > 0 || r.accs.length > 0);
+
+        // Reply details
+        const replyDetails = replies.slice(0, 20).map(o => {
+          const stkId = linkedIds(o,'Stakeholder')[0];
+          const stk   = stakeholders.find(s => s.id === stkId);
+          const accId = linkedIds(o,'Account')[0];
+          const acc   = accounts.find(a => a.id === accId);
+          const msg   = (F(o,'Notes') || F(o,'Message') || '').replace(/\[gmsg:[^\]]+\]\n?/,'').slice(0,250);
+          const d     = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+          return { stk, acc, msg, d, channel: F(o,'Channel') || '' };
+        });
+
+        const kpiBox = (label, value, color) =>
+          `<td style="width:25%;padding:16px 12px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb;">
+            <div style="font-size:28px;font-weight:800;color:${color};line-height:1;">${value}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:6px;text-transform:uppercase;letter-spacing:0.5px;">${label}</div>
+          </td>`;
+
+        const solSection = solRows.length === 0 ? '' : `
+          <tr><td style="padding:0 0 8px;">
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">By Solution</h2>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr style="background:${T};">
+                ${['Solution','Accounts','Sent','Replies','Reply %','Meetings'].map(h=>`<th style="padding:8px 10px;text-align:left;font-size:11px;color:#fff;font-weight:600;">${h}</th>`).join('')}
+              </tr>
+              ${solRows.map((r,i)=>`
+              <tr style="background:${i%2===0?'#fff':LG};">
+                <td style="padding:8px 10px;font-size:13px;font-weight:600;color:${T};">${F(r.sol,'Name')}</td>
+                <td style="padding:8px 10px;font-size:12px;color:${GR};">${r.accs.map(a=>F(a,'Account Name')).join(', ') || '—'}</td>
+                <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${GR};">${r.sent}</td>
+                <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.replies>0?'#059669':'#9ca3af'};">${r.replies}</td>
+                <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.rr>=20?'#059669':r.rr>=10?'#d97706':'#9ca3af'};">${r.rr}%</td>
+                <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.meetings>0?'#2563eb':'#9ca3af'};">${r.meetings}</td>
+              </tr>`).join('')}
+            </table>
+          </td></tr>`;
+
+        const replySection = replyDetails.length === 0 ? '' : `
+          <tr><td style="padding:24px 0 8px;">
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received (${replies.length})</h2>
+            ${replyDetails.map(r=>`
+            <div style="margin-bottom:12px;padding:12px 16px;background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;">
+              <div style="font-size:13px;font-weight:700;color:${T};margin-bottom:4px;">
+                ${r.stk ? `${F(r.stk,'Name') || ''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown'}
+                ${r.stk && F(r.stk,'Role') ? `<span style="font-weight:400;color:#6b7280;"> · ${F(r.stk,'Role')}</span>` : ''}
+                ${r.acc ? `<span style="color:${G};"> · ${F(r.acc,'Account Name')}</span>` : ''}
+                <span style="float:right;font-size:11px;color:#9ca3af;">${r.channel} · ${r.d}</span>
+              </div>
+              ${r.msg ? `<div style="font-size:12px;color:${GR};font-style:italic;line-height:1.5;">"${r.msg.trim()}${r.msg.length>=250?'…':''}"</div>` : ''}
+            </div>`).join('')}
+          </td></tr>`;
+
+        const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;">
+
+  <!-- Header -->
+  <tr><td style="background:${T};padding:24px 28px;border-radius:12px 12px 0 0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">Sales Activity Report</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;color:#e5e7eb;font-weight:600;">${dateLabel}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Prepared by ${COMPANY_PROFILE.senderName || 'Alejandra Cadario'}</div>
+      </div>
+    </div>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="background:#fff;padding:28px;border-radius:0 0 12px 12px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+
+      <!-- KPIs -->
+      <tr><td style="padding:0 0 24px;">
+        <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Overview</h2>
+        <table width="100%" cellpadding="6" cellspacing="8">
+          <tr>
+            ${kpiBox('Messages Sent', totalSent, T)}
+            ${kpiBox('Accounts Touched', accsContacted, '#2563eb')}
+            ${kpiBox('Reply Rate', replyRate+'%', replyRate>=20?'#059669':replyRate>=10?'#d97706':'#ef4444')}
+            ${kpiBox('Meetings', meetings.length, meetings.length>0?'#059669':'#9ca3af')}
+          </tr>
+        </table>
+      </td></tr>
+
+      ${solSection}
+      ${replySection}
+
+      <!-- Pipeline -->
+      ${activeOpps.length > 0 ? `
+      <tr><td style="padding:24px 0 8px;">
+        <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Pipeline</h2>
+        <table width="100%" cellpadding="0" cellspacing="8">
+          <tr>
+            <td style="padding:14px 16px;background:#eff6ff;border-radius:8px;text-align:center;width:50%;">
+              <div style="font-size:22px;font-weight:800;color:#1d4ed8;">${activeOpps.length}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:4px;text-transform:uppercase;">Open Opportunities</div>
+            </td>
+            <td style="padding:14px 16px;background:#f0fdf4;border-radius:8px;text-align:center;width:50%;">
+              <div style="font-size:22px;font-weight:800;color:#059669;">${formatCurrency(pipeline)}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:4px;text-transform:uppercase;">Pipeline Value</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>` : ''}
+
+      <!-- Footer -->
+      <tr><td style="padding:24px 0 0;border-top:1px solid #e5e7eb;margin-top:24px;">
+        <div style="font-size:11px;color:#9ca3af;text-align:center;">
+          Generated by <strong style="color:${G};">Oike</strong> · ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+        </div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+
+        setReportHtml(html);
+        setGenerating(false);
+      };
+
+      const copyHtml = async () => {
+        try {
+          const blob = new Blob([reportHtml], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        } catch {
+          // Fallback: copy as plain text
+          navigator.clipboard.writeText(reportHtml).catch(() => {});
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        }
+      };
+
+      const toggleSol = (id) => setSelSolIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
+      const toggleAcc = (id) => setSelAccIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
+
+      return (
+        <div>
+          <div className="page-header">
+            <h1>📧 Report Builder</h1>
+            <p>Generate a bi-weekly activity report ready to email</p>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:20, alignItems:'start' }}>
+            {/* ── Left: Controls ── */}
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              {/* Date range */}
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📅 Period</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  <div>
+                    <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:3 }}>From</label>
+                    <input type="date" className="input-field" style={{ width:'100%', fontSize:12 }} value={dateFrom} onChange={e=>setDateFrom(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:3 }}>To</label>
+                    <input type="date" className="input-field" style={{ width:'100%', fontSize:12 }} value={dateTo} onChange={e=>setDateTo(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:8, flexWrap:'wrap' }}>
+                  {[['Last 7d',7],['Last 14d',14],['Last 30d',30]].map(([label,days])=>(
+                    <button key={days} className="action-btn btn-ghost" style={{ fontSize:10, padding:'3px 10px' }}
+                      onClick={() => { setDateTo(fmt(now)); setDateFrom(fmt(new Date(now - days*86400000))); }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Solutions */}
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
+                  🛠️ Solutions
+                  {selSolIds.length > 0 && <span style={{ marginLeft:6, color:'var(--globant-green)', fontWeight:400 }}>({selSolIds.length} selected)</span>}
+                </div>
+                {solutions.map(s => (
+                  <div key={s.id} onClick={() => toggleSol(s.id)}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 8px', marginBottom:3, borderRadius:6, cursor:'pointer', background:selSolIds.includes(s.id)?'rgba(91,191,181,0.12)':'transparent' }}>
+                    <div style={{ width:14, height:14, borderRadius:3, border:`2px solid ${selSolIds.includes(s.id)?'var(--globant-green)':'var(--globant-border)'}`, background:selSolIds.includes(s.id)?'var(--globant-green)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      {selSolIds.includes(s.id) && <span style={{ color:'#1A1A2E', fontSize:9, fontWeight:900 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize:12, color: selSolIds.includes(s.id)?'var(--globant-green)':'var(--globant-text)' }}>{F(s,'Name')}</span>
+                  </div>
+                ))}
+                {selSolIds.length > 0 && <button className="action-btn btn-ghost" style={{ fontSize:10, marginTop:6 }} onClick={() => setSelSolIds([])}>Clear</button>}
+              </div>
+
+              {/* Accounts */}
+              {activeAccounts.length > 0 && (
+                <div className="card">
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
+                    🏢 Accounts
+                    {selAccIds.length > 0 && <span style={{ marginLeft:6, color:'var(--globant-info)', fontWeight:400 }}>({selAccIds.length} selected)</span>}
+                  </div>
+                  <div style={{ maxHeight:200, overflowY:'auto' }}>
+                    {activeAccounts.map(a => (
+                      <div key={a.id} onClick={() => toggleAcc(a.id)}
+                        style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', marginBottom:2, borderRadius:5, cursor:'pointer', background:selAccIds.includes(a.id)?'rgba(96,165,250,0.12)':'transparent' }}>
+                        <div style={{ width:12, height:12, borderRadius:2, border:`2px solid ${selAccIds.includes(a.id)?'var(--globant-info)':'var(--globant-border)'}`, background:selAccIds.includes(a.id)?'var(--globant-info)':'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          {selAccIds.includes(a.id) && <span style={{ color:'#fff', fontSize:8, fontWeight:900 }}>✓</span>}
+                        </div>
+                        <span style={{ fontSize:11, color: selAccIds.includes(a.id)?'var(--globant-info)':'var(--globant-text)' }}>{F(a,'Account Name')}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {selAccIds.length > 0 && <button className="action-btn btn-ghost" style={{ fontSize:10, marginTop:6 }} onClick={() => setSelAccIds([])}>Clear</button>}
+                </div>
+              )}
+
+              {/* Stats preview */}
+              <div className="card" style={{ background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.2)' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Preview Stats</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                  {[['Messages',totalSent],['Accounts',accsContacted],['Replies',replies.length],['Meetings',meetings.length],['Reply %',replyRate+'%'],['Pipeline',formatCurrency(pipeline)]].map(([l,v])=>(
+                    <div key={l} style={{ padding:'6px 8px', background:'rgba(255,255,255,0.05)', borderRadius:5 }}>
+                      <div style={{ fontSize:15, fontWeight:800, color:'var(--globant-green)' }}>{v}</div>
+                      <div style={{ fontSize:10, color:'var(--globant-muted)' }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button className="action-btn btn-primary" style={{ width:'100%', padding:'12px', fontSize:14, fontWeight:700 }}
+                onClick={generateHtml} disabled={generating}>
+                {generating ? '⏳ Generating...' : '✨ Generate Report'}
+              </button>
+            </div>
+
+            {/* ── Right: Preview ── */}
+            <div>
+              {!reportHtml ? (
+                <div className="card" style={{ textAlign:'center', padding:'60px 24px', color:'var(--globant-muted)' }}>
+                  <div style={{ fontSize:40, marginBottom:12 }}>📧</div>
+                  <div style={{ fontSize:15, marginBottom:6 }}>Configure your report on the left</div>
+                  <div style={{ fontSize:12 }}>Select period, solutions and accounts, then click Generate</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display:'flex', gap:10, marginBottom:12 }}>
+                    <button className="action-btn btn-primary" style={{ padding:'10px 20px', fontSize:13, fontWeight:700 }} onClick={copyHtml}>
+                      {copied ? '✅ Copied!' : '📋 Copy HTML'}
+                    </button>
+                    <button className="action-btn btn-ghost" style={{ padding:'10px 20px', fontSize:13 }}
+                      onClick={() => { setReportHtml(''); setCopied(false); }}>
+                      🔄 Reset
+                    </button>
+                    <span style={{ fontSize:11, color:'var(--globant-muted)', alignSelf:'center', marginLeft:4 }}>
+                      Paste in Gmail → Format → Paste as HTML
+                    </span>
+                  </div>
+                  <div style={{ border:'1px solid var(--globant-border)', borderRadius:12, overflow:'hidden', background:'#f3f4f6' }}>
+                    <iframe
+                      srcDoc={reportHtml}
+                      style={{ width:'100%', height:700, border:'none', background:'#f3f4f6' }}
+                      title="Report Preview"
+                      sandbox="allow-same-origin"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ============ MAIN APP ============
     // ============ LOGIN SCREEN ============
     // ============ ACTIVATION SCREEN ============
@@ -10071,6 +10428,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
         proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
+        reports:  <ReportBuilder data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
@@ -10087,6 +10445,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         { icon: '🎪', label: 'Events', key: 'events' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
+        { icon: '📧', label: 'Reports', key: 'reports' },
       ];
 
       const currentPageLabel = (navItems.find(i => i.key === page) || {}).label || 'Overview';
