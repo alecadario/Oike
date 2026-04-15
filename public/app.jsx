@@ -8315,6 +8315,22 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               onRefresh={onLogActivity}
               allData={data}
               onSend={(s, ch, msg, cc, evId) => {
+                // Open channel synchronously first
+                const email = F(s, 'Email') || '';
+                const phone = F(s, 'Phone number') || '';
+                const linkedin = F(s, 'LinkedIn') || '';
+                let subject = '', body = msg || '';
+                if (ch === 'Email') {
+                  const lines = body.split('\n');
+                  const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                  if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+                }
+                const ccParam = cc?.length > 0 ? `&cc=${encodeURIComponent(cc.join(','))}` : '';
+                if (ch === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(msg||'')}`, '_blank');
+                else if (ch === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${ccParam}`, '_blank');
+                else if (ch === 'LinkedIn' && linkedin) { navigator.clipboard.writeText(msg||'').catch(()=>{}); window.open(linkedin, '_blank'); }
+                else if (ch === 'Call' && phone) window.open(`tel:${phone}`, '_self');
+                // Then log to Airtable
                 const companyIds = linkedIds(s, 'Account');
                 const name = F(s, 'Name') || '';
                 const a = api || new AirtableAPI();
