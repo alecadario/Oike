@@ -565,30 +565,31 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 ))}
                 <button className="action-btn btn-primary" style={{ fontSize: 11, marginLeft: 'auto' }}
                   disabled={!quickMsg.trim() || sendingQuickMsg}
-                  onClick={async () => {
+                  onClick={() => {
                     if (!quickMsg.trim()) return;
                     setSendingQuickMsg(true);
                     const name = F(stakeholder, 'Name') || '';
                     const email = F(stakeholder, 'Email') || '';
                     const phone = F(stakeholder, 'Phone number') || '';
                     const linkedin = F(stakeholder, 'LinkedIn') || '';
-                    try { await navigator.clipboard.writeText(quickMsg); } catch(e) {}
+                    // Open channel synchronously first (must be before any await)
+                    navigator.clipboard.writeText(quickMsg).catch(() => {});
                     if (quickMsgChannel === 'LinkedIn' && linkedin) window.open(linkedin, '_blank');
                     else if (quickMsgChannel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(quickMsg)}`, '_blank');
                     else if (quickMsgChannel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(quickMsg)}`, '_blank');
-                    try {
-                      const a = new AirtableAPI();
-                      await a.createRecord(TABLE_IDS.outreach, {
-                        'Activity Name': `${quickMsgChannel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
-                        'Account': accountIds, 'Stakeholder': [stakeholder.id],
-                        'Channel': quickMsgChannel, 'Date': new Date().toISOString(),
-                        'Status': 'Sent', 'Message': quickMsg,
-                        'Notes': 'Sent via Quick Message',
-                        'Logged By': CURRENT_USER?.name || '',
-                        ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
-                        ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
-                      });
-                                } catch (e) { console.error('Quick message log failed:', e); }
+                    // Log to Airtable in background
+                    const a = new AirtableAPI();
+                    a.createRecord(TABLE_IDS.outreach, {
+                      'Activity Name': `${quickMsgChannel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
+                      'Account': accountIds, 'Stakeholder': [stakeholder.id],
+                      'Channel': quickMsgChannel, 'Date': new Date().toISOString(),
+                      'Status': 'Sent', 'Message': quickMsg,
+                      'Notes': 'Sent via Quick Message',
+                      'Logged By': CURRENT_USER?.name || '',
+                      ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+                      ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
+                    }).then(() => { if (onRefresh) onRefresh(); })
+                      .catch(e => console.error('Quick message log failed:', e));
                     setQuickMsg('');
                     setSendingQuickMsg(false);
                   }}>
@@ -806,7 +807,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       // ─── STRATEGY GOAL STATE ───
       const strategyRecord = strategy[0] || null;
       const [editingGoal, setEditingGoal] = useState(false);
-      const [goalForm, setGoalForm] = useState({ name: '', target: '', deadline: '' });
+      const [goalForm, setGoalForm] = useState({ name: '', target: '', startDate: '', deadline: '' });
       const [savingGoal, setSavingGoal] = useState(false);
 
       // ─── TEAM KPI EDITING ───
@@ -818,6 +819,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
       const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
       const goalDeadline = strategyRecord ? (F(strategyRecord, 'Deadline') || '') : '';
+      const goalStartDate = strategyRecord ? (F(strategyRecord, 'Start Date') || '') : '';
 
       // ─── CORE DATA ───
       const meetingStatuses = ['Meeting Scheduled', 'Meeting Booked'];
@@ -827,7 +829,25 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
       const allMeetings = outreach.filter(o => meetingStatuses.includes(F(o, 'Status')));
       const wonOpps = opportunities.filter(o => wonStages.includes(F(o, 'Stage')));
-      const activeOpps = opportunities.filter(o => !closedStages.includes(F(o, 'Stage')));
+
+      // Current user's record in the company Users table (for owner filtering)
+      const currentUserRecord = (data.users || []).find(u =>
+        (F(u, 'Email') || '').toLowerCase() === (CURRENT_USER?.email || '').toLowerCase()
+      );
+
+      // Active opps: filtered by owner (Users field) + Opening date within goal range
+      const activeOpps = opportunities.filter(o => {
+        if (closedStages.includes(F(o, 'Stage'))) return false;
+        // Owner filter: if opp has Users linked, current user must be one of them
+        const ownerIds = linkedIds(o, 'Users');
+        if (ownerIds.length > 0 && currentUserRecord && !ownerIds.includes(currentUserRecord.id)) return false;
+        // Opening date filter: must be on or after goalStartDate (if set)
+        if (goalStartDate) {
+          const openDate = o.fields?.['Opening date'] || o.fields?.['opening date'] || '';
+          if (openDate && new Date(openDate) < new Date(goalStartDate)) return false;
+        }
+        return true;
+      });
       const activePipeline = activeOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
       const wonValue = wonOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
       const mappedAccounts = accounts.filter(a => linkedIds(a, 'Stakeholders').length > 0);
@@ -860,7 +880,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
 
       // ─── HANDLERS ───
       const openEditGoal = () => {
-        setGoalForm({ name: goalName, target: goalTarget ? String(goalTarget) : '', deadline: goalDeadline });
+        setGoalForm({ name: goalName, target: goalTarget ? String(goalTarget) : '', startDate: goalStartDate, deadline: goalDeadline });
         setEditingGoal(true);
       };
 
@@ -871,6 +891,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           const fields = {
             'Goal Name': goalForm.name,
             'Target Amount': parseFloat(goalForm.target) || 0,
+            ...(goalForm.startDate ? { 'Start Date': goalForm.startDate } : {}),
             ...(goalForm.deadline ? { 'Deadline': goalForm.deadline } : {}),
           };
           if (strategyRecord) {
@@ -1021,7 +1042,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>{goalName}</div>
                     <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 12 }}>
                       {goalTarget > 0 && <span style={{ fontSize: 13, color: 'var(--globant-muted)' }}>Target: <strong style={{ color: 'var(--globant-text)' }}>{formatCurrency(goalTarget)}</strong></span>}
-                      {goalDeadline && <span style={{ fontSize: 13, color: 'var(--globant-muted)' }}>Deadline: <strong style={{ color: 'var(--globant-text)' }}>{formatDate(goalDeadline)}</strong></span>}
+                      {goalStartDate && <span style={{ fontSize: 13, color: 'var(--globant-muted)' }}>From: <strong style={{ color: 'var(--globant-text)' }}>{formatDate(goalStartDate)}</strong></span>}
+                  {goalDeadline && <span style={{ fontSize: 13, color: 'var(--globant-muted)' }}>To: <strong style={{ color: 'var(--globant-text)' }}>{formatDate(goalDeadline)}</strong></span>}
                       {daysRemaining !== null && (
                         <span style={{ fontSize: 12, fontWeight: 700, color: daysRemaining < 0 ? '#ef4444' : daysRemaining < 30 ? '#fbbf24' : '#4ade80' }}>
                           {daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d left`}
@@ -1054,7 +1076,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             ) : (
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>✏️ Edit Company Goal</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Goal Name</label>
                     <input style={{ ...sStyle, width: '100%' }} value={goalForm.name} onChange={e => setGoalForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Q2 2026 Revenue Target" />
@@ -1062,6 +1084,10 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Target Amount (€)</label>
                     <input style={{ ...sStyle, width: '100%' }} type="number" value={goalForm.target} onChange={e => setGoalForm(p => ({ ...p, target: e.target.value }))} placeholder="1000000" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Start Date</label>
+                    <input style={{ ...sStyle, width: '100%' }} type="date" value={goalForm.startDate} onChange={e => setGoalForm(p => ({ ...p, startDate: e.target.value }))} />
                   </div>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Deadline</label>
@@ -2143,11 +2169,14 @@ Output ONLY the message, nothing else.`;
           .then(async () => {
             // If sent as event invite, register stakeholder as invited in the event
             if (eventId) {
-              const ev = data.events?.find(e => e.id === eventId);
-              const currentInvited = ev ? linkedIds(ev, 'Stakeholders invited') : [];
-              await a.updateRecord(TABLE_IDS.events, eventId, {
-                'Stakeholders invited': [...new Set([...currentInvited, stakeholder.id])],
-              }).catch(e => console.error('[useMessage] event invite update failed:', e));
+              try {
+                const evCached = (data.events || []).find(e => e.id === eventId);
+                const currentInvited = evCached ? linkedIds(evCached, 'Stakeholders invited') : [];
+                // Always update even if stakeholder seems already there (cache may be stale)
+                await a.updateRecord(TABLE_IDS.events, eventId, {
+                  'Stakeholders invited': [...new Set([...currentInvited, stakeholder.id])],
+                });
+              } catch(evErr) { console.error('[useMessage] event invite update failed:', evErr); }
             }
           })
           .then(() => { if (onLogActivity) onLogActivity(); })
