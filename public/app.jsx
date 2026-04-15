@@ -6500,7 +6500,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
         };
         if (evNewEnd) fields['End date'] = new Date(evNewEnd).toISOString();
         if (evNewContext.trim()) fields['Aditional context'] = evNewContext.trim();
-        if (evNewWebsite.trim()) fields['Website'] = evNewWebsite.trim();
+        if (evNewWebsite.trim()) fields['URL'] = evNewWebsite.trim();
         if (evNewAttachUrl.trim()) fields['Attachments'] = [{ url: evNewAttachUrl.trim() }];
         // Optimistic: show instantly
         if (onAddRecord) onAddRecord('events', fields);
@@ -7111,7 +7111,7 @@ Return ONLY the JSON array, nothing else.`;
                 { key: 'Event Name', label: 'Event Name', fullWidth: true },
                 { key: 'Starting', label: 'Start Date', type: 'date' },
                 { key: 'End date', label: 'End Date', type: 'date' },
-                { key: 'Website', label: 'Website' },
+                { key: 'URL', label: 'Website' },
                 { key: 'Aditional context', label: 'Additional Context', type: 'textarea', fullWidth: true },
               ]}
               initialValues={(() => {
