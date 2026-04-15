@@ -7631,7 +7631,9 @@ Return ONLY the JSON array, nothing else.`;
           );
           const openOpps = solOpps.filter(o => !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage')));
           const pipeline = openOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
-          const replied = solOutreach.filter(o => F(o, 'Status') === 'Replied').length;
+          // Count unique stakeholders who replied (not total reply messages)
+          const repliedStkSet = new Set(solOutreach.filter(o => F(o,'Status')==='Replied').flatMap(o=>linkedIds(o,'Stakeholder')).filter(Boolean));
+          const replied = repliedStkSet.size || solOutreach.filter(o => F(o,'Status')==='Replied').length;
           return {
             sol, id: sol.id, name: F(sol, 'Name') || 'Unnamed',
             accountCount: solAccounts.length,
@@ -9353,9 +9355,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       });
 
       const totalSent     = periodOutreach.length;
-      const replies       = periodOutreach.filter(o => F(o, 'Status') === 'Replied');
+      const allReplies    = periodOutreach.filter(o => F(o, 'Status') === 'Replied');
+      // Deduplicate: 1 reply per unique stakeholder (if same person replied 3x → counts as 1)
+      const repliedStkIds = new Set(allReplies.flatMap(o => linkedIds(o, 'Stakeholder')).filter(Boolean));
+      const replies       = allReplies.filter((o, _, arr) => {
+        const stkId = linkedIds(o, 'Stakeholder')[0];
+        if (!stkId) return true; // no stakeholder → keep
+        return arr.findIndex(x => linkedIds(x, 'Stakeholder')[0] === stkId) === arr.indexOf(o);
+      });
       const meetings      = periodOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status')));
-      const replyRate     = totalSent > 0 ? Math.round(replies.length / totalSent * 100) : 0;
+      const uniqueRepliers = repliedStkIds.size || replies.length;
+      const replyRate     = totalSent > 0 ? Math.round(uniqueRepliers / totalSent * 100) : 0;
       const meetingRate   = totalSent > 0 ? Math.round(meetings.length / totalSent * 100) : 0;
       const accsContacted = new Set(periodOutreach.flatMap(o => linkedIds(o, 'Account'))).size;
 
@@ -9370,6 +9380,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       // ── HTML generator ──
       const generateHtml = async () => {
         setGenerating(true);
+        try {
         const T  = '#1A1A2E';
         const G  = '#5BBFB5';
         const GR = '#4A4A4A';
@@ -9382,10 +9393,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const accIds = (solAccMap[sol.id] || []).filter(id => displayAccIds.includes(id));
           const accs = accounts.filter(a => accIds.includes(a.id));
           const solOut = periodOutreach.filter(o => linkedIds(o,'Account').some(id => accIds.includes(id)));
-          const solReplies = solOut.filter(o => F(o,'Status') === 'Replied');
+          const solAllReplies = solOut.filter(o => F(o,'Status') === 'Replied');
+          // Unique repliers per solution
+          const solUniqueStkIds = new Set(solAllReplies.flatMap(o => linkedIds(o,'Stakeholder')).filter(Boolean));
+          const solUniqueReplies = solUniqueStkIds.size || solAllReplies.length;
           const solMeetings = solOut.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
-          const rr = solOut.length > 0 ? Math.round(solReplies.length/solOut.length*100) : 0;
-          return { sol, accs, sent: solOut.length, replies: solReplies.length, meetings: solMeetings.length, rr };
+          const rr = solOut.length > 0 ? Math.round(solUniqueReplies/solOut.length*100) : 0;
+          return { sol, accs, sent: solOut.length, replies: solUniqueReplies, meetings: solMeetings.length, rr };
         }).filter(r => r.sent > 0 || r.accs.length > 0);
 
         // Reply details — AI-generated one-liner status per contact
@@ -9458,7 +9472,7 @@ Return ONLY a JSON object: {"1": "status...", "2": "status...", ...}`;
 
         const replySection = replyDetails.length === 0 ? '' : `
           <tr><td style="padding:24px 0 8px;">
-            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received (${replies.length})</h2>
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received (${uniqueRepliers} contact${uniqueRepliers !== 1 ? 's' : ''})</h2>
             ${replyDetails.map(r=>{
               const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
               const role = r.stk ? (F(r.stk,'Role')||'') : '';
@@ -9667,7 +9681,7 @@ Return ONLY a JSON object: {"1": "status...", "2": "status...", ...}`;
               <div className="card" style={{ background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.2)' }}>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Preview Stats</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                  {[['Messages',totalSent],['Accounts',accsContacted],['Replies',replies.length],['Meetings',meetings.length],['Reply %',replyRate+'%'],['Pipeline',formatCurrency(pipeline)]].map(([l,v])=>(
+                  {[['Messages',totalSent],['Accounts',accsContacted],['Unique Replies',uniqueRepliers],['Meetings',meetings.length],['Reply %',replyRate+'%'],['Pipeline',formatCurrency(pipeline)]].map(([l,v])=>(
                     <div key={l} style={{ padding:'6px 8px', background:'rgba(255,255,255,0.05)', borderRadius:5 }}>
                       <div style={{ fontSize:15, fontWeight:800, color:'var(--globant-green)' }}>{v}</div>
                       <div style={{ fontSize:10, color:'var(--globant-muted)' }}>{l}</div>
