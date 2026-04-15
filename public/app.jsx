@@ -6472,6 +6472,8 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const selectEvent = useCallback((id) => {
         setSelectedEventId(id || null);
         navSetUrl('events', id || null);
+        setInviteByAccId('');
+        setInviteBySearch('');
       }, []);
       // Restore from URL / external navigation
       useEffect(() => {
@@ -6493,6 +6495,8 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const [evNewWebsite, setEvNewWebsite] = useState('');
       const [evNewAttachUrl, setEvNewAttachUrl] = useState('');
       const [editingInviteTemplate, setEditingInviteTemplate] = useState(false);
+      const [inviteByAccId, setInviteByAccId] = useState('');
+      const [inviteBySearch, setInviteBySearch] = useState('');
       const [inviteTemplateValue, setInviteTemplateValue] = useState('');
       const [savingInviteTemplate, setSavingInviteTemplate] = useState(false);
       const [evCreating, setEvCreating] = useState(false);
@@ -7006,6 +7010,72 @@ Return ONLY the JSON array, nothing else.`;
                       );
                     })}
                 </div>
+              </div>
+            )}
+
+            {/* ── Invite by Company ── */}
+            {!isPast && (
+              <div className="card">
+                <div className="card-header">
+                  <h3>🏢 Invite by Company</h3>
+                </div>
+                {/* Account filter */}
+                <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+                  <select className="input-field" style={{ fontSize:12, maxWidth:260 }}
+                    value={inviteByAccId}
+                    onChange={e => { setInviteByAccId(e.target.value); setInviteBySearch(''); }}>
+                    <option value="">— All accounts —</option>
+                    {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
+                      <option key={a.id} value={a.id}>{F(a,'Account Name')}</option>
+                    ))}
+                  </select>
+                  <input className="input-field" style={{ fontSize:12, maxWidth:220 }}
+                    placeholder="Search by name or role..."
+                    value={inviteBySearch}
+                    onChange={e => setInviteBySearch(e.target.value)} />
+                </div>
+                {(() => {
+                  const filtered = stakeholders
+                    .filter(s => {
+                      if (!invitedIds.includes(s.id) === false) return false; // skip already invited
+                      if (inviteByAccId && !linkedIds(s,'Account').includes(inviteByAccId)) return false;
+                      if (inviteBySearch) {
+                        const q = inviteBySearch.toLowerCase();
+                        if (!(`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(q)) return false;
+                      }
+                      return !invitedIds.includes(s.id);
+                    })
+                    .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||''))
+                    .slice(0, 30);
+                  if (filtered.length === 0) return <p style={{ color:'var(--globant-muted)', fontSize:12 }}>{inviteByAccId || inviteBySearch ? 'No contacts match your filter.' : 'Select a company to see contacts.'}</p>;
+                  return (
+                    <div style={{ maxHeight:320, overflowY:'auto' }}>
+                      {filtered.map(s => {
+                        const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+                        const hasPhone = !!F(s,'Phone number');
+                        const hasEmail = !!F(s,'Email');
+                        const hasLinkedin = !!F(s,'LinkedIn');
+                        return (
+                          <div key={s.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 10px', marginBottom:4, borderRadius:6, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)' }}>
+                            <div>
+                              <span style={{ fontWeight:600, fontSize:13, cursor:'pointer', color:'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
+                                {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                              </span>
+                              <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}{accNames.length > 0 ? ` · ${accNames[0]}` : ''}</span>
+                              {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ marginLeft:6, fontSize:9 }}>{F(s,'Level of Influence')}</span>}
+                            </div>
+                            <div style={{ display:'flex', gap:4 }}>
+                              <button className="action-btn btn-primary" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => setEvSelectedStakeholder(s)}>✨</button>
+                              {hasEmail && <button className="action-btn btn-email" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => inviteStakeholder(s, selectedEvent, 'Email')}>✉️</button>}
+                              {hasPhone && <button className="action-btn btn-whatsapp" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => inviteStakeholder(s, selectedEvent, 'WhatsApp')}>💬</button>}
+                              {hasLinkedin && <button className="action-btn btn-linkedin" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => inviteStakeholder(s, selectedEvent, 'LinkedIn')}>🔗</button>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
