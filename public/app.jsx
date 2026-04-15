@@ -830,17 +830,15 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const allMeetings = outreach.filter(o => meetingStatuses.includes(F(o, 'Status')));
       const wonOpps = opportunities.filter(o => wonStages.includes(F(o, 'Stage')));
 
-      // Current user's record in the company Users table (for owner filtering)
-      const currentUserRecord = (data.users || []).find(u =>
+      // Active opps: filtered by owner (Users field) + Opening date within goal range
+      const _curUserRec = (data.users || []).find(u =>
         (F(u, 'Email') || '').toLowerCase() === (CURRENT_USER?.email || '').toLowerCase()
       );
-
-      // Active opps: filtered by owner (Users field) + Opening date within goal range
       const activeOpps = opportunities.filter(o => {
         if (closedStages.includes(F(o, 'Stage'))) return false;
         // Owner filter: if opp has Users linked, current user must be one of them
         const ownerIds = linkedIds(o, 'Users');
-        if (ownerIds.length > 0 && currentUserRecord && !ownerIds.includes(currentUserRecord.id)) return false;
+        if (ownerIds.length > 0 && _curUserRec && !ownerIds.includes(_curUserRec.id)) return false;
         // Opening date filter: must be on or after goalStartDate (if set)
         if (goalStartDate) {
           const openDate = o.fields?.['Opening date'] || o.fields?.['opening date'] || '';
