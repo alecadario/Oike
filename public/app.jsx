@@ -1708,7 +1708,8 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const handleSend = (channel) => {
         if (!currentMessage.trim()) return;
         const ccList = (channel === 'Email' && ccPartner && cpEmails.length > 0) ? cpEmails : [];
-        onSend(stakeholder, channel, currentMessage, ccList, isEventInvite ? selectedEventId : null);
+        // Pass selectedEventId whenever an event is selected — regardless of invite/followup mode
+        onSend(stakeholder, channel, currentMessage, ccList, selectedEventId || null);
         onClose();
       };
 
@@ -2142,14 +2143,10 @@ Output ONLY the message, nothing else.`;
             // If sent as event invite, register stakeholder as invited in the event
             if (eventId) {
               const ev = data.events?.find(e => e.id === eventId);
-              if (ev) {
-                const currentInvited = linkedIds(ev, 'Stakeholders invited');
-                if (!currentInvited.includes(stakeholder.id)) {
-                  await a.updateRecord(TABLE_IDS.events, eventId, {
-                    'Stakeholders invited': [...currentInvited, stakeholder.id],
-                  });
-                }
-              }
+              const currentInvited = ev ? linkedIds(ev, 'Stakeholders invited') : [];
+              await a.updateRecord(TABLE_IDS.events, eventId, {
+                'Stakeholders invited': [...new Set([...currentInvited, stakeholder.id])],
+              }).catch(e => console.error('[useMessage] event invite update failed:', e));
             }
           })
           .then(() => { if (onLogActivity) onLogActivity(); })
@@ -2973,14 +2970,10 @@ Output ONLY the message, nothing else.`;
           .then(async () => {
             if (eventId) {
               const ev = data.events?.find(e => e.id === eventId);
-              if (ev) {
-                const currentInvited = linkedIds(ev, 'Stakeholders invited');
-                if (!currentInvited.includes(stakeholder.id)) {
-                  await a.updateRecord(TABLE_IDS.events, eventId, {
-                    'Stakeholders invited': [...currentInvited, stakeholder.id],
-                  });
-                }
-              }
+              const currentInvited = ev ? linkedIds(ev, 'Stakeholders invited') : [];
+              await a.updateRecord(TABLE_IDS.events, eventId, {
+                'Stakeholders invited': [...new Set([...currentInvited, stakeholder.id])],
+              }).catch(e => console.error('[useMessage] event invite update failed:', e));
             }
           })
           .then(() => { if (onLogActivity) onLogActivity(); })
@@ -6698,15 +6691,14 @@ Return ONLY the JSON array, nothing else.`;
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           // If this was an event invite from AI Generator, link the stakeholder to the event
           if (eventId) {
-            const ev = data.events?.find(e => e.id === eventId);
-            if (ev) {
-              const currentInvited = linkedIds(ev, 'Stakeholders invited');
-              if (!currentInvited.includes(stakeholder.id)) {
-                await a.updateRecord(TABLE_IDS.events, eventId, {
-                  'Stakeholders invited': [...currentInvited, stakeholder.id]
-                });
-              }
-            }
+            try {
+              const ev = data.events?.find(e => e.id === eventId);
+              const currentInvited = ev ? linkedIds(ev, 'Stakeholders invited') : [];
+              const merged = [...new Set([...currentInvited, stakeholder.id])];
+              await a.updateRecord(TABLE_IDS.events, eventId, {
+                'Stakeholders invited': merged,
+              });
+            } catch (evErr) { console.error('[evUseMessage] Failed to update Stakeholders invited:', evErr); }
           }
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Event message log failed:', e); }
@@ -6953,7 +6945,7 @@ Return ONLY the JSON array, nothing else.`;
                 onClose={() => setEvHistoryStakeholder(null)}
                 onRefresh={onLogActivity}
                 allData={data}
-                onSend={evUseMessage}
+                onSend={(s, ch, msg, cc, evId) => evUseMessage(s, ch, msg, cc, evId || selectedEventId)}
               />
             )}
 
@@ -6962,7 +6954,7 @@ Return ONLY the JSON array, nothing else.`;
               <AIMessageModal
                 stakeholder={evSelectedStakeholder}
                 onClose={() => setEvSelectedStakeholder(null)}
-                onSend={evUseMessage}
+                onSend={(s, ch, msg, cc, evId) => evUseMessage(s, ch, msg, cc, evId || selectedEventId)}
                 data={data}
               />
             )}
