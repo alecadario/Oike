@@ -7110,21 +7110,42 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
                   const sendInviteMsg = (s, channel) => {
                     if (!invitePreview?.msg) return;
+                    const msg = invitePreview.msg;
                     const email = F(s,'Email')||'';
                     const phone = F(s,'Phone number')||'';
                     const linkedin = F(s,'LinkedIn')||'';
-                    let subject = '', body = invitePreview.msg;
+                    let subject = '', body = msg;
                     if (channel === 'Email') {
                       const lines = body.split('\n');
                       const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
                       if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
                       else { subject = `${F(selectedEvent,'Event Name')||'Event'} — ${F(s,'Name')||''}`; }
                     }
-                    if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(invitePreview.msg)}`,'_blank');
+                    // Open channel with the GENERATED message (only once)
+                    if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
                     else if (channel==='Email'&&email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
-                    else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(invitePreview.msg).catch(()=>{}); window.open(linkedin,'_blank'); }
-                    // Log + register as invited
-                    inviteStakeholder(s, selectedEvent, channel);
+                    else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(msg).catch(()=>{}); window.open(linkedin,'_blank'); }
+                    // Log activity + register as invited (without reopening channel)
+                    const companyIds = linkedIds(s,'Account');
+                    const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+                    const evName = F(selectedEvent,'Event Name')||'';
+                    const a = api || new AirtableAPI();
+                    a.createRecord(TABLE_IDS.outreach, {
+                      'Activity Name': `Event ${invitePreview.mode==='invite'?'Invite':'Follow-up'}: ${sName} → ${evName} — ${new Date().toLocaleDateString('en-US')}`,
+                      'Account': companyIds, 'Stakeholder': [s.id],
+                      'Channel': channel, 'Date': new Date().toISOString(),
+                      'Status': 'Sent', 'Message': msg,
+                      'Notes': `${invitePreview.mode==='invite'?'Event invitation':'Post-event follow-up'} for "${evName}"`,
+                      'Logged By': CURRENT_USER?.name || '',
+                    }).then(async () => {
+                      // Register as invited/met
+                      const evCached = (data.events||[]).find(e => e.id === selectedEventId);
+                      const currentInvited = evCached ? linkedIds(evCached,'Stakeholders invited') : [];
+                      await a.updateRecord(TABLE_IDS.events, selectedEventId, {
+                        'Stakeholders invited': [...new Set([...currentInvited, s.id])],
+                      }).catch(e => console.error('Event invite register failed:', e));
+                      if (onLogActivity) onLogActivity();
+                    }).catch(e => console.error('sendInviteMsg log failed:', e));
                     setInvitePreview(null);
                   };
 
