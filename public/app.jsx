@@ -7004,6 +7004,28 @@ Return ONLY the JSON array, nothing else.`;
                 data={data}
               />
             )}
+
+            {/* Edit Event Modal — must be inside detail view (not list view) */}
+            {editingEvent && (
+              <EditModal
+                title={`Edit: ${F(editingEvent, 'Event Name') || 'Event'}`}
+                fields={[
+                  { key: 'Event Name', label: 'Event Name', fullWidth: true },
+                  { key: 'Starting', label: 'Start Date', type: 'date' },
+                  { key: 'End date', label: 'End Date', type: 'date' },
+                  { key: 'URL', label: 'Website' },
+                  { key: 'Aditional context', label: 'Additional Context', type: 'textarea', fullWidth: true },
+                ]}
+                initialValues={(() => {
+                  const v = { ...editingEvent.fields };
+                  if (v['Starting']) v['Starting'] = v['Starting'].split('T')[0];
+                  if (v['End date']) v['End date'] = v['End date'].split('T')[0];
+                  return v;
+                })()}
+                onSave={saveEventEdit}
+                onClose={() => setEditingEvent(null)}
+              />
+            )}
           </div>
         );
       }
@@ -9300,17 +9322,34 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         return m;
       }, [activeSols, opportunities]);
 
-      const allSolAccIds = [...new Set(Object.values(solAccMap).flat())];
-      const activeAccounts = accounts.filter(a => allSolAccIds.includes(a.id));
+      // If solutions selected → show their accounts. If no solutions → show ALL accounts
+      const allSolAccIds = selSolIds.length > 0
+        ? [...new Set(Object.values(solAccMap).flat())]
+        : accounts.map(a => a.id);
+      const activeAccounts = accounts
+        .filter(a => allSolAccIds.includes(a.id))
+        .sort((a, b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||''));
       const displayAccounts = selAccIds.length > 0
         ? activeAccounts.filter(a => selAccIds.includes(a.id))
         : activeAccounts;
       const displayAccIds = displayAccounts.map(a => a.id);
 
-      // Outreach in period for selected accounts
+      // Stakeholder IDs for the selected accounts (for broader outreach matching)
+      const displayStkIds = useMemo(() => {
+        const ids = new Set();
+        stakeholders.forEach(s => {
+          if (linkedIds(s, 'Account').some(id => displayAccIds.includes(id))) ids.add(s.id);
+        });
+        return ids;
+      }, [stakeholders, displayAccIds]);
+
+      // Outreach in period — matched by Account OR by Stakeholder belonging to those accounts
       const periodOutreach = outreach.filter(o => {
         const ts = new Date(o.fields?.['Date'] || 0).getTime();
-        return ts >= fromTs && ts <= toTs && linkedIds(o, 'Account').some(id => displayAccIds.includes(id));
+        return ts >= fromTs && ts <= toTs && (
+          linkedIds(o, 'Account').some(id => displayAccIds.includes(id)) ||
+          linkedIds(o, 'Stakeholder').some(id => displayStkIds.has(id))
+        );
       });
 
       const totalSent     = periodOutreach.length;
@@ -9329,7 +9368,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const pipeline = activeOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
 
       // ── HTML generator ──
-      const generateHtml = () => {
+      const generateHtml = async () => {
         setGenerating(true);
         const T  = '#1A1A2E';
         const G  = '#5BBFB5';
@@ -9349,23 +9388,48 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           return { sol, accs, sent: solOut.length, replies: solReplies.length, meetings: solMeetings.length, rr };
         }).filter(r => r.sent > 0 || r.accs.length > 0);
 
-        // Reply details — clean summary instead of raw message
-        const replyDetails = replies.slice(0, 20).map(o => {
+        // Reply details — AI-generated one-liner status per contact
+        const replyRaw = replies.slice(0, 20).map(o => {
           const stkId = linkedIds(o,'Stakeholder')[0];
           const stk   = stakeholders.find(s => s.id === stkId);
-          const accId = linkedIds(o,'Account')[0];
+          const accId = linkedIds(o,'Account')[0] || (stk ? linkedIds(stk,'Account')[0] : null);
           const acc   = accounts.find(a => a.id === accId);
-          // Clean the message: remove gmsg prefix, forwarded headers, trim
           const rawMsg = (F(o,'Notes') || F(o,'Message') || '')
             .replace(/\[gmsg:[^\]]+\]\n?/g, '')
             .replace(/[-─]+\s*(Forwarded message|Original message|De:|From:).*/si, '')
             .replace(/^Subject:\s*.*/im, '')
-            .trim();
-          // Extract first meaningful sentence as summary
-          const summary = rawMsg.split(/[.!?]\s+/)[0]?.trim().slice(0,180) || rawMsg.slice(0,180);
-          const d     = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-          return { stk, acc, summary, d, channel: F(o,'Channel') || '' };
+            .trim().slice(0, 300);
+          const d = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+          return { stk, acc, rawMsg, d, channel: F(o,'Channel') || '' };
         });
+
+        // Ask AI for one-liner status per contact
+        let aiStatuses = {};
+        if (replyRaw.length > 0) {
+          try {
+            const lines = replyRaw.map((r, i) => {
+              const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
+              const company = r.acc ? F(r.acc,'Account Name') : '';
+              return `${i+1}. ${name} (${company}) [${r.d}]: "${r.rawMsg}"`;
+            }).join('\n');
+            const prompt = `You are summarizing sales reply emails for a bi-weekly report. For each reply below, write ONE SHORT LINE (max 12 words) describing the current conversation status — like "Interested, follow-up meeting being scheduled" or "Referred to procurement, waiting for contact" or "Busy this week, reconnect next month".
+
+Be specific and action-oriented. NO generic phrases like "replied to email". Focus on WHERE THE DEAL IS GOING.
+
+Replies:
+${lines}
+
+Return ONLY a JSON object: {"1": "status...", "2": "status...", ...}`;
+            const result = await callOpenAI({ prompt, temperature: 0.3, max_tokens: 300 });
+            const cleaned = result.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+            aiStatuses = JSON.parse(cleaned);
+          } catch(e) { console.error('AI summary failed:', e); }
+        }
+
+        const replyDetails = replyRaw.map((r, i) => ({
+          ...r,
+          summary: aiStatuses[String(i+1)] || r.rawMsg.split(/[.!?]\s+/)[0]?.trim().slice(0,120) || '—',
+        }));
 
         const kpiBox = (label, value, color) =>
           `<td style="width:25%;padding:16px 12px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb;">
@@ -9499,7 +9563,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 </body></html>`;
 
         setReportHtml(html);
+      } catch(e) {
+        console.error('Report generation failed:', e);
+      } finally {
         setGenerating(false);
+      }
       };
 
       const copyHtml = async () => {
@@ -9573,9 +9641,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               {/* Accounts */}
               {activeAccounts.length > 0 && (
                 <div className="card">
-                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>
                     🏢 Accounts
                     {selAccIds.length > 0 && <span style={{ marginLeft:6, color:'var(--globant-info)', fontWeight:400 }}>({selAccIds.length} selected)</span>}
+                  </div>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:8 }}>
+                    {selSolIds.length > 0 ? `Accounts linked to selected solutions` : `All accounts — pick specific ones or leave all`}
                   </div>
                   <div style={{ maxHeight:200, overflowY:'auto' }}>
                     {activeAccounts.map(a => (
