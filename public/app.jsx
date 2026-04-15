@@ -1561,7 +1561,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         const eUrl = F(selectedEvent, 'URL') || '';
         const eAdditional = F(selectedEvent, 'Aditional context') || '';
         const eSummary = F(selectedEvent, 'Attachment Summary') || '';
-        return `EVENT: ${eName}${eStart ? ` | Date: ${eStart}${eEnd ? ` – ${eEnd}` : ''}` : ''}${eUrl ? ` | URL: ${eUrl}` : ''}${eAdditional ? `\nEvent Context: ${eAdditional.slice(0, 300)}` : ''}${eSummary ? `\nEvent Summary: ${(typeof eSummary === 'string' ? eSummary : '').slice(0, 300)}` : ''}`;
+        const eTemplate = F(selectedEvent, 'Stakeholder Invitation') || '';
+        return `EVENT: ${eName}${eStart ? ` | Date: ${eStart}${eEnd ? ` – ${eEnd}` : ''}` : ''}${eUrl ? ` | URL: ${eUrl}` : ''}${eAdditional ? `\nEvent Context: ${eAdditional.slice(0, 300)}` : ''}${eSummary ? `\nEvent Summary: ${(typeof eSummary === 'string' ? eSummary : '').slice(0, 300)}` : ''}${eTemplate ? `\n\n━━━ INVITATION TEMPLATE (use this as the base, personalize to the recipient) ━━━\n${eTemplate.slice(0, 500)}` : ''}`;
       })() : '';
       const isEventFollowup = !!(eventContext && eventMode === 'followup');
       const isEventInvite = !!(eventContext && eventMode === 'invite');
@@ -6464,6 +6465,9 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const [evNewContext, setEvNewContext] = useState('');
       const [evNewWebsite, setEvNewWebsite] = useState('');
       const [evNewAttachUrl, setEvNewAttachUrl] = useState('');
+      const [editingInviteTemplate, setEditingInviteTemplate] = useState(false);
+      const [inviteTemplateValue, setInviteTemplateValue] = useState('');
+      const [savingInviteTemplate, setSavingInviteTemplate] = useState(false);
       const [evCreating, setEvCreating] = useState(false);
       const [editingEvent, setEditingEvent] = useState(null);
       const now = new Date();
@@ -6791,13 +6795,55 @@ Return ONLY the JSON array, nothing else.`;
               </div>
             )}
 
-            {/* AI Invitation Message */}
-            {aiInviteMsg && (
-              <div className="card">
-                <div className="card-header"><h3>✨ AI Invitation Message</h3></div>
-                <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', padding: '10px 14px', background: 'rgba(91,191,181,0.06)', borderRadius: 8 }}>{aiInviteMsg}</div>
+            {/* Invitation Template — editable */}
+            <div className="card">
+              <div className="card-header">
+                <h3>✉️ Invitation Message Template</h3>
+                <div style={{ display:'flex', gap:6 }}>
+                  {!editingInviteTemplate ? (
+                    <button className="action-btn btn-ghost" style={{ fontSize:10 }}
+                      onClick={() => { setEditingInviteTemplate(true); setInviteTemplateValue(aiInviteMsg || ''); }}>
+                      {aiInviteMsg ? '✏️ Edit' : '➕ Add Template'}
+                    </button>
+                  ) : (
+                    <>
+                      <button className="action-btn btn-primary" style={{ fontSize:10 }} disabled={savingInviteTemplate}
+                        onClick={async () => {
+                          setSavingInviteTemplate(true);
+                          try {
+                            const a = api || new AirtableAPI();
+                            await a.updateRecord(TABLE_IDS.events, selectedEventId, { 'Stakeholder Invitation': inviteTemplateValue });
+                            if (onUpdateRecord) onUpdateRecord('events', selectedEventId, { 'Stakeholder Invitation': inviteTemplateValue });
+                            setEditingInviteTemplate(false);
+                            if (onLogActivity) onLogActivity();
+                          } catch(e) { console.error(e); alert('Failed to save template'); }
+                          setSavingInviteTemplate(false);
+                        }}>
+                        {savingInviteTemplate ? '⏳' : '💾 Save'}
+                      </button>
+                      <button className="action-btn btn-ghost" style={{ fontSize:10 }} onClick={() => setEditingInviteTemplate(false)}>Cancel</button>
+                    </>
+                  )}
+                </div>
               </div>
-            )}
+              {editingInviteTemplate ? (
+                <div>
+                  <textarea className="input-field"
+                    style={{ width:'100%', minHeight:120, resize:'vertical', fontSize:12, fontFamily:'inherit', lineHeight:1.6 }}
+                    placeholder={`Write the base message for inviting stakeholders to this event.\n\nThe AI will use this as a guide to personalize each invitation.\n\nExample:\n"Hi [Name], I wanted to personally invite you to [Event]. Given your role in [Company], I think it's a great opportunity to connect and explore [topic]. Are you planning to attend?"`}
+                    value={inviteTemplateValue}
+                    onChange={e => setInviteTemplateValue(e.target.value)}
+                  />
+                  <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>
+                    💡 The AI will use this template + the stakeholder's pain points and context to personalize each invitation.
+                  </div>
+                </div>
+              ) : aiInviteMsg ? (
+                <div style={{ fontSize:13, lineHeight:1.7, color:'var(--globant-text)', whiteSpace:'pre-wrap', padding:'10px 14px', background:'rgba(91,191,181,0.06)', borderRadius:8 }}>{aiInviteMsg}</div>
+              ) : (
+                <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No template set. Add one to guide the AI when generating personalized invitations for this event.</p>
+              )}
+            </div>
 
             {/* Invited Stakeholders grouped by account */}
             <div className="card">
