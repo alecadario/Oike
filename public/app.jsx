@@ -6497,6 +6497,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const [editingInviteTemplate, setEditingInviteTemplate] = useState(false);
       const [inviteByAccId, setInviteByAccId] = useState('');
       const [inviteBySearch, setInviteBySearch] = useState('');
+      const [invitePreview, setInvitePreview] = useState(null); // {id, mode, msg, generating}
       const [inviteTemplateValue, setInviteTemplateValue] = useState('');
       const [savingInviteTemplate, setSavingInviteTemplate] = useState(false);
       const [evCreating, setEvCreating] = useState(false);
@@ -7047,29 +7048,112 @@ Return ONLY the JSON array, nothing else.`;
                     })
                     .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||''))
                     .slice(0, 30);
-                  if (filtered.length === 0) return <p style={{ color:'var(--globant-muted)', fontSize:12 }}>{inviteByAccId || inviteBySearch ? 'No contacts match your filter.' : 'Select a company to see contacts.'}</p>;
+                  if (filtered.length === 0) return <p style={{ color:'var(--globant-muted)', fontSize:12 }}>{inviteByAccId || inviteBySearch ? 'No contacts match.' : 'Select a company to see contacts.'}</p>;
+
+                  const generateInviteMsg = async (s, mode) => {
+                    setInvitePreview({ id: s.id, mode, msg: '', generating: true });
+                    const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+                    const role = F(s,'Role') || '';
+                    const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,300);
+                    const accId = linkedIds(s,'Account')[0];
+                    const acc = accounts.find(a => a.id === accId);
+                    const accName = acc ? F(acc,'Account Name') : '';
+                    const sOut = outreach.filter(o => linkedIds(o,'Stakeholder').includes(s.id))
+                      .sort((a,b) => new Date(b.fields?.['Date']||0)-new Date(a.fields?.['Date']||0))
+                      .slice(0,3)
+                      .map(o => `[${F(o,'Channel')||'?'}] ${(F(o,'Message')||'').slice(0,120)}`).join('\n');
+                    const evName = F(selectedEvent,'Event Name') || '';
+                    const evDate = selectedEvent.fields?.['Starting'] ? new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
+                    const template = F(selectedEvent,'Stakeholder Invitation') || '';
+                    const isInvite = mode === 'invite';
+                    const prompt = `You are a senior B2B sales rep. Write ONE short personalized message.
+
+CONTACT: ${sName} | ${role} | ${accName}
+${pain ? `PAIN POINTS: ${pain}` : ''}
+${sOut ? `PREVIOUS OUTREACH:\n${sOut}` : ''}
+
+EVENT: ${evName}${evDate ? ` — ${evDate}` : ''}
+${template && isInvite ? `EVENT TEMPLATE (adapt this, don't copy):\n${template}` : ''}
+
+MISSION: ${isInvite
+  ? `Invite ${sName} to ${evName}. Casual, direct. Reference their role/pain if relevant. Ask if they're attending. Max 3 sentences.`
+  : `Follow up after meeting ${sName} at ${evName}. Reference the meeting naturally. ONE clear next step. Max 3 sentences.`
+}
+
+BANNED: "following up" / "checking in" / "I hope this finds you well" / brackets / placeholders.
+Output ONLY the message.`;
+                    try {
+                      const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
+                      setInvitePreview({ id: s.id, mode, msg: msg.trim(), generating: false });
+                    } catch(e) {
+                      setInvitePreview({ id: s.id, mode, msg: template || `Hi ${sName}, I'd love to invite you to ${evName}. Would you be joining?`, generating: false });
+                    }
+                  };
+
+                  const sendInviteMsg = (s, channel) => {
+                    if (!invitePreview?.msg) return;
+                    const email = F(s,'Email')||'';
+                    const phone = F(s,'Phone number')||'';
+                    const linkedin = F(s,'LinkedIn')||'';
+                    let subject = '', body = invitePreview.msg;
+                    if (channel === 'Email') {
+                      const lines = body.split('\n');
+                      const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                      if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+                      else { subject = `${F(selectedEvent,'Event Name')||'Event'} — ${F(s,'Name')||''}`; }
+                    }
+                    if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(invitePreview.msg)}`,'_blank');
+                    else if (channel==='Email'&&email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+                    else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(invitePreview.msg).catch(()=>{}); window.open(linkedin,'_blank'); }
+                    // Log + register as invited
+                    inviteStakeholder(s, selectedEvent, channel);
+                    setInvitePreview(null);
+                  };
+
                   return (
-                    <div style={{ maxHeight:320, overflowY:'auto' }}>
+                    <div style={{ maxHeight:400, overflowY:'auto' }}>
                       {filtered.map(s => {
-                        const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+                        const accNames = resolveLinked(s,'Account',accounts,'Account Name');
                         const hasPhone = !!F(s,'Phone number');
                         const hasEmail = !!F(s,'Email');
                         const hasLinkedin = !!F(s,'LinkedIn');
+                        const isActive = invitePreview?.id === s.id;
                         return (
-                          <div key={s.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 10px', marginBottom:4, borderRadius:6, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)' }}>
-                            <div>
-                              <span style={{ fontWeight:600, fontSize:13, cursor:'pointer', color:'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
-                                {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
-                              </span>
-                              <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}{accNames.length > 0 ? ` · ${accNames[0]}` : ''}</span>
-                              {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ marginLeft:6, fontSize:9 }}>{F(s,'Level of Influence')}</span>}
+                          <div key={s.id} style={{ marginBottom:6, borderRadius:8, border:`1px solid ${isActive?'var(--globant-green)':'var(--globant-border)'}`, overflow:'hidden' }}>
+                            {/* Contact row */}
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'rgba(255,255,255,0.03)' }}>
+                              <div>
+                                <span style={{ fontWeight:600, fontSize:13, cursor:'pointer', color:'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
+                                  {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                                </span>
+                                <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}{accNames.length>0 ? ` · ${accNames[0]}` : ''}</span>
+                                {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ marginLeft:6, fontSize:9 }}>{F(s,'Level of Influence')}</span>}
+                              </div>
+                              <div style={{ display:'flex', gap:4 }}>
+                                <button className="action-btn btn-primary" style={{ fontSize:10, padding:'4px 10px', fontWeight:700 }}
+                                  disabled={isActive && invitePreview.generating}
+                                  onClick={() => invitePreview?.id===s.id && invitePreview.mode==='invite' ? setInvitePreview(null) : generateInviteMsg(s,'invite')}>
+                                  {isActive && invitePreview.mode==='invite' && invitePreview.generating ? '⏳' : '📨 Invite'}
+                                </button>
+                                <button className="action-btn btn-ghost" style={{ fontSize:10, padding:'4px 10px' }}
+                                  disabled={isActive && invitePreview.generating}
+                                  onClick={() => invitePreview?.id===s.id && invitePreview.mode==='followup' ? setInvitePreview(null) : generateInviteMsg(s,'followup')}>
+                                  {isActive && invitePreview.mode==='followup' && invitePreview.generating ? '⏳' : '🤝 Met them'}
+                                </button>
+                              </div>
                             </div>
-                            <div style={{ display:'flex', gap:4 }}>
-                              <button className="action-btn btn-primary" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => setEvSelectedStakeholder(s)}>✨</button>
-                              {hasEmail && <button className="action-btn btn-email" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => inviteStakeholder(s, selectedEvent, 'Email')}>✉️</button>}
-                              {hasPhone && <button className="action-btn btn-whatsapp" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => inviteStakeholder(s, selectedEvent, 'WhatsApp')}>💬</button>}
-                              {hasLinkedin && <button className="action-btn btn-linkedin" style={{ fontSize:10, padding:'3px 8px' }} onClick={() => inviteStakeholder(s, selectedEvent, 'LinkedIn')}>🔗</button>}
-                            </div>
+                            {/* Preview panel */}
+                            {isActive && !invitePreview.generating && invitePreview.msg && (
+                              <div style={{ padding:'10px 12px', background:'rgba(91,191,181,0.06)', borderTop:'1px solid var(--globant-border)' }}>
+                                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, marginBottom:10, whiteSpace:'pre-wrap' }}>{invitePreview.msg}</div>
+                                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                                  {hasEmail && <button className="action-btn btn-email" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'Email')}>✉️ Send via Email</button>}
+                                  {hasPhone && <button className="action-btn btn-whatsapp" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'WhatsApp')}>💬 Send via WhatsApp</button>}
+                                  {hasLinkedin && <button className="action-btn btn-linkedin" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'LinkedIn')}>🔗 Send via LinkedIn</button>}
+                                  <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={() => generateInviteMsg(s, invitePreview.mode)}>🔄 Regenerate</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
