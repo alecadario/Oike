@@ -6474,6 +6474,8 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
         navSetUrl('events', id || null);
         setInviteByAccId('');
         setInviteBySearch('');
+        setShowInvited(false);
+        setInvitePreview(null);
       }, []);
       // Restore from URL / external navigation
       useEffect(() => {
@@ -6497,7 +6499,8 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const [editingInviteTemplate, setEditingInviteTemplate] = useState(false);
       const [inviteByAccId, setInviteByAccId] = useState('');
       const [inviteBySearch, setInviteBySearch] = useState('');
-      const [invitePreview, setInvitePreview] = useState(null); // {id, mode, msg, generating}
+      const [invitePreview, setInvitePreview] = useState(null);
+      const [showInvited, setShowInvited] = useState(false); // {id, mode, msg, generating}
       const [inviteTemplateValue, setInviteTemplateValue] = useState('');
       const [savingInviteTemplate, setSavingInviteTemplate] = useState(false);
       const [evCreating, setEvCreating] = useState(false);
@@ -6877,10 +6880,15 @@ Return ONLY the JSON array, nothing else.`;
               )}
             </div>
 
-            {/* Invited Stakeholders grouped by account */}
+            {/* Invited Stakeholders grouped by account — collapsible */}
             <div className="card">
-              <div className="card-header"><h3>✅ Invited Stakeholders ({invitedStakeholders.length})</h3></div>
-              {invitedStakeholders.length === 0 && <p style={{ color: 'var(--globant-warning)', fontSize: 13 }}>No stakeholders invited yet.</p>}
+              <div className="card-header" style={{ cursor:'pointer' }} onClick={() => setShowInvited(v => !v)}>
+                <h3>✅ Invited Stakeholders ({invitedStakeholders.length})</h3>
+                <span style={{ fontSize:12, color:'var(--globant-muted)' }}>{showInvited ? '▲ Hide' : '▼ Show'}</span>
+              </div>
+              {!showInvited && invitedStakeholders.length === 0 && <p style={{ color:'var(--globant-warning)', fontSize:13 }}>No stakeholders invited yet.</p>}
+              {showInvited && invitedStakeholders.length === 0 && <p style={{ color:'var(--globant-warning)', fontSize:13 }}>No stakeholders invited yet.</p>}
+              {showInvited && invitedStakeholders.length > 0 && (<React.Fragment>
               {Object.entries(invitedByAccount).sort((a, b) => b[1].length - a[1].length).map(([accName, sArr]) => (
                 <div key={accName} style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 8, padding: '4px 0', borderBottom: '1px solid var(--globant-border)' }}>
@@ -6923,6 +6931,7 @@ Return ONLY the JSON array, nothing else.`;
                   })}
                 </div>
               ))}
+              </React.Fragment>)}
             </div>
 
             {/* Suggest more stakeholders to invite */}
