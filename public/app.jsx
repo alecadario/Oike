@@ -8942,11 +8942,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [showGenerator, setShowGenerator] = useState(false);
       const [genStep, setGenStep]             = useState(1);
       const [genCopied, setGenCopied]         = useState(false);
+      const _b = loadBranding();
       const DEFAULT_GEN = {
         slug:'', company:'', contact:'', contactTitle:'', industry:'',
-        senderName: CLIENT_CONFIG.name || '',
-        senderLogo: CLIENT_CONFIG.logo || '',
-        senderEmail: CURRENT_USER?.email || '',
+        senderName:  _b.senderName  || CLIENT_CONFIG.name || '',
+        senderLogo:  _b.senderLogo  || CLIENT_CONFIG.logo || '',
+        senderEmail: _b.senderEmail || CURRENT_USER?.email || '',
+        calendarLink: _b.calendarLink || '',
         discovery:'', pain1:'', pain2:'', pain3:'', goalQuote:'', rootProblem:'',
         option:'B',
         optionName:'',
@@ -8954,7 +8956,6 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         optionDesc:'',
         optionFeatures:[''],
         whySolution:'', nextStep1:'Discovery call to align on ICP and target accounts', nextStep2:'We build the economic proposal together', nextStep3:'Kick-off and system setup — week 1',
-        calendarLink:'',
       };
       const [genForm, setGenForm] = useState(DEFAULT_GEN);
       const GF = (k) => genForm[k] || '';
@@ -10152,28 +10153,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                           <div><label style={lStyle}>Title / Role</label><input style={iStyle} value={GF('contactTitle')} onChange={e=>setGF('contactTitle',e.target.value)} placeholder="CEO & Partner" /></div>
                         </div>
                         <div><label style={lStyle}>Industry</label><input style={iStyle} value={GF('industry')} onChange={e=>setGF('industry',e.target.value)} placeholder="ERP consulting" /></div>
-
-                        <div style={{ borderTop:'1px solid var(--globant-border)', paddingTop:14, marginTop:2 }}>
-                          <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>Your branding</div>
-                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                            <div><label style={lStyle}>Your company name</label><input style={iStyle} value={GF('senderName')} onChange={e=>setGF('senderName',e.target.value)} placeholder="Acme Sales" /></div>
-                            <div><label style={lStyle}>Your email</label><input style={iStyle} value={GF('senderEmail')} onChange={e=>setGF('senderEmail',e.target.value)} placeholder="you@company.com" /></div>
+                        {(GF('senderName') || GF('senderLogo')) && (
+                          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.2)', borderRadius:8 }}>
+                            {GF('senderLogo') && <img src={GF('senderLogo')} alt="" style={{ height:20, maxWidth:80, objectFit:'contain' }} onError={e=>e.target.style.display='none'} />}
+                            <span style={{ fontSize:12, color:'var(--globant-muted)' }}>Branding: <strong style={{ color:'var(--globant-text)' }}>{GF('senderName')}</strong></span>
+                            <a onClick={() => setTab && setTab('proposals')} style={{ marginLeft:'auto', fontSize:11, color:'var(--globant-accent)', cursor:'pointer', textDecoration:'underline' }}>Edit in Settings</a>
                           </div>
-                          <div style={{ marginTop:12 }}>
-                            <label style={lStyle}>Logo URL <span style={{ fontWeight:400, textTransform:'none' }}>(optional — paste a direct image link)</span></label>
-                            <input style={iStyle} value={GF('senderLogo')} onChange={e=>setGF('senderLogo',e.target.value)} placeholder="https://yourcompany.com/logo.png" />
-                            {GF('senderLogo') && (
-                              <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:10 }}>
-                                <img src={GF('senderLogo')} alt="logo preview" style={{ height:32, maxWidth:120, objectFit:'contain', borderRadius:4, background:'rgba(255,255,255,0.05)', padding:4 }} onError={e=>e.target.style.display='none'} />
-                                <span style={{ fontSize:11, color:'var(--globant-muted)' }}>Preview</span>
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ marginTop:12 }}>
-                            <label style={lStyle}>Calendar / booking link</label>
-                            <input style={iStyle} value={GF('calendarLink')} onChange={e=>setGF('calendarLink',e.target.value)} placeholder="https://cal.com/yourname" />
-                          </div>
-                        </div>
+                        )}
                       </div>
                     )}
 
@@ -11717,11 +11703,33 @@ Return ONLY valid JSON:
     }
 
     // ============ SETTINGS MODAL ============
+    const BRANDING_LS_KEY = 'oike_proposal_branding';
+    function loadBranding() {
+      try { return JSON.parse(localStorage.getItem(BRANDING_LS_KEY) || '{}'); } catch { return {}; }
+    }
+
     function SettingsModal({ onClose, gmailReturnStatus = '' }) {
       const isAdmin = CURRENT_USER?.role === 'admin';
       const [tab, setTab] = useState(gmailReturnStatus ? 'integrations' : 'profile');
       const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
       const [saved, setSaved] = useState(false);
+
+      // ── Proposal branding ──
+      const [branding, setBranding] = useState(() => {
+        const b = loadBranding();
+        return {
+          senderName:  b.senderName  || CLIENT_CONFIG.name || '',
+          senderEmail: b.senderEmail || CURRENT_USER?.email || '',
+          senderLogo:  b.senderLogo  || CLIENT_CONFIG.logo  || '',
+          calendarLink: b.calendarLink || '',
+        };
+      });
+      const [brandingSaved, setBrandingSaved] = useState(false);
+      const saveBranding = () => {
+        localStorage.setItem(BRANDING_LS_KEY, JSON.stringify(branding));
+        setBrandingSaved(true);
+        setTimeout(() => setBrandingSaved(false), 2000);
+      };
 
       // ── Gmail integration state ──
       const [gmailConnected, setGmailConnected] = useState(
@@ -11801,6 +11809,7 @@ Return ONLY valid JSON:
               {[
                 { key: 'profile', label: '🤖 AI Profile' },
                 { key: 'workspace', label: '🏢 Workspace' },
+                { key: 'proposals', label: '📄 Proposals' },
                 { key: 'integrations', label: '🔌 Integrations' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -11811,6 +11820,40 @@ Return ONLY valid JSON:
                 }}>{t.label}</button>
               ))}
             </div>
+
+            {/* Proposals branding tab */}
+            {tab === 'proposals' && (
+              <div style={{ display:'flex', flexDirection:'column', gap:16, overflowY:'auto' }}>
+                <div style={{ fontSize:13, color:'var(--globant-muted)' }}>
+                  Set your branding once — it'll auto-fill every proposal you generate.
+                </div>
+                <div>
+                  <label style={labelStyle}>Company / sender name</label>
+                  <input style={inputStyle} value={branding.senderName} onChange={e=>setBranding(p=>({...p,senderName:e.target.value}))} placeholder="Your Company" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Your email</label>
+                  <input style={inputStyle} value={branding.senderEmail} onChange={e=>setBranding(p=>({...p,senderEmail:e.target.value}))} placeholder="you@company.com" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Calendar / booking link</label>
+                  <input style={inputStyle} value={branding.calendarLink} onChange={e=>setBranding(p=>({...p,calendarLink:e.target.value}))} placeholder="https://cal.com/yourname" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Logo URL <span style={{ fontWeight:400, textTransform:'none', color:'var(--globant-muted)' }}>(paste a direct image link)</span></label>
+                  <input style={inputStyle} value={branding.senderLogo} onChange={e=>setBranding(p=>({...p,senderLogo:e.target.value}))} placeholder="https://yourcompany.com/logo.png" />
+                  {branding.senderLogo && (
+                    <div style={{ marginTop:10, padding:'10px 14px', background:'var(--globant-darker)', borderRadius:8, border:'1px solid var(--globant-border)', display:'flex', alignItems:'center', gap:10 }}>
+                      <img src={branding.senderLogo} alt="logo preview" style={{ height:36, maxWidth:140, objectFit:'contain', borderRadius:4 }} onError={e=>e.target.style.display='none'} />
+                      <span style={{ fontSize:11, color:'var(--globant-muted)' }}>Preview</span>
+                    </div>
+                  )}
+                </div>
+                <button className="action-btn btn-primary" style={{ padding:'10px', fontWeight:700 }} onClick={saveBranding}>
+                  {brandingSaved ? '✅ Saved!' : '💾 Save branding'}
+                </button>
+              </div>
+            )}
 
             {/* Integrations tab */}
             {tab === 'integrations' && (
