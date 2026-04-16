@@ -3753,7 +3753,26 @@ Output ONLY the message, nothing else.`;
           list = list.filter(a => (F(a, 'Country') || '').trim() === filterCountry.trim());
         }
         if (filterCPId) {
-          list = list.filter(a => linkedIds(a, 'CP').includes(filterCPId));
+          // The CP↔Account relationship can live on either side depending on how Airtable is set up.
+          // Strategy 1: account has a 'CP' linked-record field pointing to the CP table
+          // Strategy 2: the CP record has an 'Accounts' linked-record field pointing to accounts
+          // Strategy 3: account's 'Account Owner' name matches CP's 'Name'
+          const selectedCP = (data.clientPartners || []).find(cp => cp.id === filterCPId);
+          const cpLinkedAccountIds = selectedCP ? linkedIds(selectedCP, 'Accounts') : [];
+          const cpName = selectedCP ? (F(selectedCP, 'Name') || '').toLowerCase() : '';
+          list = list.filter(a => {
+            // Strategy 1
+            if (linkedIds(a, 'CP').includes(filterCPId)) return true;
+            // Strategy 2
+            if (cpLinkedAccountIds.includes(a.id)) return true;
+            // Strategy 3: match by Account Owner name
+            if (cpName) {
+              const owners = F(a, 'Account Owner') || [];
+              const ownerArr = Array.isArray(owners) ? owners : [owners];
+              if (ownerArr.some(o => o && (o.toLowerCase().includes(cpName) || cpName.includes(o.toLowerCase())))) return true;
+            }
+            return false;
+          });
         }
         return list;
       }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId, data.clientPartners]);
@@ -9074,7 +9093,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.proposals, selected.id, { 'Executive Summary': v });
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'Executive Summary': v });
-        } catch(e) { console.error('[saveExecSummary]', e); }
+        } catch(e) {
+          if (e.message && e.message.includes('Unknown field')) {
+            console.warn('[saveExecSummary] Field "Executive Summary" not found in Airtable — create it as a Long Text field in your proposals table.');
+          } else { console.error('[saveExecSummary]', e); }
+        }
         setExecSummarySaving(false);
       };
 
