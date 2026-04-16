@@ -8934,12 +8934,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [pptFileName, setPptFileName] = useState('');
       const [aiRec, setAiRec]             = useState('');
       const [aiLoading, setAiLoading]     = useState(false);
+      const PROPOSAL_EXEC_LS_KEY = 'oike_proposal_exec_summaries';
       const [execSummary, setExecSummary]         = useState('');
       const [execSummaryLoading, setExecSummaryLoading] = useState(false);
       const [execSummarySaving, setExecSummarySaving]   = useState(false);
       // Proposal Generator wizard
       const [showGenerator, setShowGenerator] = useState(false);
       const [genStep, setGenStep]             = useState(1);
+      const [genCopied, setGenCopied]         = useState(false);
       const DEFAULT_GEN = {
         slug:'', company:'', contact:'', contactTitle:'', industry:'',
         discovery:'', pain1:'', pain2:'', pain3:'', goalQuote:'', rootProblem:'',
@@ -8981,7 +8983,16 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (p) {
             setNotes(p.fields?.['Notes'] || '');
             setPptText(p.fields?.['PPT Content'] || '');
-            setExecSummary(p.fields?.['Executive Summary'] || '');
+            // Try Airtable first, fall back to localStorage if field doesn't exist yet
+            const airtableExec = p.fields?.['Executive Summary'] || '';
+            if (airtableExec) {
+              setExecSummary(airtableExec);
+            } else {
+              try {
+                const stored = JSON.parse(localStorage.getItem(PROPOSAL_EXEC_LS_KEY) || '{}');
+                setExecSummary(stored[selectedId] || '');
+              } catch { setExecSummary(''); }
+            }
             setPptFileName('');
             setAiRec('');
           }
@@ -9092,6 +9103,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const saveExecSummary = async (val) => {
         const v = val !== undefined ? val : execSummary;
         if (!selected) return;
+        // Always persist to localStorage first so it survives navigation even if Airtable field is missing
+        try {
+          const stored = JSON.parse(localStorage.getItem(PROPOSAL_EXEC_LS_KEY) || '{}');
+          stored[selected.id] = v;
+          localStorage.setItem(PROPOSAL_EXEC_LS_KEY, JSON.stringify(stored));
+        } catch {}
         setExecSummarySaving(true);
         try {
           const a = api || new AirtableAPI();
@@ -9099,7 +9116,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'Executive Summary': v });
         } catch(e) {
           if (e.message && e.message.includes('Unknown field')) {
-            console.warn('[saveExecSummary] Field "Executive Summary" not found in Airtable — create it as a Long Text field in your proposals table.');
+            console.warn('[saveExecSummary] Field "Executive Summary" not found in Airtable — saved to localStorage only.');
           } else { console.error('[saveExecSummary]', e); }
         }
         setExecSummarySaving(false);
@@ -9905,6 +9922,149 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         URL.revokeObjectURL(url);
       };
 
+      // Email-compatible HTML (inline styles, no CSS vars, no external fonts)
+      const generateEmailHTML = () => {
+        const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+        const teal = '#5BBFB5';
+        const dark = '#1a1a2e';
+        const muted = '#555';
+        const border = '#e5e7eb';
+        const featuresHTML = genForm.optionFeatures.filter(Boolean).map(f =>
+          '<tr><td style="padding:6px 0; color:#1a1a2e; font-size:14px; border-bottom:1px solid #f0f0f0; font-family:Arial,sans-serif;">' +
+          '<span style="color:' + teal + '; font-weight:700; margin-right:8px;">✓</span>' + f + '</td></tr>'
+        ).join('');
+        const painCards = [
+          { num:'01', text: GF('pain1') },
+          { num:'02', text: GF('pain2') },
+          { num:'03', text: GF('pain3') },
+        ].filter(p => p.text).map(p =>
+          '<td style="width:33%; padding:16px; background:#fff5f5; border:1px solid #fecaca; border-radius:8px; vertical-align:top; font-family:Arial,sans-serif;">' +
+          '<div style="font-size:24px; font-weight:900; color:#fca5a5; margin-bottom:6px;">' + p.num + '</div>' +
+          '<p style="margin:0; font-size:13px; color:#374151; line-height:1.6;">' + p.text + '</p></td>'
+        ).join('<td style="width:12px;"></td>');
+        const nextSteps = [GF('nextStep1'), GF('nextStep2'), GF('nextStep3')].filter(Boolean).map((s, i) =>
+          '<tr><td style="padding:10px 0; border-bottom:1px solid ' + border + ';">' +
+          '<table cellpadding="0" cellspacing="0" style="width:100%;"><tr>' +
+          '<td style="width:30px; height:30px; background:#e6f7f6; border:1px solid #b2e4df; border-radius:50%; text-align:center; vertical-align:middle; font-size:12px; font-weight:800; color:' + teal + '; font-family:Arial,sans-serif;">' + (i+1) + '</td>' +
+          '<td style="padding-left:12px; font-size:14px; color:#374151; font-family:Arial,sans-serif;">' + s + '</td>' +
+          '</tr></table></td></tr>'
+        ).join('');
+
+        return '<!DOCTYPE html>' +
+'<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+'<body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,sans-serif;">' +
+'<table cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;margin:0 auto;background:#ffffff;">' +
+
+// Header
+'<tr><td style="background:' + dark + ';padding:28px 40px;">' +
+'<table cellpadding="0" cellspacing="0" style="width:100%;"><tr>' +
+'<td><table cellpadding="0" cellspacing="0"><tr>' +
+'<td style="width:34px;height:34px;background:' + teal + ';border-radius:8px;text-align:center;vertical-align:middle;font-size:16px;font-weight:900;color:' + dark + ';">O</td>' +
+'<td style="padding-left:10px;font-size:18px;font-weight:800;color:#ffffff;">Oike</td>' +
+'</tr></table></td>' +
+'<td style="text-align:right;font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Commercial Proposal</td>' +
+'</tr></table></td></tr>' +
+
+// Hero
+'<tr><td style="padding:40px 40px 28px;background:' + dark + ';border-bottom:3px solid ' + teal + ';">' +
+'<p style="margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Built for</p>' +
+'<h1 style="margin:0 0 12px;font-size:36px;font-weight:900;color:#ffffff;letter-spacing:-1px;">' + GF('company') + '</h1>' +
+'<p style="margin:0;font-size:13px;color:#9ca3af;">Prepared for <strong style="color:#e5e7eb;">' + GF('contact') + (GF('contactTitle') ? ', ' + GF('contactTitle') : '') + '</strong> &nbsp;·&nbsp; ' + today + '</p>' +
+'</td></tr>' +
+
+// Section: Discovery
+'<tr><td style="padding:36px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">What we heard</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">Context &amp; Discovery</h2>' +
+'<div style="padding:20px 24px;background:#f9fafb;border:1px solid ' + border + ';border-radius:10px;">' +
+'<p style="margin:0;font-size:14px;color:#374151;line-height:1.8;">' + GF('discovery').replace(/\n/g,'<br>') + '</p>' +
+'</div></td></tr>' +
+
+// Section: Pain points
+'<tr><td style="padding:32px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Challenges identified</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">The friction points we need to solve</h2>' +
+'<table cellpadding="0" cellspacing="0" style="width:100%;"><tr>' + painCards + '</tr></table>' +
+'</td></tr>' +
+
+// Section: Quote
+(GF('goalQuote') ? (
+'<tr><td style="padding:32px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Declared goal</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">In their own words</h2>' +
+'<blockquote style="margin:0;padding:20px 24px;background:#e6f7f6;border-left:4px solid ' + teal + ';border-radius:0 10px 10px 0;">' +
+'<p style="margin:0;font-size:17px;font-style:italic;color:' + dark + ';line-height:1.7;">&ldquo;' + GF('goalQuote') + '&rdquo;</p>' +
+'</blockquote></td></tr>'
+) : '') +
+
+// Section: Root problem
+(GF('rootProblem') ? (
+'<tr><td style="padding:32px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Root problem</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">The underlying diagnosis</h2>' +
+'<div style="padding:20px 24px;background:#f9fafb;border:1px solid ' + border + ';border-radius:10px;">' +
+'<p style="margin:0;font-size:14px;color:#374151;line-height:1.8;">' + GF('rootProblem').replace(/\n/g,'<br>') + '</p>' +
+'</div></td></tr>'
+) : '') +
+
+// Section: Solution
+'<tr><td style="padding:32px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Our proposal</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">What we recommend for ' + GF('company') + '</h2>' +
+'<div style="padding:28px;background:#f0faf9;border:1px solid #b2e4df;border-radius:12px;">' +
+'<div style="width:44px;height:44px;background:#e6f7f6;border:1px solid #b2e4df;border-radius:10px;text-align:center;line-height:44px;font-size:20px;font-weight:900;color:' + teal + ';margin-bottom:14px;">' + GF('option') + '</div>' +
+'<h3 style="margin:0 0 4px;font-size:20px;font-weight:800;color:' + dark + ';">' + GF('optionName') + '</h3>' +
+'<p style="margin:0 0 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:' + teal + ';">' + GF('optionSubtitle') + '</p>' +
+'<p style="margin:0 0 20px;font-size:14px;color:' + muted + ';line-height:1.7;">' + GF('optionDesc') + '</p>' +
+'<table cellpadding="0" cellspacing="0" style="width:100%;">' + featuresHTML + '</table>' +
+'</div></td></tr>' +
+
+// Section: Why this solution
+(GF('whySolution') ? (
+'<tr><td style="padding:32px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Why this solution</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">Why it fits ' + GF('company') + '</h2>' +
+'<div style="padding:20px 24px;background:#e6f7f6;border:1px solid #b2e4df;border-radius:10px;">' +
+'<p style="margin:0;font-size:14px;color:' + dark + ';line-height:1.8;">' + GF('whySolution').replace(/\n/g,'<br>') + '</p>' +
+'</div></td></tr>'
+) : '') +
+
+// Section: Next steps
+'<tr><td style="padding:32px 40px 0;">' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Next steps</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">How we move forward</h2>' +
+'<table cellpadding="0" cellspacing="0" style="width:100%;">' + nextSteps + '</table>' +
+'</td></tr>' +
+
+// CTA
+'<tr><td style="padding:40px;text-align:center;background:#f9fafb;margin-top:32px;">' +
+'<h2 style="margin:0 0 12px;font-size:22px;font-weight:800;color:' + dark + ';">Ready to move forward?</h2>' +
+'<p style="margin:0 0 24px;font-size:14px;color:' + muted + ';">20 minutes is enough to align on everything.</p>' +
+'<a href="' + GF('calendarLink') + '" style="display:inline-block;padding:14px 40px;background:' + teal + ';color:' + dark + ';font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;">Schedule a call &rarr;</a>' +
+'</td></tr>' +
+
+// Footer
+'<tr><td style="padding:20px 40px;border-top:1px solid ' + border + ';text-align:center;">' +
+'<p style="margin:0;font-size:12px;color:#9ca3af;"><strong style="color:' + dark + ';">Oike</strong> &mdash; Sales Intelligence Platform &nbsp;&middot;&nbsp; Ale Cadario &nbsp;&middot;&nbsp; <a href="mailto:ale@alecadario.com" style="color:' + teal + ';text-decoration:none;">ale@alecadario.com</a></p>' +
+'</td></tr>' +
+
+'</table></body></html>';
+      };
+
+      const copyProposalHTML = async () => {
+        const html = generateEmailHTML();
+        try {
+          const blob = new Blob([html], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          setGenCopied(true);
+          setTimeout(() => setGenCopied(false), 2500);
+        } catch {
+          navigator.clipboard.writeText(html).catch(() => {});
+          setGenCopied(true);
+          setTimeout(() => setGenCopied(false), 2500);
+        }
+      };
+
       // ── LIST VIEW ──
       return (
         <div>
@@ -9997,20 +10157,52 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     {/* STEP 3 — SOLUTION */}
                     {genStep === 3 && (
                       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Start from a template and customize freely. Every field is editable.</div>
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Pick a solution from your Solutions Hub to auto-fill the fields, then customize freely.</div>
 
-                        {/* Option selector */}
+                        {/* Solutions Hub picker */}
                         <div>
-                          <label style={lStyle}>Starting template</label>
-                          <div style={{ display:'flex', gap:8 }}>
-                            {['A','B','C'].map(opt => (
-                              <button key={opt} onClick={() => setGenForm(p => ({...p, option:opt, ...OPTION_PRESETS[opt]}))}
-                                style={{ flex:1, padding:'10px', borderRadius:8, border:'1px solid', borderColor: GF('option')===opt ? 'var(--globant-accent)' : 'var(--globant-border)', background: GF('option')===opt ? 'rgba(91,191,181,0.1)' : 'var(--globant-card)', color: GF('option')===opt ? 'var(--globant-accent)' : 'var(--globant-muted)', fontWeight:700, cursor:'pointer', fontSize:13 }}>
-                                {opt} — {OPTION_PRESETS[opt].optionName}
-                              </button>
-                            ))}
-                          </div>
-                          <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Selecting a template overwrites the fields below — customize them after.</div>
+                          <label style={lStyle}>Load from Solutions Hub</label>
+                          {solutions && solutions.length > 0 ? (
+                            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                              {solutions.filter(s => F(s,'Name')).map(sol => {
+                                const name = F(sol,'Name') || '';
+                                const type = F(sol,'Type') || '';
+                                const desc = F(sol,'Description') || '';
+                                const keyMsg = F(sol,'Key Message') || '';
+                                const price = sol.fields?.['Price'] ? `$${sol.fields['Price']}` : '';
+                                const isSelected = GF('optionName') === name && GF('optionDesc') === desc;
+                                return (
+                                  <button key={sol.id}
+                                    onClick={() => {
+                                      const features = keyMsg
+                                        ? keyMsg.split('\n').map(l => l.replace(/^[-•*]\s*/,'')).filter(Boolean)
+                                        : [];
+                                      setGenForm(p => ({...p,
+                                        optionName: name,
+                                        optionSubtitle: type,
+                                        optionDesc: desc,
+                                        optionFeatures: features.length ? features : [''],
+                                      }));
+                                    }}
+                                    style={{ width:'100%', padding:'12px 14px', borderRadius:8, border:'1px solid', textAlign:'left', cursor:'pointer',
+                                      borderColor: isSelected ? 'var(--globant-accent)' : 'var(--globant-border)',
+                                      background: isSelected ? 'rgba(91,191,181,0.08)' : 'var(--globant-card)',
+                                    }}>
+                                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                      <span style={{ fontWeight:700, fontSize:13, color: isSelected ? 'var(--globant-accent)' : 'var(--globant-text)' }}>{name}</span>
+                                      <span style={{ fontSize:11, color:'var(--globant-muted)' }}>{price}{type ? (price ? ' · ' : '') + type : ''}</span>
+                                    </div>
+                                    {desc && <div style={{ fontSize:12, color:'var(--globant-muted)', marginTop:3, lineHeight:1.4, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{desc.slice(0,90)}{desc.length>90?'…':''}</div>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div style={{ padding:'12px 14px', borderRadius:8, border:'1px solid var(--globant-border)', fontSize:12, color:'var(--globant-muted)' }}>
+                              No solutions found. Add them in Solutions Hub or fill the fields manually below.
+                            </div>
+                          )}
+                          <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Selecting a solution fills the fields below — edit them freely after.</div>
                         </div>
 
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
@@ -10035,13 +10227,21 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     {/* STEP 4 — PREVIEW */}
                     {genStep === 4 && (
                       <div>
-                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>Your proposal is ready. Download it and push it to GitHub as <strong style={{ color:'var(--globant-text)' }}>public/{GF('slug')||'proposal'}.html</strong> — it'll be live at <strong style={{ color:'var(--globant-accent)' }}>oike.app/{GF('slug')||'slug'}</strong>.</div>
-                        <div style={{ display:'flex', gap:10, marginBottom:20 }}>
-                          <button onClick={downloadProposal} style={{ flex:1, padding:'14px', borderRadius:10, background:'var(--globant-accent)', border:'none', color:'#0d1117', fontWeight:800, fontSize:14, cursor:'pointer' }}>
-                            ⬇️ Download {GF('slug')||'proposal'}.html
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>Your proposal is ready. Copy it to paste directly in Gmail, or download the webpage version to host at <strong style={{ color:'var(--globant-accent)' }}>oike.app/{GF('slug')||'slug'}</strong>.</div>
+                        <div style={{ display:'flex', gap:10, marginBottom:12 }}>
+                          <button onClick={copyProposalHTML} style={{ flex:1, padding:'14px', borderRadius:10, background:'var(--globant-accent)', border:'none', color:'#0d1117', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                            {genCopied ? '✅ Copied!' : '📋 Copy for email'}
                           </button>
-                          <button onClick={() => { const w=window.open(); w.document.write(generateHTML()); w.document.close(); }} style={{ padding:'14px 20px', borderRadius:10, background:'rgba(91,191,181,0.1)', border:'1px solid var(--globant-border)', color:'var(--globant-text)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                          <button onClick={() => { const w=window.open(); w.document.write(generateEmailHTML()); w.document.close(); }} style={{ padding:'14px 20px', borderRadius:10, background:'rgba(91,191,181,0.1)', border:'1px solid var(--globant-border)', color:'var(--globant-text)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
                             👁 Preview
+                          </button>
+                        </div>
+                        <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:16, paddingLeft:2 }}>
+                          Gmail → paste → it renders as formatted email. Also works in Outlook.
+                        </div>
+                        <div style={{ display:'flex', gap:10, marginBottom:20 }}>
+                          <button onClick={downloadProposal} style={{ flex:1, padding:'11px', borderRadius:10, background:'transparent', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                            ⬇️ Download webpage ({GF('slug')||'proposal'}.html)
                           </button>
                         </div>
                         <div style={{ padding:'20px 24px', background:'var(--globant-card)', borderRadius:10, border:'1px solid var(--globant-border)' }}>
@@ -10070,8 +10270,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         Next →
                       </button>
                     ) : (
-                      <button onClick={downloadProposal} style={{ padding:'9px 24px', borderRadius:8, border:'none', background:'var(--globant-accent)', color:'#0d1117', fontWeight:700, cursor:'pointer', fontSize:13 }}>
-                        ⬇️ Download
+                      <button onClick={copyProposalHTML} style={{ padding:'9px 24px', borderRadius:8, border:'none', background:'var(--globant-accent)', color:'#0d1117', fontWeight:700, cursor:'pointer', fontSize:13 }}>
+                        {genCopied ? '✅ Copied!' : '📋 Copy for email'}
                       </button>
                     )}
                   </div>
