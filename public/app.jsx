@@ -2850,7 +2850,7 @@ Output ONLY the message, nothing else.`;
           if (record?.id) {
             setCtxNewAccountId(record.id);
             // Add to local state with real ID — no full reload needed
-            if (onAddRecord) onAddRecord('accounts', fields);
+            if (onAddRecord) onAddRecord('accounts', fields, record.id);
           }
           setCtxNewAccountName(''); setCtxNewAccountWebsite('');
           setShowNewAccount(false);
@@ -12279,11 +12279,12 @@ Return ONLY valid JSON:
       }, [setPageAndSave]);
 
       // Optimistic update: add a record to local state instantly (before API response)
-      const addToData = useCallback((tableKey, fields) => {
-        const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+      // Pass realId when the Airtable ID is already known (e.g. after createRecord returns)
+      const addToData = useCallback((tableKey, fields, realId = null) => {
+        const recordId = realId || ('tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7));
         setData(prev => ({
           ...prev,
-          [tableKey]: [...(prev[tableKey] || []), { id: tempId, fields }]
+          [tableKey]: [...(prev[tableKey] || []), { id: recordId, fields }]
         }));
       }, []);
 
