@@ -8933,6 +8933,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [pptFileName, setPptFileName] = useState('');
       const [aiRec, setAiRec]             = useState('');
       const [aiLoading, setAiLoading]     = useState(false);
+      const [execSummary, setExecSummary]         = useState('');
+      const [execSummaryLoading, setExecSummaryLoading] = useState(false);
+      const [execSummarySaving, setExecSummarySaving]   = useState(false);
 
       const STATUSES = ['Draft','Presented','Under Review','Accepted','Rejected','Expired'];
       const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
@@ -8948,18 +8951,19 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         }
       }, [navigateToProposalId, clearNavigateProposal]);
 
-      // Sync notes + PPT content when switching presentation
+      // Sync notes + PPT + exec summary when switching presentation
       useEffect(() => {
         if (selectedId) {
           const p = proposals.find(x => x.id === selectedId);
           if (p) {
             setNotes(p.fields?.['Notes'] || '');
             setPptText(p.fields?.['PPT Content'] || '');
+            setExecSummary(p.fields?.['Executive Summary'] || '');
             setPptFileName('');
             setAiRec('');
           }
         } else {
-          setNotes(''); setPptText(''); setPptFileName(''); setAiRec('');
+          setNotes(''); setPptText(''); setPptFileName(''); setAiRec(''); setExecSummary('');
         }
       }, [selectedId]);
 
@@ -9060,6 +9064,53 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'Notes': notes });
         } catch(e) { console.error('[saveNotes]', e); }
         setNoteSaving(false);
+      };
+
+      const saveExecSummary = async (val) => {
+        const v = val !== undefined ? val : execSummary;
+        if (!selected) return;
+        setExecSummarySaving(true);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.proposals, selected.id, { 'Executive Summary': v });
+          if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'Executive Summary': v });
+        } catch(e) { console.error('[saveExecSummary]', e); }
+        setExecSummarySaving(false);
+      };
+
+      const generateExecSummary = async () => {
+        if (!selected) return;
+        setExecSummaryLoading(true);
+        try {
+          const acc_ = accounts.find(a => linkedIds(selected,'Account').includes(a.id));
+          const stkList_ = linkedIds(selected,'Stakeholders').map(id => stakeholders.find(s=>s.id===id)).filter(Boolean);
+          const solList_ = linkedIds(selected,'Solutions').map(id => solutions.find(s=>s.id===id)).filter(Boolean);
+          const accInfo = acc_ ? [
+            F(acc_,'Account Name') ? `Company: ${F(acc_,'Account Name')}` : '',
+            F(acc_,'Industry') ? `Industry: ${F(acc_,'Industry')}` : '',
+            F(acc_,'Country') ? `Country: ${F(acc_,'Country')}` : '',
+            F(acc_,'Description') ? `Description: ${F(acc_,'Description')}` : '',
+            F(acc_,'Pain Points') ? `Pain Points: ${F(acc_,'Pain Points')}` : '',
+            F(acc_,'Strategic Goals') ? `Strategic Goals: ${F(acc_,'Strategic Goals')}` : '',
+          ].filter(Boolean).join('\n') : 'No account info available.';
+          const stkContext = stkList_.map(s => `- ${F(s,'Name')} (${F(s,'Title')||''}${F(s,'Department') ? ', '+F(s,'Department') : ''})`).join('\n') || 'None';
+          const solContext = solList_.map(s => F(s,'Name')).filter(Boolean).join(', ') || 'None';
+          const pptSnippet = pptText ? pptText.slice(0, 2000) : '';
+          const messages = [
+            { role: 'system', content: 'You are a senior B2B sales strategist. You write sharp, executive-level summaries of commercial presentations. Be concise, direct, and actionable. Respond in English. Use this structure:\n\n**Executive Summary**\n2-3 sentences on what this presentation proposes and why it matters for this account.\n\n**Key Value Propositions**\n3 bullet points max.\n\n**Next Steps**\n2-3 concrete, prioritized actions with owners if possible.' },
+            { role: 'user', content: `PRESENTATION: "${F(selected,'Title')||'Untitled'}"\nSTATUS: ${F(selected,'Status')||'Draft'}\nSOLUTIONS: ${solContext}\n\nACCOUNT INFO:\n${accInfo}\n\nSTAKEHOLDERS:\n${stkContext}\n\n${pptSnippet ? 'PRESENTATION CONTENT (extracted):\n'+pptSnippet : ''}\n\n${notes ? 'INTERNAL NOTES:\n'+notes : ''}\n\nGenerate a sharp executive summary with key value propositions and clear next steps.` }
+          ];
+          const resp = await fetch('/api/openai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+            body: JSON.stringify({ messages, model: 'gpt-4o', max_tokens: 700 }),
+          });
+          const d = await resp.json();
+          const result = d.content || 'Could not generate summary. Please try again.';
+          setExecSummary(result);
+          await saveExecSummary(result);
+        } catch(e) { console.error('[generateExecSummary]', e); }
+        setExecSummaryLoading(false);
       };
 
       const handlePptUpload = async (file) => {
@@ -9401,63 +9452,250 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               </div>
             </div>
 
-            {/* ── NOTES + PPT ANALYSIS ROW ── */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
-
-              {/* Notes */}
-              <div className="card">
-                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📝 Notes</div>
-                <textarea
-                  style={{ width:'100%', minHeight:120, padding:'8px 10px', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
-                  placeholder="Internal notes about this presentation: objections, context, next steps..."
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  onBlur={saveNotes}
-                />
-                <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8 }}>
-                  <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={saveNotes} disabled={noteSaving}>
-                    {noteSaving ? '⏳ Saving...' : '💾 Save notes'}
+            {/* ── EXECUTIVE SUMMARY ── */}
+            <div className="card" style={{ marginBottom:16, background:'linear-gradient(135deg, rgba(91,191,181,0.06) 0%, rgba(91,191,181,0.02) 100%)', border:'1px solid rgba(91,191,181,0.2)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: execSummary ? 16 : 0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontSize:18 }}>📋</span>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--globant-text)', letterSpacing:'0.2px' }}>Executive Summary</div>
+                    {!execSummary && !execSummaryLoading && (
+                      <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:2 }}>Auto-generated from presentation + account intelligence</div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  {execSummary && (
+                    <button
+                      onClick={saveExecSummary}
+                      disabled={execSummarySaving}
+                      style={{ fontSize:11, padding:'5px 12px', borderRadius:6, border:'1px solid var(--globant-border)', background:'rgba(255,255,255,0.04)', color: execSummarySaving ? 'var(--globant-muted)' : 'var(--globant-text)', cursor: execSummarySaving ? 'default' : 'pointer', fontWeight:500 }}
+                    >
+                      {execSummarySaving ? '⏳ Saving...' : '💾 Save edits'}
+                    </button>
+                  )}
+                  <button
+                    onClick={generateExecSummary}
+                    disabled={execSummaryLoading}
+                    style={{ fontSize:12, padding:'6px 18px', borderRadius:7, border:'none', background: execSummaryLoading ? 'rgba(91,191,181,0.1)' : 'var(--globant-green)', color: execSummaryLoading ? 'var(--globant-muted)' : '#0d1117', cursor: execSummaryLoading ? 'default' : 'pointer', fontWeight:700, transition:'all 0.2s' }}
+                  >
+                    {execSummaryLoading ? '⏳ Generating...' : execSummary ? '🔄 Regenerate' : '✨ Generate Summary'}
                   </button>
                 </div>
               </div>
 
-              {/* PPT Analysis */}
-              <div className="card">
-                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📊 PPT Analysis</div>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(91,191,181,0.06)', border:'1px dashed rgba(91,191,181,0.4)', borderRadius:8, cursor:'pointer', fontSize:12, color:'var(--globant-green)', fontWeight:600, marginBottom:10 }}>
-                  <span style={{ fontSize:20 }}>📤</span>
-                  <span>{pptParsing ? 'Reading file...' : pptFileName ? `✅ ${pptFileName}` : 'Upload .pptx or .pdf'}</span>
-                  <input type="file" accept=".pptx,.pdf" style={{ display:'none' }} onChange={e => { if (e.target.files[0]) handlePptUpload(e.target.files[0]); }} />
-                </label>
-                {pptText ? (
-                  <div style={{ maxHeight:120, overflowY:'auto', padding:'8px 10px', background:'rgba(255,255,255,0.03)', borderRadius:6, border:'1px solid var(--globant-border)', fontSize:11, color:'var(--globant-muted)', lineHeight:1.5, whiteSpace:'pre-wrap' }}>
-                    {pptText.slice(0, 800)}{pptText.length > 800 ? '\n...' : ''}
+              {execSummaryLoading && (
+                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'20px 16px', color:'var(--globant-muted)', fontSize:13 }}>
+                  <span style={{ animation:'spin 1.2s linear infinite', display:'inline-block', fontSize:20 }}>⚙️</span>
+                  <div>
+                    <div style={{ fontWeight:500, marginBottom:2 }}>Analyzing presentation + account data...</div>
+                    <div style={{ fontSize:11 }}>This takes a few seconds</div>
                   </div>
-                ) : (
-                  <p style={{ fontSize:12, color:'var(--globant-muted)' }}>Upload a .pptx or .pdf to extract content and enable AI recommendations.</p>
+                </div>
+              )}
+
+              {execSummary && !execSummaryLoading && (
+                <div>
+                  {/* Rendered view */}
+                  <div style={{ fontSize:13, color:'var(--globant-text)', lineHeight:1.8, marginBottom:12 }}>
+                    {execSummary.split('\n').map((line, i) => {
+                      const trimmed = line.trim();
+                      if (!trimmed) return React.createElement('div', { key:i, style:{ height:6 } });
+                      // Section headers: **Title**
+                      if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
+                        const label = trimmed.replace(/\*\*/g,'');
+                        const isNextSteps = /next step/i.test(label);
+                        return React.createElement('div', { key:i, style:{ display:'flex', alignItems:'center', gap:8, margin:'14px 0 6px 0' } },
+                          React.createElement('span', { style:{ fontSize:13, fontWeight:700, color: isNextSteps ? 'var(--globant-warning)' : 'var(--globant-green)', letterSpacing:'0.3px' } },
+                            isNextSteps ? '🎯 ' + label : '📌 ' + label
+                          )
+                        );
+                      }
+                      // Bullet points
+                      if (/^[-•]/.test(trimmed)) {
+                        const content = trimmed.replace(/^[-•]\s*/,'').replace(/\*\*([^*]+)\*\*/g,'___B___$1___/B___');
+                        const parts = content.split(/(___B___|___\/B___)/);
+                        let bold = false;
+                        const rendered = parts.map((p,j) => {
+                          if (p==='___B___'){bold=true;return null;}
+                          if (p==='___/B___'){bold=false;return null;}
+                          return bold ? React.createElement('strong',{key:j,style:{fontWeight:700}},p) : React.createElement('span',{key:j},p);
+                        }).filter(Boolean);
+                        return React.createElement('div',{key:i,style:{display:'flex',gap:10,marginBottom:6,paddingLeft:4}},
+                          React.createElement('span',{style:{color:'var(--globant-green)',marginTop:2,fontSize:12,flexShrink:0}},'▸'),
+                          React.createElement('span',{style:{flex:1,lineHeight:1.7}},...rendered)
+                        );
+                      }
+                      // Numbered items
+                      const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
+                      if (numMatch) {
+                        const content = numMatch[2].replace(/\*\*([^*]+)\*\*/g,'___B___$1___/B___');
+                        const parts = content.split(/(___B___|___\/B___)/);
+                        let bold = false;
+                        const rendered = parts.map((p,j) => {
+                          if (p==='___B___'){bold=true;return null;}
+                          if (p==='___/B___'){bold=false;return null;}
+                          return bold ? React.createElement('strong',{key:j,style:{fontWeight:700}},p) : React.createElement('span',{key:j},p);
+                        }).filter(Boolean);
+                        return React.createElement('div',{key:i,style:{display:'flex',gap:10,marginBottom:8,padding:'8px 12px',background:'rgba(251,191,36,0.05)',borderRadius:7,border:'1px solid rgba(251,191,36,0.15)'}},
+                          React.createElement('span',{style:{width:20,height:20,minWidth:20,borderRadius:'50%',background:'rgba(251,191,36,0.15)',color:'var(--globant-warning)',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}},numMatch[1]),
+                          React.createElement('span',{style:{flex:1,lineHeight:1.7}},...rendered)
+                        );
+                      }
+                      // Regular paragraph
+                      return React.createElement('p',{key:i,style:{margin:'0 0 4px 0',lineHeight:1.75,color:'var(--globant-text)'}},trimmed);
+                    })}
+                  </div>
+                  {/* Editable textarea (collapsed by default, expandable) */}
+                  <details style={{ marginTop:8 }}>
+                    <summary style={{ fontSize:11, color:'var(--globant-muted)', cursor:'pointer', userSelect:'none', listStyle:'none', display:'flex', alignItems:'center', gap:6 }}>
+                      <span>✏️</span><span>Edit raw text</span>
+                    </summary>
+                    <textarea
+                      style={{ width:'100%', minHeight:120, marginTop:8, padding:'10px 12px', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:7, color:'var(--globant-text)', fontSize:12, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit', lineHeight:1.6, outline:'none' }}
+                      value={execSummary}
+                      onChange={e => setExecSummary(e.target.value)}
+                      onBlur={() => saveExecSummary()}
+                    />
+                  </details>
+                </div>
+              )}
+            </div>
+
+            {/* ── NOTES + PPT ANALYSIS ROW ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+
+              {/* Notes */}
+              <div className="card" style={{ display:'flex', flexDirection:'column' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:16 }}>📝</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:'var(--globant-text)', letterSpacing:'0.3px' }}>Internal Notes</span>
+                  </div>
+                  <button
+                    onClick={saveNotes}
+                    disabled={noteSaving}
+                    style={{ fontSize:11, padding:'4px 12px', borderRadius:6, border:'1px solid var(--globant-border)', background: noteSaving ? 'transparent' : 'rgba(91,191,181,0.1)', color: noteSaving ? 'var(--globant-muted)' : 'var(--globant-green)', cursor: noteSaving ? 'default' : 'pointer', fontWeight:600, transition:'all 0.2s' }}
+                  >
+                    {noteSaving ? '⏳ Saving...' : '💾 Save'}
+                  </button>
+                </div>
+                <textarea
+                  style={{ flex:1, width:'100%', minHeight:140, padding:'12px', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:8, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit', lineHeight:1.6, outline:'none', transition:'border-color 0.2s' }}
+                  placeholder="Objections, context, next steps, key insights..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                  onFocus={e => { e.target.style.borderColor = 'var(--globant-green)'; }}
+                />
+              </div>
+
+              {/* PPT / PDF Analysis */}
+              <div className="card" style={{ display:'flex', flexDirection:'column' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:16 }}>📄</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:'var(--globant-text)', letterSpacing:'0.3px' }}>Document Analysis</span>
+                  </div>
+                  {pptText && (
+                    <label style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'rgba(255,255,255,0.04)', color:'var(--globant-muted)', cursor:'pointer', fontWeight:600 }}>
+                      ↻ Replace
+                      <input type="file" accept=".pptx,.pdf" style={{ display:'none' }} onChange={e => { if (e.target.files[0]) handlePptUpload(e.target.files[0]); }} />
+                    </label>
+                  )}
+                </div>
+                {!pptText && !pptParsing && (
+                  <label style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, padding:'24px 16px', background:'rgba(91,191,181,0.04)', border:'2px dashed rgba(91,191,181,0.3)', borderRadius:10, cursor:'pointer', textAlign:'center', transition:'all 0.2s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background='rgba(91,191,181,0.08)'; e.currentTarget.style.borderColor='rgba(91,191,181,0.6)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background='rgba(91,191,181,0.04)'; e.currentTarget.style.borderColor='rgba(91,191,181,0.3)'; }}
+                  >
+                    <span style={{ fontSize:28 }}>📤</span>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:600, color:'var(--globant-green)', marginBottom:4 }}>Upload .pptx or .pdf</div>
+                      <div style={{ fontSize:11, color:'var(--globant-muted)' }}>Content will be extracted for AI analysis</div>
+                    </div>
+                    <input type="file" accept=".pptx,.pdf" style={{ display:'none' }} onChange={e => { if (e.target.files[0]) handlePptUpload(e.target.files[0]); }} />
+                  </label>
+                )}
+                {pptParsing && (
+                  <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, padding:'24px 16px' }}>
+                    <span style={{ fontSize:28, animation:'spin 1.5s linear infinite', display:'inline-block' }}>⚙️</span>
+                    <div style={{ fontSize:13, color:'var(--globant-muted)', fontWeight:500 }}>Reading file...</div>
+                  </div>
+                )}
+                {pptText && !pptParsing && (
+                  <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(74,222,128,0.07)', borderRadius:7, border:'1px solid rgba(74,222,128,0.2)' }}>
+                      <span style={{ fontSize:14 }}>✅</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:'var(--globant-success)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{pptFileName}</div>
+                        <div style={{ fontSize:11, color:'var(--globant-muted)' }}>{pptText.split('\n').filter(Boolean).length} slides/pages extracted</div>
+                      </div>
+                    </div>
+                    <div style={{ flex:1, maxHeight:110, overflowY:'auto', padding:'10px 12px', background:'rgba(255,255,255,0.02)', borderRadius:7, border:'1px solid var(--globant-border)', fontSize:11, color:'var(--globant-muted)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>
+                      {pptText.slice(0, 600)}{pptText.length > 600 ? '\n...' : ''}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
 
             {/* ── AI RECOMMENDATION ── */}
             <div className="card" style={{ marginBottom:16 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: aiRec ? 14 : 0 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px' }}>🤖 Who should you push this to?</div>
-                <button className="action-btn btn-primary" style={{ fontSize:12, padding:'6px 16px' }} onClick={getAiRec} disabled={aiLoading}>
-                  {aiLoading ? '⏳ Analyzing...' : '✨ Recommend stakeholders'}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: (aiRec || aiLoading) ? 16 : 0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:16 }}>🤖</span>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:700, color:'var(--globant-text)', letterSpacing:'0.3px' }}>Who should you push this to?</div>
+                    {!aiRec && !aiLoading && <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:2 }}>AI analysis of stakeholders + presentation content</div>}
+                  </div>
+                </div>
+                <button
+                  className="action-btn btn-primary"
+                  style={{ fontSize:12, padding:'7px 18px', borderRadius:8, fontWeight:600, whiteSpace:'nowrap' }}
+                  onClick={getAiRec}
+                  disabled={aiLoading}
+                >
+                  {aiLoading ? '⏳ Analyzing...' : aiRec ? '🔄 Regenerate' : '✨ Recommend'}
                 </button>
               </div>
-              {!aiRec && !aiLoading && (
-                <p style={{ fontSize:12, color:'var(--globant-muted)', marginTop:8 }}>AI will analyze the presentation content, notes and account stakeholders to tell you who to contact first and with what angle.</p>
-              )}
               {aiLoading && (
-                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 0', color:'var(--globant-muted)', fontSize:13 }}>
-                  <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⚙️</span> Analyzing presentation and stakeholders...
+                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'16px', background:'rgba(91,191,181,0.04)', borderRadius:8, border:'1px solid rgba(91,191,181,0.15)', color:'var(--globant-muted)', fontSize:13 }}>
+                  <span style={{ animation:'spin 1s linear infinite', display:'inline-block', fontSize:18 }}>⚙️</span>
+                  <span>Analyzing presentation, notes and stakeholder profiles...</span>
                 </div>
               )}
-              {aiRec && (
-                <div style={{ padding:'14px 16px', background:'rgba(91,191,181,0.06)', borderRadius:8, border:'1px solid rgba(91,191,181,0.2)', fontSize:13, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>
-                  {aiRec}
+              {aiRec && !aiLoading && (
+                <div style={{ padding:'16px 18px', background:'rgba(91,191,181,0.05)', borderRadius:10, border:'1px solid rgba(91,191,181,0.18)', fontSize:13, color:'var(--globant-text)', lineHeight:1.75 }}>
+                  {aiRec.split('\n').map((line, i) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return React.createElement('div', { key:i, style:{ height:8 } });
+                    // Numbered list items: "1. **Name** - ..."
+                    const listMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
+                    if (listMatch) {
+                      const content = listMatch[2].replace(/\*\*([^*]+)\*\*/g, '___BOLD_START___$1___BOLD_END___');
+                      const parts = content.split(/(___BOLD_START___|___BOLD_END___)/);
+                      let bold = false;
+                      const rendered = parts.map((p, j) => {
+                        if (p === '___BOLD_START___') { bold = true; return null; }
+                        if (p === '___BOLD_END___') { bold = false; return null; }
+                        return bold ? React.createElement('strong', { key:j, style:{ color:'var(--globant-green)', fontWeight:700 } }, p) : React.createElement('span', { key:j }, p);
+                      }).filter(Boolean);
+                      return React.createElement('div', { key:i, style:{ display:'flex', gap:12, marginBottom:10, padding:'10px 14px', background:'rgba(255,255,255,0.03)', borderRadius:8, border:'1px solid var(--globant-border)' } },
+                        React.createElement('span', { style:{ width:22, height:22, minWidth:22, borderRadius:'50%', background:'rgba(91,191,181,0.15)', color:'var(--globant-green)', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' } }, listMatch[1]),
+                        React.createElement('span', { style:{ flex:1, lineHeight:1.7 } }, ...rendered)
+                      );
+                    }
+                    // Bold inline text
+                    const parts2 = trimmed.replace(/\*\*([^*]+)\*\*/g, '___B___$1___/B___').split(/(___B___|___\/B___)/);
+                    let isBold = false;
+                    const rendered2 = parts2.map((p, j) => {
+                      if (p === '___B___') { isBold = true; return null; }
+                      if (p === '___/B___') { isBold = false; return null; }
+                      return isBold ? React.createElement('strong', { key:j, style:{ color:'var(--globant-text)', fontWeight:700 } }, p) : React.createElement('span', { key:j }, p);
+                    }).filter(Boolean);
+                    return React.createElement('p', { key:i, style:{ margin:'0 0 6px 0', lineHeight:1.7 } }, ...rendered2);
+                  })}
                 </div>
               )}
             </div>
