@@ -4722,7 +4722,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 value={filterCPId}
                 onChange={e => { setFilterCPId(e.target.value); selectAccount(''); }}
               >
-                <option value="">👤 All Users</option>
+                <option value="">👤 All Owners</option>
                 {(data.users || []).filter(u => F(u, 'Name')).sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(u => (
                   <option key={u.id} value={u.id}>{F(u, 'Name')}</option>
                 ))}
