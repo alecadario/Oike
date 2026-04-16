@@ -3571,7 +3571,7 @@ Output ONLY the message, nothing else.`;
     }
 
     // ============ CP BRIEFINGS ============
-    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, goToAccount }) {
+    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, goToAccount, goToProposal }) {
       const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [] } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -5595,7 +5595,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                     <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <h3>📋 Presentations ({accProposals.length})</h3>
                       <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
-                        onClick={() => { setPageAndSave('proposals'); }}>
+                        onClick={() => goToProposal && goToProposal()}>
                         + New Presentation
                       </button>
                     </div>
@@ -5610,7 +5610,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           const docs = p.fields?.['Document'];
                           return (
                             <div key={p.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)', cursor:'pointer' }}
-                              onClick={() => { setPageAndSave('proposals'); setNavigateToProposalId(p.id); }}>
+                              onClick={() => goToProposal && goToProposal(p.id)}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
                                 <div style={{ fontWeight:700, fontSize:13 }}>{F(p,'Title')}</div>
                                 <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
@@ -11349,6 +11349,11 @@ Return ONLY valid JSON:
         setPageAndSave('solutionshub');
       }, [setPageAndSave]);
 
+      const goToProposal = useCallback((proposalId) => {
+        if (proposalId) setNavigateToProposalId(proposalId);
+        setPageAndSave('proposals');
+      }, [setPageAndSave]);
+
       // Optimistic update: add a record to local state instantly (before API response)
       const addToData = useCallback((tableKey, fields) => {
         const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -11553,7 +11558,7 @@ Return ONLY valid JSON:
         insights: <InsightsView data={data} />,
         campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         reports:  <ReportBuilder data={data} />,
-        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} />,
+        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
       };
