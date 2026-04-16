@@ -70,7 +70,7 @@
       }
     }
 
-    const channelIcon = { WhatsApp: '💬', Email: '✉️', LinkedIn: '🔗', Call: '📞' };
+    const channelIcon = { WhatsApp: '💬', Email: '✉️', LinkedIn: '🔗', Call: '📞', Meeting: '📅' };
 
     // ============ URL NAV STATE ============
     // Keeps ?v= (page) and ?id= (selected record) in sync with the browser URL
@@ -2047,7 +2047,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             'Activity Name': `Meeting Scheduled: ${name} — ${new Date().toLocaleDateString('en-US')}`,
             'Account': companyIds,
             'Stakeholder': [stakeholder.id],
-            'Channel': 'Call',
+            'Channel': 'Meeting',
             'Date': new Date().toISOString(),
             'Status': 'Meeting Scheduled',
             'Message': notes || '',
@@ -3412,12 +3412,21 @@ Output ONLY the message, nothing else.`;
           const accNames = resolveLinked(a, 'Account', accounts, 'Account Name');
           if (!accNames.some(n => n.toLowerCase().includes(term))) return false;
         }
-        if (selectedChannel && F(a, 'Channel') !== selectedChannel) return false;
+        if (selectedChannel) {
+          const ch = F(a, 'Channel');
+          const st = F(a, 'Status');
+          if (selectedChannel === 'Meeting') {
+            // Match any activity logged as meeting (new channel or old status-based)
+            if (ch !== 'Meeting' && st !== 'Meeting Scheduled' && st !== 'Meeting Booked') return false;
+          } else {
+            if (ch !== selectedChannel) return false;
+          }
+        }
         if (selectedStatus && F(a, 'Status') !== selectedStatus) return false;
         return true;
       }).sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0)), [outreach, accountSearch, accounts, selectedChannel, selectedStatus]);
 
-      const channelColors = { WhatsApp: '#25D366', Email: '#60a5fa', LinkedIn: '#0A66C2', Call: '#fbbf24' };
+      const channelColors = { WhatsApp: '#25D366', Email: '#60a5fa', LinkedIn: '#0A66C2', Call: '#fbbf24', Meeting: '#a78bfa' };
 
       return (
         <div>
@@ -3458,8 +3467,10 @@ Output ONLY the message, nothing else.`;
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
             <div className="card" style={{ padding: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: 'var(--globant-text)' }}>By Channel</div>
-              {['Email', 'WhatsApp', 'LinkedIn', 'Call'].map(ch => {
-                const count = byChannel[ch] || 0;
+              {['Email', 'WhatsApp', 'LinkedIn', 'Call', 'Meeting'].map(ch => {
+                const count = ch === 'Meeting'
+                  ? outreach.filter(a => F(a,'Channel') === 'Meeting' || F(a,'Status') === 'Meeting Scheduled' || F(a,'Status') === 'Meeting Booked').length
+                  : byChannel[ch] || 0;
                 const pct = outreach.length > 0 ? (count / outreach.length) * 100 : 0;
                 return (
                   <div key={ch} style={{ marginBottom: 10 }}>
@@ -3503,7 +3514,7 @@ Output ONLY the message, nothing else.`;
             />
             <div style={{ display: 'flex', gap: 6 }}>
               <button className={`action-btn ${selectedChannel === '' ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11 }} onClick={() => setSelectedChannel('')}>All</button>
-              {['Email', 'WhatsApp', 'LinkedIn', 'Call'].map(ch => (
+              {['Email', 'WhatsApp', 'LinkedIn', 'Call', 'Meeting'].map(ch => (
                 <button key={ch} className={`action-btn ${selectedChannel === ch ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11 }} onClick={() => setSelectedChannel(selectedChannel === ch ? '' : ch)}>
                   {channelIcon[ch]} {ch}
                 </button>
@@ -3520,7 +3531,9 @@ Output ONLY the message, nothing else.`;
             {filtered.length === 0 && <p style={{ padding: 20, color: 'var(--globant-muted)', textAlign: 'center' }}>No activities found{accountSearch ? ` for "${accountSearch}"` : ''}</p>}
             {filtered.sort((a, b) => new Date(b.fields?.['Date']) - new Date(a.fields?.['Date'])).map(a => {
               const channel = F(a, 'Channel');
-              const icon = channelIcon[channel] || '📋';
+              const status = F(a, 'Status');
+              const isMeeting = status === 'Meeting Scheduled' || status === 'Meeting Booked' || channel === 'Meeting';
+              const icon = isMeeting ? '📅' : (channelIcon[channel] || '📋');
               const stakeholderNames = resolveLinked(a, 'Stakeholder', stakeholders, 'Name');
               const accountNames = resolveLinked(a, 'Account', accounts, 'Account Name');
 
