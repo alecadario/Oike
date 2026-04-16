@@ -10298,15 +10298,24 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       const openProposalInGmail = async () => {
         const html = generateEmailHTML();
+        // 1. Copy HTML to clipboard — user just pastes in body
         try {
           const blob = new Blob([html], { type: 'text/html' });
           await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
         } catch {
           navigator.clipboard.writeText(html).catch(() => {});
         }
-        window.open('https://mail.google.com/mail/?view=cm&fs=1', '_blank');
+        // 2. Build Gmail compose URL with pre-filled To + Subject
+        const stk = GF('stakeholderId') ? stakeholders.find(s => s.id === GF('stakeholderId')) : null;
+        const toEmail = stk ? (F(stk, 'Email') || '') : '';
+        const subjectPrefixes = { en:'Proposal for', es:'Propuesta para', pt:'Proposta para', fr:'Proposition pour' };
+        const subject = (subjectPrefixes[GF('language') || 'en'] || 'Proposal for') + ' ' + (GF('company') || '');
+        let gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1';
+        if (toEmail) gmailUrl += '&to=' + encodeURIComponent(toEmail);
+        if (subject.trim()) gmailUrl += '&su=' + encodeURIComponent(subject.trim());
+        window.open(gmailUrl, '_blank');
         setGenGmail(true);
-        setTimeout(() => setGenGmail(false), 4000);
+        setTimeout(() => setGenGmail(false), 5000);
       };
 
       // ── LIST VIEW ──
@@ -10584,20 +10593,42 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>Your proposal is ready. Send it directly via Gmail, copy to paste in any email client, or download.</div>
 
                         {/* Primary actions */}
-                        <div style={{ display:'flex', gap:10, marginBottom:10 }}>
-                          <button onClick={openProposalInGmail} style={{ flex:1, padding:'14px', borderRadius:10, background:'rgba(66,133,244,0.15)', border:'1px solid rgba(66,133,244,0.4)', color:'#60a5fa', fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                            {genGmail ? '✅ Copied! Paste in Gmail' : '📧 Open in Gmail'}
-                          </button>
-                          <button onClick={copyProposalHTML} style={{ flex:1, padding:'14px', borderRadius:10, background:'var(--globant-accent)', border:'none', color:'#0d1117', fontWeight:800, fontSize:14, cursor:'pointer' }}>
-                            {genCopied ? '✅ Copied!' : '📋 Copy for email'}
-                          </button>
-                        </div>
-
-                        {genGmail && (
-                          <div style={{ padding:'10px 14px', borderRadius:8, background:'rgba(66,133,244,0.08)', border:'1px solid rgba(66,133,244,0.2)', fontSize:12, color:'#93c5fd', marginBottom:10 }}>
-                            Gmail is open. Paste with <strong>Ctrl+V</strong> (or ⌘V) directly in the message body — it renders as formatted HTML.
-                          </div>
-                        )}
+                        {(() => {
+                          const stk = GF('stakeholderId') ? stakeholders.find(s => s.id === GF('stakeholderId')) : null;
+                          const toEmail = stk ? (F(stk, 'Email') || '') : '';
+                          const stkName = stk ? (F(stk, 'Name') || '') : '';
+                          return (
+                            <div>
+                              <div style={{ display:'flex', gap:10, marginBottom:10 }}>
+                                <button onClick={openProposalInGmail} style={{ flex:1, padding:'14px', borderRadius:10, background:'rgba(66,133,244,0.15)', border:'1px solid rgba(66,133,244,0.4)', color:'#60a5fa', fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                                  {genGmail
+                                    ? '✅ HTML copiado — pegalo en Gmail'
+                                    : toEmail
+                                      ? '📧 Enviar a ' + stkName + ' (' + toEmail + ')'
+                                      : '📧 Open in Gmail'}
+                                </button>
+                              </div>
+                              {!toEmail && !genGmail && (
+                                <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:10, paddingLeft:2 }}>
+                                  💡 Seleccioná un stakeholder en Step 1 para pre-llenar el destinatario
+                                </div>
+                              )}
+                              {genGmail && (
+                                <div style={{ padding:'10px 14px', borderRadius:8, background:'rgba(66,133,244,0.08)', border:'1px solid rgba(66,133,244,0.2)', fontSize:12, color:'#93c5fd', marginBottom:10 }}>
+                                  {toEmail
+                                    ? 'Gmail abierto con ' + toEmail + ' como destinatario y asunto pre-llenado. Solo pegá con '
+                                    : 'Gmail abierto. Pegá con '}
+                                  <strong>Ctrl+V</strong> (o ⌘V) en el cuerpo del correo.
+                                </div>
+                              )}
+                              <div style={{ display:'flex', gap:10, marginBottom:10 }}>
+                                <button onClick={copyProposalHTML} style={{ flex:1, padding:'11px', borderRadius:10, background:'var(--globant-card)', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                                  {genCopied ? '✅ Copiado!' : '📋 Solo copiar HTML'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Secondary actions */}
                         <div style={{ display:'flex', gap:10, marginBottom:20 }}>
