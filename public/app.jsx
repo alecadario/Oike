@@ -11798,7 +11798,7 @@ Return ONLY valid JSON:
 
       return (
         <div className="modal-overlay" onClick={onClose}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640, width: '95vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
               <h3 style={{ margin: 0 }}>⚙️ Settings</h3>
               <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
@@ -11809,7 +11809,7 @@ Return ONLY valid JSON:
               {[
                 { key: 'profile', label: '🤖 AI Profile' },
                 { key: 'workspace', label: '🏢 Workspace' },
-                { key: 'proposals', label: '📄 Proposals' },
+                { key: 'proposals', label: '🏷️ Company Info' },
                 { key: 'integrations', label: '🔌 Integrations' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -11821,36 +11821,65 @@ Return ONLY valid JSON:
               ))}
             </div>
 
-            {/* Proposals branding tab */}
+            {/* Company Info tab */}
             {tab === 'proposals' && (
               <div style={{ display:'flex', flexDirection:'column', gap:16, overflowY:'auto' }}>
                 <div style={{ fontSize:13, color:'var(--globant-muted)' }}>
-                  Set your branding once — it'll auto-fill every proposal you generate.
+                  Configure once — auto-fills every proposal you generate.
                 </div>
-                <div>
-                  <label style={labelStyle}>Company / sender name</label>
-                  <input style={inputStyle} value={branding.senderName} onChange={e=>setBranding(p=>({...p,senderName:e.target.value}))} placeholder="Your Company" />
+
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                  <div>
+                    <label style={labelStyle}>Company name</label>
+                    <input style={inputStyle} value={branding.senderName} onChange={e=>setBranding(p=>({...p,senderName:e.target.value}))} placeholder="Your Company" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Your email</label>
+                    <input style={inputStyle} value={branding.senderEmail} onChange={e=>setBranding(p=>({...p,senderEmail:e.target.value}))} placeholder="you@company.com" />
+                  </div>
                 </div>
-                <div>
-                  <label style={labelStyle}>Your email</label>
-                  <input style={inputStyle} value={branding.senderEmail} onChange={e=>setBranding(p=>({...p,senderEmail:e.target.value}))} placeholder="you@company.com" />
-                </div>
+
                 <div>
                   <label style={labelStyle}>Calendar / booking link</label>
                   <input style={inputStyle} value={branding.calendarLink} onChange={e=>setBranding(p=>({...p,calendarLink:e.target.value}))} placeholder="https://cal.com/yourname" />
                 </div>
+
                 <div>
-                  <label style={labelStyle}>Logo URL <span style={{ fontWeight:400, textTransform:'none', color:'var(--globant-muted)' }}>(paste a direct image link)</span></label>
-                  <input style={inputStyle} value={branding.senderLogo} onChange={e=>setBranding(p=>({...p,senderLogo:e.target.value}))} placeholder="https://yourcompany.com/logo.png" />
-                  {branding.senderLogo && (
-                    <div style={{ marginTop:10, padding:'10px 14px', background:'var(--globant-darker)', borderRadius:8, border:'1px solid var(--globant-border)', display:'flex', alignItems:'center', gap:10 }}>
-                      <img src={branding.senderLogo} alt="logo preview" style={{ height:36, maxWidth:140, objectFit:'contain', borderRadius:4 }} onError={e=>e.target.style.display='none'} />
-                      <span style={{ fontSize:11, color:'var(--globant-muted)' }}>Preview</span>
+                  <label style={labelStyle}>Logo</label>
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    {/* Logo preview */}
+                    <div style={{ width:80, height:56, borderRadius:8, border:'1px solid var(--globant-border)', background:'var(--globant-darker)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, overflow:'hidden' }}>
+                      {branding.senderLogo
+                        ? <img src={branding.senderLogo} alt="logo" style={{ maxWidth:72, maxHeight:48, objectFit:'contain' }} onError={e=>{e.target.style.display='none';}} />
+                        : <span style={{ fontSize:11, color:'var(--globant-muted)' }}>No logo</span>
+                      }
                     </div>
-                  )}
+                    <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
+                      {/* File upload */}
+                      <label style={{ display:'block', cursor:'pointer' }}>
+                        <div style={{ padding:'9px 14px', borderRadius:7, border:'1px dashed var(--globant-border)', background:'var(--globant-darker)', fontSize:12, color:'var(--globant-muted)', textAlign:'center', cursor:'pointer' }}>
+                          📁 Upload image (PNG, JPG, SVG)
+                        </div>
+                        <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => setBranding(p=>({...p, senderLogo: ev.target.result}));
+                          reader.readAsDataURL(file);
+                        }} />
+                      </label>
+                      {branding.senderLogo && (
+                        <button onClick={() => setBranding(p=>({...p,senderLogo:''}))}
+                          style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer' }}>
+                          🗑 Remove logo
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <button className="action-btn btn-primary" style={{ padding:'10px', fontWeight:700 }} onClick={saveBranding}>
-                  {brandingSaved ? '✅ Saved!' : '💾 Save branding'}
+
+                <button className="action-btn btn-primary" style={{ padding:'11px', fontWeight:700 }} onClick={saveBranding}>
+                  {brandingSaved ? '✅ Saved!' : '💾 Save'}
                 </button>
               </div>
             )}
