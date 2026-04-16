@@ -3735,17 +3735,22 @@ Output ONLY the message, nothing else.`;
 
       const mappedAccounts = useMemo(() => accounts.filter(a => linkedIds(a, 'Stakeholders').length > 0), [accounts]);
       const filteredAccounts = useMemo(() => {
-        let list = searchTerm
-          ? accounts.filter(a => (F(a, 'Account Name') || '').toLowerCase().includes(searchTerm.toLowerCase()))
-          : [...mappedAccounts].sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
+        const hasFilter = searchTerm || filterSolutionId || filterIndustry || filterCountry || filterCPId;
+        let list = hasFilter
+          ? [...accounts]
+          : [...mappedAccounts];
+        list = list.sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
+        if (searchTerm) {
+          list = list.filter(a => (F(a, 'Account Name') || '').toLowerCase().includes(searchTerm.toLowerCase()));
+        }
         if (filterSolutionId) {
           list = list.filter(a => linkedIds(a, 'Solutions').includes(filterSolutionId));
         }
         if (filterIndustry) {
-          list = list.filter(a => (F(a, 'Industry') || '') === filterIndustry);
+          list = list.filter(a => (F(a, 'Industry') || '').trim() === filterIndustry.trim());
         }
         if (filterCountry) {
-          list = list.filter(a => (F(a, 'Country') || '') === filterCountry);
+          list = list.filter(a => (F(a, 'Country') || '').trim() === filterCountry.trim());
         }
         if (filterCPId) {
           const cp = (data.clientPartners || []).find(c => c.id === filterCPId);
@@ -8983,10 +8988,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (form.amount)        fields['Amount'] = parseFloat(form.amount);
           if (form.description.trim()) fields['Description'] = form.description.trim();
           if (form.presentedDate) fields['Presented Date'] = form.presentedDate;
-          if (form.accountId)     fields['Account'] = [{ id: form.accountId }];
-          if (form.stakeholderIds.length) fields['Stakeholders'] = form.stakeholderIds.map(id => ({ id }));
-          if (form.solutionIds.length)    fields['Solutions'] = form.solutionIds.map(id => ({ id }));
-          if (form.opportunityId) fields['Opportunity'] = [{ id: form.opportunityId }];
+          if (form.accountId)     fields['Account'] = [form.accountId];
+          if (form.stakeholderIds.length) fields['Stakeholders'] = [...form.stakeholderIds];
+          if (form.solutionIds.length)    fields['Solutions'] = [...form.solutionIds];
+          if (form.opportunityId) fields['Opportunity'] = [form.opportunityId];
           if (form.documentUrl?.trim()) fields['Document'] = form.documentUrl.trim();
           const a = api || new AirtableAPI();
           const rec = await a.createRecord(TABLE_IDS.proposals, fields);
@@ -9026,9 +9031,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (editForm.amount)           fields['Amount'] = parseFloat(editForm.amount);
           if (editForm.description.trim()) fields['Description'] = editForm.description.trim();
           if (editForm.presentedDate)    fields['Presented Date'] = editForm.presentedDate;
-          fields['Account']      = editForm.accountId ? [{ id: editForm.accountId }] : [];
-          fields['Stakeholders'] = editForm.stakeholderIds.map(id => ({ id }));
-          fields['Solutions']    = editForm.solutionIds.map(id => ({ id }));
+          fields['Account']      = editForm.accountId ? [editForm.accountId] : [];
+          fields['Stakeholders'] = [...editForm.stakeholderIds];
+          fields['Solutions']    = [...editForm.solutionIds];
           if (editForm.documentUrl.trim()) fields['Document'] = editForm.documentUrl.trim();
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.proposals, selected.id, fields);
@@ -9068,18 +9073,26 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         try {
           const arrayBuffer = await file.arrayBuffer();
           const zip = await JSZip.loadAsync(arrayBuffer);
+          const slidePattern = new RegExp('^ppt/slides/slide\\d+\\.xml$');
+          const numPattern = new RegExp('\\d+');
+          const atPattern = new RegExp('<a:t[^>]*>([\\s\\S]*?)<\\/a:t>', 'g');
           const slideFiles = Object.keys(zip.files)
-            .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-            .sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+            .filter(n => slidePattern.test(n))
+            .sort((a, b) => parseInt(a.match(numPattern)[0]) - parseInt(b.match(numPattern)[0]));
           let extracted = '';
-          for (const name of slideFiles) {
+          for (let si = 0; si < slideFiles.length; si++) {
+            const name = slideFiles[si];
             const xml = await zip.files[name].async('text');
-            const texts = [...xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g)]
-              .map(m => m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim())
-              .filter(Boolean);
+            const texts = [];
+            let m;
+            atPattern.lastIndex = 0;
+            while ((m = atPattern.exec(xml)) !== null) {
+              const t = m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim();
+              if (t) texts.push(t);
+            }
             if (texts.length) {
-              const num = name.match(/\d+/)[0];
-              extracted += `[Slide ${num}] ${texts.join(' ')}\n`;
+              const num = name.match(numPattern)[0];
+              extracted += '[Slide ' + num + '] ' + texts.join(' ') + '\n';
             }
           }
           extracted = extracted.trim();
