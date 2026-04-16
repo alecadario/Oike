@@ -9910,8 +9910,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         <div>
           <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
-              <h1>Presentations</h1>
-              <p>Track commercial presentations — linked to accounts, stakeholders and solutions</p>
+              <h1>Proposals</h1>
+              <p>Generate client proposals and track commercial presentations</p>
             </div>
             <div style={{ display:'flex', gap:10, marginTop:4 }}>
               <button className="action-btn btn-ghost" style={{ fontSize:12, padding:'8px 16px' }}
@@ -12187,6 +12187,7 @@ Return ONLY valid JSON:
         { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
         { icon: '🎪', label: 'Events', key: 'events' },
         { icon: '📣', label: 'Campaigns', key: 'campaigns' },
+        { icon: '📄', label: 'Proposals', key: 'proposals' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
         { icon: '📧', label: 'Reports', key: 'reports' },
