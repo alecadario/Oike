@@ -8944,14 +8944,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [genCopied, setGenCopied]         = useState(false);
       const DEFAULT_GEN = {
         slug:'', company:'', contact:'', contactTitle:'', industry:'',
+        senderName: CLIENT_CONFIG.name || '',
+        senderLogo: CLIENT_CONFIG.logo || '',
+        senderEmail: CURRENT_USER?.email || '',
         discovery:'', pain1:'', pain2:'', pain3:'', goalQuote:'', rootProblem:'',
         option:'B',
-        optionName:'Setup + Advisory',
-        optionSubtitle:'Platform + Ongoing support',
-        optionDesc:'Everything in option A, plus monthly advisory sessions to optimize messages, review metrics and continuously improve the system.',
-        optionFeatures:['Full system setup','Access to the Oike platform','Monthly optimization session','Metrics review & message refinement','Ongoing support via WhatsApp'],
+        optionName:'',
+        optionSubtitle:'',
+        optionDesc:'',
+        optionFeatures:[''],
         whySolution:'', nextStep1:'Discovery call to align on ICP and target accounts', nextStep2:'We build the economic proposal together', nextStep3:'Kick-off and system setup — week 1',
-        calendarLink:'https://calendar.app.google/j71NmNvCfgU9QCMZ6',
+        calendarLink:'',
       };
       const [genForm, setGenForm] = useState(DEFAULT_GEN);
       const GF = (k) => genForm[k] || '';
@@ -9809,7 +9812,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '</head>\n' +
 '<body>\n' +
 '  <nav>\n' +
-'    <a href="#" class="logo"><div class="logo-icon">O</div> Oike</a>\n' +
+'    <a href="#" class="logo">' +
+      (GF('senderLogo')
+        ? '<img src="' + GF('senderLogo') + '" alt="' + (GF('senderName')||'Logo') + '" style="height:28px;width:auto;object-fit:contain;" />'
+        : '<div class="logo-icon">' + (GF('senderName')||'?')[0].toUpperCase() + '</div> ' + (GF('senderName')||'Your Company')) +
+    '</a>\n' +
 '    <a href="' + GF('calendarLink') + '" target="_blank" class="nav-cta">Schedule a call \u2192</a>\n' +
 '  </nav>\n' +
 '\n' +
@@ -9906,7 +9913,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  </div>\n' +
 '\n' +
 '  <div class="divider"></div>\n' +
-'  <footer><strong style="color:var(--text);">Oike</strong> \u2014 Sales Intelligence Platform &nbsp;\u00b7&nbsp; Ale Cadario &nbsp;\u00b7&nbsp;<a href="mailto:ale@alecadario.com" style="color:var(--teal);text-decoration:none;">ale@alecadario.com</a></footer>\n' +
+'  <footer><strong style="color:var(--text);">' + (GF('senderName')||'Your Company') + '</strong>' +
+      (GF('senderEmail') ? ' &nbsp;\u00b7&nbsp; <a href="mailto:' + GF('senderEmail') + '" style="color:var(--teal);text-decoration:none;">' + GF('senderEmail') + '</a>' : '') +
+'</footer>\n' +
 '</body>\n' +
 '</html>';
       };
@@ -9958,10 +9967,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 // Header
 '<tr><td style="background:' + dark + ';padding:28px 40px;">' +
 '<table cellpadding="0" cellspacing="0" style="width:100%;"><tr>' +
-'<td><table cellpadding="0" cellspacing="0"><tr>' +
-'<td style="width:34px;height:34px;background:' + teal + ';border-radius:8px;text-align:center;vertical-align:middle;font-size:16px;font-weight:900;color:' + dark + ';">O</td>' +
-'<td style="padding-left:10px;font-size:18px;font-weight:800;color:#ffffff;">Oike</td>' +
-'</tr></table></td>' +
+'<td>' +
+  (GF('senderLogo')
+    ? '<img src="' + GF('senderLogo') + '" alt="' + (GF('senderName')||'Logo') + '" style="height:32px;width:auto;object-fit:contain;" />'
+    : '<table cellpadding="0" cellspacing="0"><tr>' +
+      '<td style="width:34px;height:34px;background:' + teal + ';border-radius:8px;text-align:center;vertical-align:middle;font-size:16px;font-weight:900;color:' + dark + ';">' + (GF('senderName')||'?')[0].toUpperCase() + '</td>' +
+      '<td style="padding-left:10px;font-size:18px;font-weight:800;color:#ffffff;">' + (GF('senderName')||'Your Company') + '</td>' +
+      '</tr></table>') +
+'</td>' +
 '<td style="text-align:right;font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Commercial Proposal</td>' +
 '</tr></table></td></tr>' +
 
@@ -10045,7 +10058,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
 // Footer
 '<tr><td style="padding:20px 40px;border-top:1px solid ' + border + ';text-align:center;">' +
-'<p style="margin:0;font-size:12px;color:#9ca3af;"><strong style="color:' + dark + ';">Oike</strong> &mdash; Sales Intelligence Platform &nbsp;&middot;&nbsp; Ale Cadario &nbsp;&middot;&nbsp; <a href="mailto:ale@alecadario.com" style="color:' + teal + ';text-decoration:none;">ale@alecadario.com</a></p>' +
+'<p style="margin:0;font-size:12px;color:#9ca3af;">' +
+  '<strong style="color:' + dark + ';">' + (GF('senderName')||'Your Company') + '</strong>' +
+  (GF('senderEmail') ? ' &nbsp;&middot;&nbsp; <a href="mailto:' + GF('senderEmail') + '" style="color:' + teal + ';text-decoration:none;">' + GF('senderEmail') + '</a>' : '') +
+'</p>' +
 '</td></tr>' +
 
 '</table></body></html>';
@@ -10129,13 +10145,35 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Basic info about the prospect. This appears in the hero of the proposal.</div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                           <div><label style={lStyle}>Company name *</label><input style={iStyle} value={GF('company')} onChange={e=>setGF('company',e.target.value)} placeholder="Acme Corp" autoFocus /></div>
-                          <div><label style={lStyle}>URL slug *</label><input style={iStyle} value={GF('slug')} onChange={e=>setGF('slug',e.target.value.toLowerCase().replace(/\s+/g,'-'))} placeholder="acme-corp" /><div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>oike.app/{GF('slug')||'slug'}</div></div>
+                          <div><label style={lStyle}>URL slug</label><input style={iStyle} value={GF('slug')} onChange={e=>setGF('slug',e.target.value.toLowerCase().replace(/\s+/g,'-'))} placeholder="acme-corp" /><div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>oike.app/{GF('slug')||'slug'}</div></div>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                           <div><label style={lStyle}>Contact name *</label><input style={iStyle} value={GF('contact')} onChange={e=>setGF('contact',e.target.value)} placeholder="Jorge Hidalgo" /></div>
                           <div><label style={lStyle}>Title / Role</label><input style={iStyle} value={GF('contactTitle')} onChange={e=>setGF('contactTitle',e.target.value)} placeholder="CEO & Partner" /></div>
                         </div>
                         <div><label style={lStyle}>Industry</label><input style={iStyle} value={GF('industry')} onChange={e=>setGF('industry',e.target.value)} placeholder="ERP consulting" /></div>
+
+                        <div style={{ borderTop:'1px solid var(--globant-border)', paddingTop:14, marginTop:2 }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>Your branding</div>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                            <div><label style={lStyle}>Your company name</label><input style={iStyle} value={GF('senderName')} onChange={e=>setGF('senderName',e.target.value)} placeholder="Acme Sales" /></div>
+                            <div><label style={lStyle}>Your email</label><input style={iStyle} value={GF('senderEmail')} onChange={e=>setGF('senderEmail',e.target.value)} placeholder="you@company.com" /></div>
+                          </div>
+                          <div style={{ marginTop:12 }}>
+                            <label style={lStyle}>Logo URL <span style={{ fontWeight:400, textTransform:'none' }}>(optional — paste a direct image link)</span></label>
+                            <input style={iStyle} value={GF('senderLogo')} onChange={e=>setGF('senderLogo',e.target.value)} placeholder="https://yourcompany.com/logo.png" />
+                            {GF('senderLogo') && (
+                              <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:10 }}>
+                                <img src={GF('senderLogo')} alt="logo preview" style={{ height:32, maxWidth:120, objectFit:'contain', borderRadius:4, background:'rgba(255,255,255,0.05)', padding:4 }} onError={e=>e.target.style.display='none'} />
+                                <span style={{ fontSize:11, color:'var(--globant-muted)' }}>Preview</span>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ marginTop:12 }}>
+                            <label style={lStyle}>Calendar / booking link</label>
+                            <input style={iStyle} value={GF('calendarLink')} onChange={e=>setGF('calendarLink',e.target.value)} placeholder="https://cal.com/yourname" />
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -10220,7 +10258,6 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                           <div><label style={lStyle}>Next step 2</label><input style={iStyle} value={GF('nextStep2')} onChange={e=>setGF('nextStep2',e.target.value)} /></div>
                           <div><label style={lStyle}>Next step 3</label><input style={iStyle} value={GF('nextStep3')} onChange={e=>setGF('nextStep3',e.target.value)} /></div>
                         </div>
-                        <div><label style={lStyle}>Calendar link</label><input style={iStyle} value={GF('calendarLink')} onChange={e=>setGF('calendarLink',e.target.value)} /></div>
                       </div>
                     )}
 
