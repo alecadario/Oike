@@ -7108,8 +7108,10 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                     }
                   };
 
-                  const sendInviteMsg = (s, channel) => {
+                  const sendInviteMsg = (_s, channel) => {
                     if (!invitePreview?.msg) return;
+                    // Always look up by invitePreview.id — avoids closure/re-render mismatch
+                    const s = stakeholders.find(x => x.id === invitePreview.id) || _s;
                     const msg = invitePreview.msg;
                     const email = F(s,'Email')||'';
                     const phone = F(s,'Phone number')||'';
@@ -9508,6 +9510,514 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       );
     }
 
+    // ============ CAMPAIGNS HUB ============
+    function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord }) {
+      const { campaigns = [], stakeholders = [], accounts = [], outreach = [] } = data;
+
+      const [selectedId, setSelectedId] = useState(null);
+      const [listSearch, setListSearch] = useState('');
+      const [statusFilter, setStatusFilter] = useState('');
+      const [showForm, setShowForm] = useState(false);
+      const [editingCampaign, setEditingCampaign] = useState(null);
+      const [form, setForm] = useState({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'' });
+      const [saving, setSaving] = useState(false);
+      const [filterIndustry, setFilterIndustry] = useState('');
+      const [filterRole, setFilterRole] = useState('');
+      const [filterSearch, setFilterSearch] = useState('');
+      const [invitePreview, setInvitePreview] = useState(null); // {id, msg, generating}
+
+      const TYPE_OPTIONS = ['White Paper', 'News / Article', 'Product Launch', 'Case Study', 'Cold Outreach'];
+      const STATUS_OPTIONS = ['Draft', 'Active', 'Paused', 'Completed'];
+      const STATUS_COLORS = { 'Draft': '#a78bfa', 'Active': '#4ade80', 'Paused': '#fbbf24', 'Completed': '#60a5fa' };
+      const TYPE_ICONS = { 'White Paper': '📄', 'News / Article': '📰', 'Product Launch': '🚀', 'Case Study': '📊', 'Cold Outreach': '🎯' };
+
+      const selectedCampaign = campaigns.find(c => c.id === selectedId) || null;
+      const reachedIds = selectedCampaign ? linkedIds(selectedCampaign, 'Stakeholders Reached') : [];
+
+      // ── Filtered campaigns list ──
+      const filteredCampaigns = campaigns.filter(c => {
+        if (statusFilter && F(c,'Status') !== statusFilter) return false;
+        if (listSearch && !(F(c,'Name')||'').toLowerCase().includes(listSearch.toLowerCase())) return false;
+        return true;
+      }).sort((a,b) => (F(b,'Start Date')||'').localeCompare(F(a,'Start Date')||''));
+
+      // ── Filter options for detail view ──
+      const industryOptions = [...new Set(accounts.map(a => F(a,'Industry')).filter(Boolean))].sort();
+      const roleOptions = [...new Set(stakeholders.map(s => F(s,'Role')).filter(Boolean))].sort();
+
+      // ── Contacts for detail view (all stakeholders, sorted: unreached first) ──
+      const detailContacts = selectedCampaign ? stakeholders.filter(s => {
+        if (filterSearch) {
+          const q = filterSearch.toLowerCase();
+          if (!(`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(q)) return false;
+        }
+        if (filterRole && F(s,'Role') !== filterRole) return false;
+        if (filterIndustry) {
+          const acc = accounts.find(a => linkedIds(s,'Account').includes(a.id));
+          if (!acc || F(acc,'Industry') !== filterIndustry) return false;
+        }
+        return true;
+      }).sort((a,b) => {
+        const aR = reachedIds.includes(a.id), bR = reachedIds.includes(b.id);
+        if (aR !== bR) return aR ? 1 : -1;
+        return (F(a,'Name')||'').localeCompare(F(b,'Name')||'');
+      }) : [];
+
+      // ── Form helpers ──
+      const openCreate = () => {
+        setEditingCampaign(null);
+        setForm({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'' });
+        setShowForm(true);
+      };
+
+      const openEdit = (c) => {
+        setEditingCampaign(c);
+        setForm({
+          name: F(c,'Name') || '',
+          type: F(c,'Type') || 'White Paper',
+          status: F(c,'Status') || 'Draft',
+          messageTemplate: F(c,'Message Template') || '',
+          assetUrl: F(c,'Asset URL') || '',
+          startDate: c.fields?.['Start Date'] || '',
+          goal: c.fields?.['Goal'] ? String(c.fields['Goal']) : '',
+        });
+        setShowForm(true);
+      };
+
+      const saveCampaign = async () => {
+        if (!form.name.trim()) { alert('Campaign name is required'); return; }
+        setSaving(true);
+        try {
+          const fields = {
+            'Name': form.name.trim(),
+            'Type': form.type,
+            'Status': form.status,
+            'Message Template': form.messageTemplate,
+            ...(form.assetUrl ? { 'Asset URL': form.assetUrl } : {}),
+            ...(form.startDate ? { 'Start Date': form.startDate } : {}),
+            ...(form.goal ? { 'Goal': parseInt(form.goal) || 0 } : {}),
+          };
+          if (editingCampaign) {
+            await api.updateRecord(TABLE_IDS.campaigns, editingCampaign.id, fields);
+            if (onUpdateRecord) onUpdateRecord('campaigns', editingCampaign.id, fields);
+          } else {
+            const created = await api.createRecord(TABLE_IDS.campaigns, fields);
+            if (onAddRecord) onAddRecord('campaigns', created?.fields || fields);
+          }
+          setShowForm(false);
+          if (onLogActivity) onLogActivity();
+        } catch(e) {
+          alert('Error saving campaign: ' + e.message);
+        }
+        setSaving(false);
+      };
+
+      // ── Generate message ──
+      const generateMsg = async (s) => {
+        setInvitePreview({ id: s.id, msg: '', generating: true });
+        const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+        const role = F(s,'Role') || '';
+        const influence = F(s,'Level of Influence') || '';
+        const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,300);
+        const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,200);
+        const accId = linkedIds(s,'Account')[0];
+        const acc = accounts.find(a => a.id === accId);
+        const accName = acc ? F(acc,'Account Name') : '';
+        const industry = acc ? F(acc,'Industry') : '';
+        const accNews = acc ? (F(acc,'Recent News')||'').slice(0,150) : '';
+        const sOut = outreach
+          .filter(o => linkedIds(o,'Stakeholder').includes(s.id))
+          .sort((a,b) => new Date(b.fields?.['Date']||0) - new Date(a.fields?.['Date']||0))
+          .slice(0,3)
+          .map(o => `[${F(o,'Channel')||'?'} · ${o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'}] ${(F(o,'Message')||'').slice(0,120)}`)
+          .join('\n');
+        const campaignName = F(selectedCampaign,'Name') || '';
+        const campaignType = F(selectedCampaign,'Type') || '';
+        const template = F(selectedCampaign,'Message Template') || '';
+        const assetUrl = F(selectedCampaign,'Asset URL') || '';
+
+        const prompt = `B2B sales rep running a ${campaignType} campaign. Write ONE short personalized message. Max 3 sentences + subject if email.
+
+CONTACT: ${sName} | ${role}${influence ? ` (${influence})` : ''} | ${accName}${industry ? ` — ${industry}` : ''}
+${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : ''}${accNews ? `\nCompany news: ${accNews}` : ''}
+History: ${sOut || 'First contact'}
+
+CAMPAIGN: "${campaignName}" (${campaignType})
+${template ? `Reference angle (personalize — DO NOT copy verbatim, rewrite for this specific person):\n"${template.slice(0,400)}"` : ''}
+${assetUrl ? `Asset/resource to reference: ${assetUrl}` : ''}
+
+MISSION: Connect this ${campaignType} campaign to ${sName}'s specific context at ${accName}. Be direct, specific, and relevant to their role.
+BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.
+Sender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}
+If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the message.`;
+
+        try {
+          const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
+          setInvitePreview({ id: s.id, msg: msg.trim(), generating: false });
+        } catch(e) {
+          console.error('Campaign generateMsg failed:', e);
+          const fallback = `Hi ${sName}, I wanted to share something that might be relevant to your work at ${accName}${industry ? ` in the ${industry} space` : ''}. ${template ? template.slice(0,120) + '...' : 'Would love to connect and share more.'} Can we set up a quick call?`;
+          setInvitePreview({ id: s.id, msg: fallback, generating: false });
+        }
+      };
+
+      // ── Send message ──
+      const sendMsg = (_s, channel) => {
+        if (!invitePreview?.msg) return;
+        const s = stakeholders.find(x => x.id === invitePreview.id) || _s;
+        const msg = invitePreview.msg;
+        const email = F(s,'Email')||'';
+        const phone = F(s,'Phone number')||'';
+        const linkedin = F(s,'LinkedIn')||'';
+        let subject = '', body = msg;
+        if (channel === 'Email') {
+          const lines = body.split('\n');
+          const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+          else { subject = `${F(selectedCampaign,'Name')||'Campaign'} — ${F(s,'Name')||''}`; }
+        }
+        // Open channel synchronously (before any await)
+        if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+        else if (channel==='Email'&&email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+        else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(msg).catch(()=>{}); window.open(linkedin,'_blank'); }
+
+        // Log outreach + update Stakeholders Reached
+        const companyIds = linkedIds(s,'Account');
+        const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+        const campaignName = F(selectedCampaign,'Name')||'';
+        const a = api || new AirtableAPI();
+        a.createRecord(TABLE_IDS.outreach, {
+          'Activity Name': `Campaign "${campaignName}": ${sName} — ${new Date().toLocaleDateString('en-US')}`,
+          'Account': companyIds, 'Stakeholder': [s.id],
+          'Channel': channel, 'Date': new Date().toISOString(),
+          'Status': 'Sent', 'Message': msg,
+          'Notes': `Campaign: ${campaignName} (${F(selectedCampaign,'Type')||''})`,
+          'Logged By': CURRENT_USER?.name || '',
+        }).then(async () => {
+          const currentReached = linkedIds(selectedCampaign, 'Stakeholders Reached');
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+            'Stakeholders Reached': [...new Set([...currentReached, s.id])],
+          }).catch(e => console.error('Campaign reached update failed:', e));
+          if (onLogActivity) onLogActivity();
+        }).catch(e => console.error('Campaign send log failed:', e));
+
+        setInvitePreview(null);
+      };
+
+      const inputSt = { background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', padding:'8px 10px', fontSize:13, width:'100%' };
+
+      // ── DETAIL VIEW ──
+      if (selectedCampaign) {
+        const reached = reachedIds.length;
+        const goal = selectedCampaign.fields?.['Goal'] || 0;
+        const campaignType = F(selectedCampaign,'Type') || '';
+        const status = F(selectedCampaign,'Status') || '';
+        const template = F(selectedCampaign,'Message Template') || '';
+        const assetUrl = F(selectedCampaign,'Asset URL') || '';
+
+        return (
+          <div>
+            {/* Back + header */}
+            <div className="page-header" style={{ marginBottom:12 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+                <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={() => { setSelectedId(null); setInvitePreview(null); setFilterIndustry(''); setFilterRole(''); setFilterSearch(''); }}>← Back</button>
+                <span style={{ fontSize:11, color:'var(--globant-muted)' }}>Campaigns</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                <span style={{ fontSize:18 }}>{TYPE_ICONS[campaignType]||'📣'}</span>
+                <h1 style={{ margin:0 }}>{F(selectedCampaign,'Name')}</h1>
+                <span style={{ fontSize:11, padding:'3px 10px', borderRadius:20, background:`${STATUS_COLORS[status]||'#666'}20`, color:STATUS_COLORS[status]||'var(--globant-muted)', fontWeight:700, border:`1px solid ${STATUS_COLORS[status]||'var(--globant-border)'}40` }}>{status}</span>
+                <button className="action-btn btn-ghost" style={{ fontSize:11, marginLeft:'auto' }} onClick={() => openEdit(selectedCampaign)}>✏️ Edit</button>
+              </div>
+              <div style={{ display:'flex', gap:16, marginTop:6, flexWrap:'wrap' }}>
+                <span style={{ fontSize:12, color:'var(--globant-muted)' }}>Type: <strong style={{ color:'var(--globant-text)' }}>{campaignType}</strong></span>
+                {selectedCampaign.fields?.['Start Date'] && <span style={{ fontSize:12, color:'var(--globant-muted)' }}>Start: <strong style={{ color:'var(--globant-text)' }}>{formatDate(selectedCampaign.fields['Start Date'])}</strong></span>}
+                <span style={{ fontSize:12, color:'var(--globant-muted)' }}>Reached: <strong style={{ color:'#4ade80' }}>{reached}</strong>{goal>0 ? ` / ${goal} goal` : ''}</span>
+                {assetUrl && <a href={assetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:'var(--globant-green)' }}>🔗 View Asset</a>}
+              </div>
+            </div>
+
+            {/* Template reference */}
+            {template && (
+              <div className="card" style={{ marginBottom:14, borderLeft:'3px solid var(--globant-green)', padding:'10px 14px' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', marginBottom:4, textTransform:'uppercase', letterSpacing:1 }}>Message Template / Reference Angle</div>
+                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{template}</div>
+              </div>
+            )}
+
+            {/* Stats */}
+            <div className="kpi-row" style={{ gridTemplateColumns:'repeat(3,1fr)', marginBottom:14 }}>
+              <div className="kpi-card">
+                <div className="kpi-label">Contacts (filtered)</div>
+                <div className="kpi-value">{detailContacts.length}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-label">Reached</div>
+                <div className="kpi-value" style={{ color:'#4ade80' }}>{detailContacts.filter(s=>reachedIds.includes(s.id)).length}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-label">Pending</div>
+                <div className="kpi-value" style={{ color:'#fbbf24' }}>{detailContacts.filter(s=>!reachedIds.includes(s.id)).length}</div>
+              </div>
+            </div>
+
+            {/* Contact filters */}
+            <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+              <input className="input-field" style={{ fontSize:12, flex:1, minWidth:160 }} placeholder="Search contacts..." value={filterSearch} onChange={e=>setFilterSearch(e.target.value)} />
+              <select className="input-field" style={{ fontSize:12, minWidth:160 }} value={filterIndustry} onChange={e=>setFilterIndustry(e.target.value)}>
+                <option value="">🏭 All industries</option>
+                {industryOptions.map(i=><option key={i} value={i}>{i}</option>)}
+              </select>
+              <select className="input-field" style={{ fontSize:12, minWidth:160 }} value={filterRole} onChange={e=>setFilterRole(e.target.value)}>
+                <option value="">👤 All roles</option>
+                {roleOptions.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+
+            {/* Contacts list */}
+            <div className="card" style={{ padding:0, overflow:'hidden' }}>
+              <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--globant-border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:13, fontWeight:700 }}>Contacts ({detailContacts.length})</span>
+                <span style={{ fontSize:11, color:'var(--globant-muted)' }}>✅ = already reached</span>
+              </div>
+              {detailContacts.length === 0 ? (
+                <div style={{ padding:24, textAlign:'center', color:'var(--globant-muted)', fontSize:13 }}>No contacts match the current filters.</div>
+              ) : (
+                <div style={{ maxHeight:540, overflowY:'auto' }}>
+                  {detailContacts.map(s => {
+                    const isReached = reachedIds.includes(s.id);
+                    const accId = linkedIds(s,'Account')[0];
+                    const acc = accounts.find(a=>a.id===accId);
+                    const accName = acc ? F(acc,'Account Name') : '';
+                    const industry = acc ? F(acc,'Industry') : '';
+                    const hasEmail = !!F(s,'Email');
+                    const hasPhone = !!F(s,'Phone number');
+                    const hasLinkedin = !!F(s,'LinkedIn');
+                    const isActive = invitePreview?.id === s.id;
+
+                    return (
+                      <div key={s.id} style={{ borderBottom:'1px solid var(--globant-border)', opacity: isReached&&!isActive ? 0.65 : 1 }}>
+                        {/* Contact row */}
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px' }}>
+                          <div>
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                              {isReached && <span style={{ fontSize:12 }}>✅</span>}
+                              <span style={{ fontWeight:600, fontSize:13 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</span>
+                              {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ fontSize:9 }}>{F(s,'Level of Influence')}</span>}
+                            </div>
+                            <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:2 }}>
+                              {F(s,'Role')}{accName ? ` · ${accName}` : ''}{industry ? ` · ${industry}` : ''}
+                            </div>
+                          </div>
+                          <button
+                            className="action-btn btn-primary" style={{ fontSize:10, padding:'4px 12px' }}
+                            disabled={isActive && invitePreview.generating}
+                            onClick={() => isActive ? setInvitePreview(null) : generateMsg(s)}>
+                            {isActive && invitePreview.generating ? '⏳' : isActive ? '✕ Close' : isReached ? '🔄 Resend' : '✨ Generate'}
+                          </button>
+                        </div>
+                        {/* Preview panel */}
+                        {isActive && !invitePreview.generating && invitePreview.msg && (
+                          <div style={{ padding:'10px 14px', background:'rgba(91,191,181,0.06)', borderTop:'1px solid var(--globant-border)' }}>
+                            <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, marginBottom:10, whiteSpace:'pre-wrap' }}>{invitePreview.msg}</div>
+                            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                              {hasEmail && <button className="action-btn btn-email" style={{ fontSize:11 }} onClick={()=>sendMsg(s,'Email')}>✉️ Send via Email</button>}
+                              {hasPhone && <button className="action-btn btn-whatsapp" style={{ fontSize:11 }} onClick={()=>sendMsg(s,'WhatsApp')}>💬 Send via WhatsApp</button>}
+                              {hasLinkedin && <button className="action-btn btn-linkedin" style={{ fontSize:11 }} onClick={()=>sendMsg(s,'LinkedIn')}>🔗 Send via LinkedIn</button>}
+                              <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={()=>generateMsg(s)}>🔄 Regenerate</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Edit modal (reuses create form) */}
+            {showForm && (
+              <div className="modal-overlay" onClick={()=>setShowForm(false)}>
+                <div className="modal" onClick={e=>e.stopPropagation()} style={{ maxWidth:560 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+                    <h3 style={{ margin:0 }}>✏️ Edit Campaign</h3>
+                    <button onClick={()=>setShowForm(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:18 }}>✕</button>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Campaign Name *</label>
+                      <input style={inputSt} value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} />
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                      <div>
+                        <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Type</label>
+                        <select style={inputSt} value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}>
+                          {TYPE_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Status</label>
+                        <select style={inputSt} value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))}>
+                          {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                      <div>
+                        <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Start Date</label>
+                        <input type="date" style={inputSt} value={form.startDate} onChange={e=>setForm(p=>({...p,startDate:e.target.value}))} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Goal (# contacts)</label>
+                        <input type="number" style={inputSt} placeholder="e.g. 50" value={form.goal} onChange={e=>setForm(p=>({...p,goal:e.target.value}))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Asset URL (optional)</label>
+                      <input style={inputSt} placeholder="https://..." value={form.assetUrl} onChange={e=>setForm(p=>({...p,assetUrl:e.target.value}))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Message Template / Reference Angle *</label>
+                      <textarea style={{ ...inputSt, minHeight:100, resize:'vertical', fontFamily:'inherit' }}
+                        placeholder="Core angle, key message, or talking points. The AI uses this as reference to personalize for each contact."
+                        value={form.messageTemplate} onChange={e=>setForm(p=>({...p,messageTemplate:e.target.value}))} />
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, marginTop:18 }}>
+                    <button className="action-btn btn-primary" style={{ fontSize:13 }} onClick={saveCampaign} disabled={saving}>{saving?'⏳ Saving...':'💾 Save Campaign'}</button>
+                    <button className="action-btn btn-ghost" style={{ fontSize:13 }} onClick={()=>setShowForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // ── LIST VIEW ──
+      return (
+        <div>
+          <div className="page-header">
+            <h1>📣 Campaigns</h1>
+            <p>Targeted outreach campaigns with AI-personalized messages</p>
+          </div>
+
+          <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+            <input className="input-field" style={{ fontSize:12, flex:1, minWidth:180 }} placeholder="Search campaigns..." value={listSearch} onChange={e=>setListSearch(e.target.value)} />
+            <select className="input-field" style={{ fontSize:12, minWidth:140 }} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className="action-btn btn-primary" style={{ fontSize:12 }} onClick={openCreate}>+ New Campaign</button>
+          </div>
+
+          {filteredCampaigns.length === 0 ? (
+            <div className="card" style={{ textAlign:'center', padding:40 }}>
+              <div style={{ fontSize:32, marginBottom:12 }}>📣</div>
+              <div style={{ fontSize:15, fontWeight:700, marginBottom:8 }}>{campaigns.length===0 ? 'No campaigns yet' : 'No campaigns match'}</div>
+              <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>{campaigns.length===0 ? 'Create your first campaign to start targeted outreach' : 'Try adjusting your filters'}</div>
+              {campaigns.length===0 && <button className="action-btn btn-primary" onClick={openCreate}>+ New Campaign</button>}
+            </div>
+          ) : (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px,1fr))', gap:14 }}>
+              {filteredCampaigns.map(c => {
+                const status = F(c,'Status') || '';
+                const type = F(c,'Type') || '';
+                const reached = linkedIds(c,'Stakeholders Reached').length;
+                const goal = c.fields?.['Goal'] || 0;
+                const pct = goal>0 ? Math.min(100, Math.round((reached/goal)*100)) : null;
+                return (
+                  <div key={c.id} className="card" style={{ cursor:'pointer', borderTop:`3px solid ${STATUS_COLORS[status]||'var(--globant-border)'}` }}
+                    onClick={()=>{ setSelectedId(c.id); setInvitePreview(null); }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ fontSize:18 }}>{TYPE_ICONS[type]||'📣'}</span>
+                        <span style={{ fontWeight:700, fontSize:14 }}>{F(c,'Name')}</span>
+                      </div>
+                      <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:`${STATUS_COLORS[status]||'#666'}20`, color:STATUS_COLORS[status]||'var(--globant-muted)', fontWeight:700, whiteSpace:'nowrap', border:`1px solid ${STATUS_COLORS[status]||'var(--globant-border)'}40` }}>{status}</span>
+                    </div>
+                    <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:8 }}>
+                      {type}{c.fields?.['Start Date'] ? ` · ${formatDate(c.fields['Start Date'])}` : ''}
+                    </div>
+                    {F(c,'Message Template') && (
+                      <div style={{ fontSize:11, color:'var(--globant-muted)', fontStyle:'italic', marginBottom:10, lineHeight:1.4 }}>
+                        "{(F(c,'Message Template')||'').slice(0,100)}{(F(c,'Message Template')||'').length>100?'...':''}"
+                      </div>
+                    )}
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <span style={{ fontSize:12, color:'#4ade80', fontWeight:700 }}>✅ {reached} reached</span>
+                      {goal>0 && <span style={{ fontSize:11, color:'var(--globant-muted)' }}>/ {goal} goal</span>}
+                    </div>
+                    {pct!==null && (
+                      <div style={{ height:4, borderRadius:2, background:'var(--globant-darker)', overflow:'hidden', marginTop:8 }}>
+                        <div style={{ height:'100%', width:`${pct}%`, background:'linear-gradient(90deg,#4ade80,#22d3ee)', borderRadius:2 }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Create modal */}
+          {showForm && (
+            <div className="modal-overlay" onClick={()=>setShowForm(false)}>
+              <div className="modal" onClick={e=>e.stopPropagation()} style={{ maxWidth:560 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+                  <h3 style={{ margin:0 }}>📣 New Campaign</h3>
+                  <button onClick={()=>setShowForm(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:18 }}>✕</button>
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Campaign Name *</label>
+                    <input style={inputSt} placeholder="e.g. White Paper Q2 — Real Estate" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Type</label>
+                      <select style={inputSt} value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}>
+                        {TYPE_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Status</label>
+                      <select style={inputSt} value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))}>
+                        {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Start Date</label>
+                      <input type="date" style={inputSt} value={form.startDate} onChange={e=>setForm(p=>({...p,startDate:e.target.value}))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Goal (# contacts)</label>
+                      <input type="number" style={inputSt} placeholder="e.g. 50" value={form.goal} onChange={e=>setForm(p=>({...p,goal:e.target.value}))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Asset URL (optional)</label>
+                    <input style={inputSt} placeholder="https://..." value={form.assetUrl} onChange={e=>setForm(p=>({...p,assetUrl:e.target.value}))} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Message Template / Reference Angle *</label>
+                    <textarea style={{ ...inputSt, minHeight:100, resize:'vertical', fontFamily:'inherit' }}
+                      placeholder="Core angle, key message, or talking points. The AI uses this as reference to personalize for each contact."
+                      value={form.messageTemplate} onChange={e=>setForm(p=>({...p,messageTemplate:e.target.value}))} />
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:8, marginTop:18 }}>
+                  <button className="action-btn btn-primary" style={{ fontSize:13 }} onClick={saveCampaign} disabled={saving}>{saving?'⏳ Saving...':'💾 Save Campaign'}</button>
+                  <button className="action-btn btn-ghost" style={{ fontSize:13 }} onClick={()=>setShowForm(false)}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data }) {
       const { accounts, stakeholders, outreach, solutions, opportunities } = data;
@@ -10641,7 +11151,7 @@ Return ONLY valid JSON:
         localStorage.setItem('oike_page', p);
         navSetUrl(p, null); // clear ?id when switching pages
       }, []);
-      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [] });
+      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [], campaigns: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
@@ -10696,8 +11206,8 @@ Return ONLY valid JSON:
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals','campaigns'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals, TABLE_IDS.campaigns];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
@@ -10866,6 +11376,7 @@ Return ONLY valid JSON:
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
         proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
+        campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         reports:  <ReportBuilder data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
@@ -10881,6 +11392,7 @@ Return ONLY valid JSON:
         { icon: '👤', label: 'Contacts', key: 'contacts' },
         { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
         { icon: '🎪', label: 'Events', key: 'events' },
+        { icon: '📣', label: 'Campaigns', key: 'campaigns' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
         { icon: '📧', label: 'Reports', key: 'reports' },
