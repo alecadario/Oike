@@ -3753,29 +3753,11 @@ Output ONLY the message, nothing else.`;
           list = list.filter(a => (F(a, 'Country') || '').trim() === filterCountry.trim());
         }
         if (filterCPId) {
-          // The CP↔Account relationship can live on either side depending on how Airtable is set up.
-          // Strategy 1: account has a 'CP' linked-record field pointing to the CP table
-          // Strategy 2: the CP record has an 'Accounts' linked-record field pointing to accounts
-          // Strategy 3: account's 'Account Owner' name matches CP's 'Name'
-          const selectedCP = (data.clientPartners || []).find(cp => cp.id === filterCPId);
-          const cpLinkedAccountIds = selectedCP ? linkedIds(selectedCP, 'Accounts') : [];
-          const cpName = selectedCP ? (F(selectedCP, 'Name') || '').toLowerCase() : '';
-          list = list.filter(a => {
-            // Strategy 1
-            if (linkedIds(a, 'CP').includes(filterCPId)) return true;
-            // Strategy 2
-            if (cpLinkedAccountIds.includes(a.id)) return true;
-            // Strategy 3: match by Account Owner name
-            if (cpName) {
-              const owners = F(a, 'Account Owner') || [];
-              const ownerArr = Array.isArray(owners) ? owners : [owners];
-              if (ownerArr.some(o => o && (o.toLowerCase().includes(cpName) || cpName.includes(o.toLowerCase())))) return true;
-            }
-            return false;
-          });
+          // Account has a 'CP' field (linked record → Users table) — filter by user ID directly
+          list = list.filter(a => linkedIds(a, 'CP').includes(filterCPId));
         }
         return list;
-      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId, data.clientPartners]);
+      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId]);
 
       const account = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) : null;
 
@@ -4733,16 +4715,16 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-            {(data.clientPartners || []).length > 0 && (
+            {(data.users || []).length > 0 && (
               <select
                 className="input-field"
                 style={{ maxWidth: 180, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterCPId ? '#a78bfa' : 'var(--globant-muted)', borderRadius: 8 }}
                 value={filterCPId}
                 onChange={e => { setFilterCPId(e.target.value); selectAccount(''); }}
               >
-                <option value="">🤝 All CPs</option>
-                {(data.clientPartners || []).filter(cp => F(cp, 'Name')).sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(cp => (
-                  <option key={cp.id} value={cp.id}>{F(cp, 'Name')}</option>
+                <option value="">👤 All Users</option>
+                {(data.users || []).filter(u => F(u, 'Name')).sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(u => (
+                  <option key={u.id} value={u.id}>{F(u, 'Name')}</option>
                 ))}
               </select>
             )}
