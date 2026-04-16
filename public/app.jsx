@@ -3753,9 +3753,7 @@ Output ONLY the message, nothing else.`;
           list = list.filter(a => (F(a, 'Country') || '').trim() === filterCountry.trim());
         }
         if (filterCPId) {
-          const cp = (data.clientPartners || []).find(c => c.id === filterCPId);
-          const cpAccIds = cp ? linkedIds(cp, 'Accounts') : [];
-          list = list.filter(a => cpAccIds.includes(a.id));
+          list = list.filter(a => linkedIds(a, 'CP').includes(filterCPId));
         }
         return list;
       }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId, data.clientPartners]);
