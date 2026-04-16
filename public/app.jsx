@@ -872,7 +872,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const myDealsWon = wonOpps.filter(opp =>
         currentUserId && linkedIds(opp, 'Account').some(accId => {
           const acc = accounts.find(a => a.id === accId);
-          return acc && (linkedIds(acc, 'BDR').includes(currentUserId) || linkedIds(acc, 'Client Partners').includes(currentUserId));
+          return acc && (linkedIds(acc, 'BDR').includes(currentUserId) || linkedIds(acc, 'CP').includes(currentUserId));
         })
       );
 
@@ -1182,7 +1182,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     const uMeetings = allMeetings.filter(o => { const lb = F(o, 'Logged By'); return lb && (lb === uName || lb === uEmail); }).length;
                     const uDealsWon = wonOpps.filter(opp => linkedIds(opp, 'Account').some(accId => {
                       const acc = accounts.find(a => a.id === accId);
-                      return acc && (linkedIds(acc, 'BDR').includes(u.id) || linkedIds(acc, 'Client Partners').includes(u.id));
+                      return acc && (linkedIds(acc, 'BDR').includes(u.id) || linkedIds(acc, 'CP').includes(u.id));
                     })).length;
                     const uMeetTarget = u.fields?.['KPI Meetings Target'] || 0;
                     const uDealTarget = u.fields?.['KPI Deals Target'] || 0;
@@ -5058,7 +5058,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       return (role || '').toLowerCase() === 'cp';
                     });
                     const currentBdrIds = linkedIds(account, 'BDR');
-                    const currentCpIds = linkedIds(account, 'Client Partners');
+                    const currentCpIds = linkedIds(account, 'CP');
                     const currentBdr = currentBdrIds[0] || '';
                     const currentCp = currentCpIds[0] || '';
 
@@ -5088,7 +5088,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                           </div>
                           <div>
                             <label style={lStyle}>Client Partner Assigned</label>
-                            <select style={sStyle} value={currentCp} onChange={e => assignUser('Client Partners', e.target.value)}>
+                            <select style={sStyle} value={currentCp} onChange={e => assignUser('CP', e.target.value)}>
                               <option value="">— Unassigned —</option>
                               {cps.map(u => <option key={u.id} value={u.id}>{F(u, 'Name') || F(u, 'Email') || u.id}</option>)}
                             </select>
@@ -5815,7 +5815,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
         ? wonOppsAll.length
         : wonOppsAll.filter(opp => selectedUserRecord && linkedIds(opp, 'Account').some(accId => {
             const acc = accounts.find(a => a.id === accId);
-            return acc && (linkedIds(acc, 'BDR').includes(selectedUserRecord.id) || linkedIds(acc, 'Client Partners').includes(selectedUserRecord.id));
+            return acc && (linkedIds(acc, 'BDR').includes(selectedUserRecord.id) || linkedIds(acc, 'CP').includes(selectedUserRecord.id));
           })).length;
 
       // ─── VELOCITY (last 4 weeks) ───
@@ -11242,7 +11242,7 @@ Return ONLY valid JSON:
 
             if (userRecordIds.length > 0) {
               results.accounts = allAccounts.filter(a => {
-                const ownerIds = linkedIds(a, 'Owner');
+                const ownerIds = linkedIds(a, 'BDR');
                 return ownerIds.some(id => userRecordIds.includes(id));
               });
             }
@@ -11274,7 +11274,7 @@ Return ONLY valid JSON:
 
             if (myCpIds.length > 0) {
               results.accounts = (results.accounts || []).filter(a => {
-                const cpIds = linkedIds(a, 'Client Partners');
+                const cpIds = linkedIds(a, 'CP');
                 return cpIds.some(id => myCpIds.includes(id));
               });
             } else {
