@@ -8982,11 +8982,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const GF = (k) => genForm[k] || '';
       const setGF = (k, v) => setGenForm(p => ({...p, [k]: v}));
 
-      // AI Polish for proposal generator — rewrites discovery fields in better English
+      // AI Polish for proposal generator — rewrites discovery fields in the selected proposal language
+      const LANG_NAMES = { en: 'English', es: 'Spanish', pt: 'Portuguese', fr: 'French' };
       const polishDiscovery = async () => {
         if (genPolishing) return;
         setGenPolishing(true);
         try {
+          const lang = genForm.language || 'en';
+          const langName = LANG_NAMES[lang] || 'English';
           const context = [
             genForm.discovery ? 'Discovery context: ' + genForm.discovery : '',
             genForm.pain1     ? 'Pain 1: '           + genForm.pain1     : '',
@@ -8997,7 +9000,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           ].filter(Boolean).join('\n');
           if (!context.trim()) { setGenPolishing(false); return; }
           const prompt = 'You are a senior B2B sales consultant writing commercial proposals.\n' +
-            'Rewrite the following raw discovery notes into sharp, professional English suitable for a commercial proposal.\n' +
+            'Rewrite the following raw discovery notes into sharp, professional ' + langName + ' suitable for a commercial proposal.\n' +
+            'IMPORTANT: Your output MUST be entirely in ' + langName + '. Do not use any other language.\n' +
             'Keep each field short, punchy, and specific. Do not add fluff. Respond ONLY with a JSON object with these keys:\n' +
             '{"discovery":"...","pain1":"...","pain2":"...","pain3":"...","goalQuote":"...","rootProblem":"..."}\n\n' +
             'Raw notes:\n' + context;
@@ -9023,6 +9027,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (genPolishing) return;
         setGenPolishing(true);
         try {
+          const lang = genForm.language || 'en';
+          const langName = LANG_NAMES[lang] || 'English';
           const context = [
             genForm.optionName    ? 'Solution name: '       + genForm.optionName    : '',
             genForm.optionDesc    ? 'Description: '         + genForm.optionDesc    : '',
@@ -9032,7 +9038,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           ].filter(Boolean).join('\n');
           if (!context.trim()) { setGenPolishing(false); return; }
           const prompt = 'You are a senior B2B sales consultant writing commercial proposals.\n' +
-            'Improve the following solution section to be more persuasive and professional in English.\n' +
+            'Improve the following solution section to be more persuasive and professional in ' + langName + '.\n' +
+            'IMPORTANT: Your output MUST be entirely in ' + langName + '. Do not use any other language.\n' +
             'Keep language concrete, outcome-focused, and free of buzzwords. Respond ONLY with JSON:\n' +
             '{"optionDesc":"...","whySolution":"..."}\n\n' +
             'Current content:\n' + context;
@@ -10493,7 +10500,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         <div><label style={lStyle}>Root problem / diagnosis</label><textarea style={{...taStyle, minHeight:90}} value={GF('rootProblem')} onChange={e=>setGF('rootProblem',e.target.value)} placeholder="They've grown to #1 by being reactive. The next stage of growth requires being proactive — a system that generates pipeline in new markets without depending on referrals or ODOO's platform." /></div>
                         <button onClick={polishDiscovery} disabled={genPolishing}
                           style={{ padding:'10px 18px', borderRadius:8, border:'1px solid rgba(167,139,250,0.4)', background:genPolishing?'rgba(167,139,250,0.05)':'rgba(167,139,250,0.1)', color:'#c4b5fd', fontWeight:700, fontSize:13, cursor:genPolishing?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
-                          {genPolishing ? '⏳ Improving...' : '✨ Polish with AI — rewrite in better English'}
+                          {genPolishing ? '⏳ Improving...' : '✨ Polish with AI — in ' + ({'en':'English','es':'Español','pt':'Português','fr':'Français'}[GF('language')||'en'] || 'English')}
                         </button>
                       </div>
                     )}
@@ -10566,7 +10573,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         </div>
                         <button onClick={polishSolution} disabled={genPolishing}
                           style={{ padding:'10px 18px', borderRadius:8, border:'1px solid rgba(167,139,250,0.4)', background:genPolishing?'rgba(167,139,250,0.05)':'rgba(167,139,250,0.1)', color:'#c4b5fd', fontWeight:700, fontSize:13, cursor:genPolishing?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
-                          {genPolishing ? '⏳ Improving...' : '✨ Polish with AI — sharpen description & fit'}
+                          {genPolishing ? '⏳ Improving...' : '✨ Polish with AI — in ' + ({'en':'English','es':'Español','pt':'Português','fr':'Français'}[GF('language')||'en'] || 'English')}
                         </button>
                       </div>
                     )}
