@@ -5065,7 +5065,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                     const assignUser = async (field, userId) => {
                       if (!api) return;
                       try {
-                        const val = userId ? [{ id: userId }] : [];
+                        const val = userId ? [userId] : [];
                         await api.updateRecord(TABLE_IDS.accounts, account.id, { [field]: val });
                         if (onUpdateRecord) onUpdateRecord('accounts', account.id, { [field]: val });
                         if (onLogActivity) onLogActivity();
