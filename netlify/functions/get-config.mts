@@ -15,6 +15,7 @@ const STANDARD_TABLES: Record<string, string> = {
   icp: 'tblli6WqjCqArxZKx',
   strategy: 'tblMER8W7Q25Rkegd',
   proposals: 'tblyjHMsB9BbuFYUo',
+  campaigns: 'tblHFXH59guU4QIVU',
 };
 
 // ── Build config dynamically from baseId ──

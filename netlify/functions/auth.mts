@@ -13,6 +13,8 @@ const STANDARD_TABLES: Record<string, string> = {
   sources: 'tblciUlYmvQHJm71w',
   users: 'tblCyjbxtx0MTPYq9',
   strategy: 'tblMER8W7Q25Rkegd',
+  proposals: 'tblyjHMsB9BbuFYUo',
+  campaigns: 'tblHFXH59guU4QIVU',
 };
 
 function buildClientConfig(baseId: string) {
