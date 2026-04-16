@@ -9064,33 +9064,49 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       const handlePptUpload = async (file) => {
         if (!file) return;
-        if (!file.name.endsWith('.pptx')) { alert('Por favor subí un archivo .pptx'); return; }
-        if (typeof JSZip === 'undefined') { alert('JSZip no está disponible. Recargá la página e intentá de nuevo.'); return; }
+        const isPptx = file.name.endsWith('.pptx');
+        const isPdf  = file.name.endsWith('.pdf');
+        if (!isPptx && !isPdf) { alert('Please upload a .pptx or .pdf file'); return; }
         setPptParsing(true);
         setPptFileName(file.name);
         try {
-          const arrayBuffer = await file.arrayBuffer();
-          const zip = await JSZip.loadAsync(arrayBuffer);
-          const slidePattern = new RegExp('^ppt/slides/slide\\d+\\.xml$');
-          const numPattern = new RegExp('\\d+');
-          const atPattern = new RegExp('<a:t[^>]*>([\\s\\S]*?)<\\/a:t>', 'g');
-          const slideFiles = Object.keys(zip.files)
-            .filter(n => slidePattern.test(n))
-            .sort((a, b) => parseInt(a.match(numPattern)[0]) - parseInt(b.match(numPattern)[0]));
           let extracted = '';
-          for (let si = 0; si < slideFiles.length; si++) {
-            const name = slideFiles[si];
-            const xml = await zip.files[name].async('text');
-            const texts = [];
-            let m;
-            atPattern.lastIndex = 0;
-            while ((m = atPattern.exec(xml)) !== null) {
-              const t = m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim();
-              if (t) texts.push(t);
+          if (isPptx) {
+            if (typeof JSZip === 'undefined') { alert('JSZip not available. Reload and try again.'); setPptParsing(false); return; }
+            const arrayBuffer = await file.arrayBuffer();
+            const zip = await JSZip.loadAsync(arrayBuffer);
+            const slidePattern = new RegExp('^ppt/slides/slide\\d+\\.xml$');
+            const numPattern = new RegExp('\\d+');
+            const atPattern = new RegExp('<a:t[^>]*>([\\s\\S]*?)<\\/a:t>', 'g');
+            const slideFiles = Object.keys(zip.files)
+              .filter(n => slidePattern.test(n))
+              .sort((a, b) => parseInt(a.match(numPattern)[0]) - parseInt(b.match(numPattern)[0]));
+            for (let si = 0; si < slideFiles.length; si++) {
+              const name = slideFiles[si];
+              const xml = await zip.files[name].async('text');
+              const texts = [];
+              let m;
+              atPattern.lastIndex = 0;
+              while ((m = atPattern.exec(xml)) !== null) {
+                const t = m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim();
+                if (t) texts.push(t);
+              }
+              if (texts.length) {
+                const num = name.match(numPattern)[0];
+                extracted += '[Slide ' + num + '] ' + texts.join(' ') + '\n';
+              }
             }
-            if (texts.length) {
-              const num = name.match(numPattern)[0];
-              extracted += '[Slide ' + num + '] ' + texts.join(' ') + '\n';
+          } else if (isPdf) {
+            const pdfjsLib = window['pdfjs-dist/build/pdf'];
+            if (!pdfjsLib) { alert('PDF.js not available. Reload and try again.'); setPptParsing(false); return; }
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              const pageText = content.items.map(item => item.str).filter(s => s.trim()).join(' ');
+              if (pageText.trim()) extracted += '[Page ' + i + '] ' + pageText.trim() + '\n';
             }
           }
           extracted = extracted.trim();
@@ -9098,7 +9114,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.proposals, selected.id, { 'PPT Content': extracted });
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'PPT Content': extracted });
-        } catch(e) { console.error('[handlePptUpload]', e); alert('Error leyendo el archivo PPT. Asegurate de que sea un .pptx válido.'); }
+        } catch(e) { console.error('[handlePptUpload]', e); alert('Error reading file. Make sure it is a valid .pptx or .pdf.'); }
         setPptParsing(false);
       };
 
@@ -9118,14 +9134,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           ).join('\n');
           const pptSnippet = pptText ? pptText.slice(0, 2500) : '';
           const parts = [
-            pptSnippet ? `CONTENIDO DE LA PRESENTACIÓN:\n${pptSnippet}` : '',
-            F(selected,'Description') ? `DESCRIPCIÓN:\n${F(selected,'Description')}` : '',
-            notes ? `NOTAS INTERNAS:\n${notes}` : '',
-            solList_.length ? `SOLUCIONES INCLUIDAS: ${solList_.map(s=>F(s,'Name')).join(', ')}` : '',
+            pptSnippet ? `PRESENTATION CONTENT:\n${pptSnippet}` : '',
+            F(selected,'Description') ? `DESCRIPTION:\n${F(selected,'Description')}` : '',
+            notes ? `INTERNAL NOTES:\n${notes}` : '',
+            solList_.length ? `INCLUDED SOLUTIONS: ${solList_.map(s=>F(s,'Name')).join(', ')}` : '',
           ].filter(Boolean).join('\n\n');
           const messages = [
-            { role: 'system', content: 'Eres un estratega de ventas B2B senior. Analizás presentaciones comerciales y recomendás con quién hablar y cómo abordarlos. Respondé en español, de forma directa y accionable. Máximo 350 palabras.' },
-            { role: 'user', content: `PRESENTACIÓN: "${F(selected,'Title')||'Sin título'}"\nCUENTA: ${acc_ ? F(acc_,'Account Name') : 'N/A'}\n\n${parts}\n\nSTAKEHOLDERS EN ESTA CUENTA:\n${stkContext || 'Sin stakeholders cargados.'}\n\n¿A quién le mando esta presentación primero y con qué argumento? Dame los top 2-3 con nombre, razón y ángulo de mensaje.` }
+            { role: 'system', content: 'You are a senior B2B sales strategist. You analyze commercial presentations and recommend who to engage and how to approach them. Respond in English, directly and actionably. Maximum 350 words.' },
+            { role: 'user', content: `PRESENTATION: "${F(selected,'Title')||'Untitled'}"\nACCOUNT: ${acc_ ? F(acc_,'Account Name') : 'N/A'}\n\n${parts}\n\nSTAKEHOLDERS IN THIS ACCOUNT:\n${stkContext || 'No stakeholders loaded.'}\n\nWho should I push this presentation to first, and with what argument? Give me the top 2-3 with name, reason, and message angle.` }
           ];
           const resp = await fetch('/api/openai', {
             method: 'POST',
@@ -9133,8 +9149,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             body: JSON.stringify({ messages, model: 'gpt-4o', max_tokens: 600 }),
           });
           const d = await resp.json();
-          setAiRec(d.content || 'No se pudo generar la recomendación. Intentá de nuevo.');
-        } catch(e) { console.error('[getAiRec]', e); setAiRec('Error al generar recomendación.'); }
+          setAiRec(d.content || 'Could not generate recommendation. Please try again.');
+        } catch(e) { console.error('[getAiRec]', e); setAiRec('Error generating recommendation.'); }
         setAiLoading(false);
       };
 
@@ -9393,14 +9409,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📝 Notes</div>
                 <textarea
                   style={{ width:'100%', minHeight:120, padding:'8px 10px', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
-                  placeholder="Notas internas sobre esta presentación: objeciones, contexto, próximos pasos..."
+                  placeholder="Internal notes about this presentation: objections, context, next steps..."
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   onBlur={saveNotes}
                 />
                 <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8 }}>
                   <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={saveNotes} disabled={noteSaving}>
-                    {noteSaving ? '⏳ Guardando...' : '💾 Guardar notas'}
+                    {noteSaving ? '⏳ Saving...' : '💾 Save notes'}
                   </button>
                 </div>
               </div>
@@ -9410,15 +9426,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📊 PPT Analysis</div>
                 <label style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(91,191,181,0.06)', border:'1px dashed rgba(91,191,181,0.4)', borderRadius:8, cursor:'pointer', fontSize:12, color:'var(--globant-green)', fontWeight:600, marginBottom:10 }}>
                   <span style={{ fontSize:20 }}>📤</span>
-                  <span>{pptParsing ? 'Leyendo slides...' : pptFileName ? `✅ ${pptFileName}` : 'Subir archivo .pptx'}</span>
-                  <input type="file" accept=".pptx" style={{ display:'none' }} onChange={e => { if (e.target.files[0]) handlePptUpload(e.target.files[0]); }} />
+                  <span>{pptParsing ? 'Reading file...' : pptFileName ? `✅ ${pptFileName}` : 'Upload .pptx or .pdf'}</span>
+                  <input type="file" accept=".pptx,.pdf" style={{ display:'none' }} onChange={e => { if (e.target.files[0]) handlePptUpload(e.target.files[0]); }} />
                 </label>
                 {pptText ? (
                   <div style={{ maxHeight:120, overflowY:'auto', padding:'8px 10px', background:'rgba(255,255,255,0.03)', borderRadius:6, border:'1px solid var(--globant-border)', fontSize:11, color:'var(--globant-muted)', lineHeight:1.5, whiteSpace:'pre-wrap' }}>
                     {pptText.slice(0, 800)}{pptText.length > 800 ? '\n...' : ''}
                   </div>
                 ) : (
-                  <p style={{ fontSize:12, color:'var(--globant-muted)' }}>Subí la PPT para extraer el contenido y habilitar la recomendación de IA.</p>
+                  <p style={{ fontSize:12, color:'var(--globant-muted)' }}>Upload a .pptx or .pdf to extract content and enable AI recommendations.</p>
                 )}
               </div>
             </div>
@@ -9426,17 +9442,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             {/* ── AI RECOMMENDATION ── */}
             <div className="card" style={{ marginBottom:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: aiRec ? 14 : 0 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px' }}>🤖 ¿A quién le pusheás esto?</div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px' }}>🤖 Who should you push this to?</div>
                 <button className="action-btn btn-primary" style={{ fontSize:12, padding:'6px 16px' }} onClick={getAiRec} disabled={aiLoading}>
-                  {aiLoading ? '⏳ Analizando...' : '✨ Recomendar stakeholders'}
+                  {aiLoading ? '⏳ Analyzing...' : '✨ Recommend stakeholders'}
                 </button>
               </div>
               {!aiRec && !aiLoading && (
-                <p style={{ fontSize:12, color:'var(--globant-muted)', marginTop:8 }}>La IA analizará el contenido de la presentación, las notas y los stakeholders de la cuenta para decirte a quién contactar primero y con qué argumento.</p>
+                <p style={{ fontSize:12, color:'var(--globant-muted)', marginTop:8 }}>AI will analyze the presentation content, notes and account stakeholders to tell you who to contact first and with what angle.</p>
               )}
               {aiLoading && (
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 0', color:'var(--globant-muted)', fontSize:13 }}>
-                  <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⚙️</span> Analizando presentación y stakeholders...
+                  <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⚙️</span> Analyzing presentation and stakeholders...
                 </div>
               )}
               {aiRec && (
