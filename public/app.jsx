@@ -8963,11 +8963,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const _b = loadBranding();
       const DEFAULT_GEN = {
         slug:'', company:'', contact:'', contactTitle:'', industry:'',
-        accountId:'', stakeholderId:'',
+        accountId:'', stakeholderId:'', language:'en',
         senderName:  _b.senderName  || CLIENT_CONFIG.name || '',
         senderLogo:  _b.senderLogo  || CLIENT_CONFIG.logo || '',
         senderEmail: _b.senderEmail || CURRENT_USER?.email || '',
         calendarLink: _b.calendarLink || '',
+        accentColor: _b.accentColor || '#5BBFB5',
+        darkColor:   _b.darkColor   || '#0D0D1A',
         discovery:'', pain1:'', pain2:'', pain3:'', goalQuote:'', rootProblem:'',
         option:'B',
         optionName:'',
@@ -9841,13 +9843,120 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       }
 
       // ── PROPOSAL GENERATOR HELPERS (defined here to avoid Babel JSX parse issues with template literals) ──
+
+      // ── i18n translations for proposal static text ──
+      const PROPOSAL_I18N = {
+        en: {
+          locale: 'en-GB', langAttr: 'en',
+          tag: '\u26a1 Commercial Proposal',
+          builtFor: 'Built for',
+          preparedFor: 'Prepared for',
+          scheduleCall: 'Schedule a call \u2192',
+          whatWeHeard: 'What we heard',
+          contextDiscovery: 'Context & Discovery',
+          challengesIdentified: 'Challenges identified',
+          frictionPoints: 'The three friction points we need to solve',
+          declaredGoal: 'Declared goal',
+          inTheirWords: 'In their own words',
+          rootProblem: 'Root problem',
+          underlyingDiagnosis: 'The underlying diagnosis',
+          ourProposal: 'Our proposal',
+          whatWeRecommend: 'What we recommend for',
+          whySolution: 'Why this solution',
+          whyItFits: 'Why it fits',
+          nextSteps: 'Next steps',
+          howWeMove: 'How we move forward',
+          readyToMove: 'Ready to move forward?',
+          ctaSubtitle: '20 minutes is enough to align on everything.',
+          footerLabel: 'Commercial Proposal',
+        },
+        es: {
+          locale: 'es-ES', langAttr: 'es',
+          tag: '\u26a1 Propuesta Comercial',
+          builtFor: 'Creada para',
+          preparedFor: 'Preparada para',
+          scheduleCall: 'Agend\u00e1 una llamada \u2192',
+          whatWeHeard: 'Lo que escuchamos',
+          contextDiscovery: 'Contexto y Discovery',
+          challengesIdentified: 'Desaf\u00edos identificados',
+          frictionPoints: 'Los tres puntos de fricci\u00f3n a resolver',
+          declaredGoal: 'Objetivo declarado',
+          inTheirWords: 'En sus propias palabras',
+          rootProblem: 'Problema ra\u00edz',
+          underlyingDiagnosis: 'El diagn\u00f3stico de fondo',
+          ourProposal: 'Nuestra propuesta',
+          whatWeRecommend: 'Lo que recomendamos para',
+          whySolution: 'Por qu\u00e9 esta soluci\u00f3n',
+          whyItFits: 'Por qu\u00e9 encaja con',
+          nextSteps: 'Pr\u00f3ximos pasos',
+          howWeMove: 'C\u00f3mo avanzamos',
+          readyToMove: '\u00bfListos para avanzar?',
+          ctaSubtitle: '20 minutos alcanzan para alinear todo.',
+          footerLabel: 'Propuesta Comercial',
+        },
+        pt: {
+          locale: 'pt-BR', langAttr: 'pt',
+          tag: '\u26a1 Proposta Comercial',
+          builtFor: 'Criada para',
+          preparedFor: 'Preparada para',
+          scheduleCall: 'Agendar uma conversa \u2192',
+          whatWeHeard: 'O que ouvimos',
+          contextDiscovery: 'Contexto e Discovery',
+          challengesIdentified: 'Desafios identificados',
+          frictionPoints: 'Os tr\u00eas pontos de atrito a resolver',
+          declaredGoal: 'Objetivo declarado',
+          inTheirWords: 'Em suas pr\u00f3prias palavras',
+          rootProblem: 'Problema raiz',
+          underlyingDiagnosis: 'O diagn\u00f3stico subjacente',
+          ourProposal: 'Nossa proposta',
+          whatWeRecommend: 'O que recomendamos para',
+          whySolution: 'Por que esta solu\u00e7\u00e3o',
+          whyItFits: 'Por que se encaixa com',
+          nextSteps: 'Pr\u00f3ximos passos',
+          howWeMove: 'Como avan\u00e7amos',
+          readyToMove: 'Prontos para avan\u00e7ar?',
+          ctaSubtitle: '20 minutos s\u00e3o suficientes para alinhar tudo.',
+          footerLabel: 'Proposta Comercial',
+        },
+        fr: {
+          locale: 'fr-FR', langAttr: 'fr',
+          tag: '\u26a1 Proposition Commerciale',
+          builtFor: 'Con\u00e7ue pour',
+          preparedFor: 'Pr\u00e9par\u00e9e pour',
+          scheduleCall: 'Planifier un appel \u2192',
+          whatWeHeard: 'Ce que nous avons entendu',
+          contextDiscovery: 'Contexte et Discovery',
+          challengesIdentified: 'D\u00e9fis identifi\u00e9s',
+          frictionPoints: 'Les trois points de friction \u00e0 r\u00e9soudre',
+          declaredGoal: 'Objectif d\u00e9clar\u00e9',
+          inTheirWords: 'Dans leurs propres mots',
+          rootProblem: 'Probl\u00e8me racine',
+          underlyingDiagnosis: 'Le diagnostic sous-jacent',
+          ourProposal: 'Notre proposition',
+          whatWeRecommend: 'Ce que nous recommandons pour',
+          whySolution: 'Pourquoi cette solution',
+          whyItFits: 'Pourquoi cela convient \u00e0',
+          nextSteps: 'Prochaines \u00e9tapes',
+          howWeMove: 'Comment nous avan\u00e7ons',
+          readyToMove: 'Pr\u00eats \u00e0 avancer\u00a0?',
+          ctaSubtitle: '20 minutes suffisent pour tout aligner.',
+          footerLabel: 'Proposition Commerciale',
+        },
+      };
+
       const generateHTML = () => {
-        const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+        const T = PROPOSAL_I18N[GF('language') || 'en'] || PROPOSAL_I18N['en'];
+        const today = new Date().toLocaleDateString(T.locale, { day:'numeric', month:'long', year:'numeric' });
+        const ACC = GF('accentColor') || '#5BBFB5';
+        const DARK = GF('darkColor') || '#0D0D1A';
+        // Derive tinted versions from accent
+        const ACC_DIM = ACC + '1A'; // ~10% opacity
+        const ACC_BORDER = ACC + '40'; // ~25% opacity
         const featuresHTML = genForm.optionFeatures.filter(Boolean).map(f =>
           '<li>' + f + '</li>'
         ).join('\n              ');
         return '<!DOCTYPE html>\n' +
-'<html lang="en">\n' +
+'<html lang="' + T.langAttr + '">\n' +
 '<head>\n' +
 '  <meta charset="UTF-8" />\n' +
 '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n' +
@@ -9855,7 +9964,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />\n' +
 '  <style>\n' +
 '    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }\n' +
-'    :root { --teal:#5BBFB5; --dark:#0D0D1A; --card:#13131F; --card2:#1A1A2E; --border:rgba(255,255,255,0.07); --text:#E8E8F0; --muted:#7878A0; --teal-dim:rgba(91,191,181,0.1); --teal-border:rgba(91,191,181,0.25); }\n' +
+'    :root { --teal:' + ACC + '; --dark:' + DARK + '; --card:#13131F; --card2:#1A1A2E; --border:rgba(255,255,255,0.07); --text:#E8E8F0; --muted:#7878A0; --teal-dim:' + ACC_DIM + '; --teal-border:' + ACC_BORDER + '; }\n' +
 '    body { font-family:\'Inter\',sans-serif; background:var(--dark); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; }\n' +
 '    nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 48px; background:rgba(13,13,26,0.85); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }\n' +
 '    .logo { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:800; color:var(--text); text-decoration:none; }\n' +
@@ -9905,20 +10014,20 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         ? '<img src="' + GF('senderLogo') + '" alt="' + (GF('senderName')||'Logo') + '" style="height:28px;width:auto;object-fit:contain;" />'
         : '<div class="logo-icon">' + (GF('senderName')||'?')[0].toUpperCase() + '</div> ' + (GF('senderName')||'Your Company')) +
     '</a>\n' +
-'    <a href="' + GF('calendarLink') + '" target="_blank" class="nav-cta">Schedule a call \u2192</a>\n' +
+'    <a href="' + GF('calendarLink') + '" target="_blank" class="nav-cta">' + T.scheduleCall + '</a>\n' +
 '  </nav>\n' +
 '\n' +
 '  <section class="hero">\n' +
-'    <div class="hero-tag">\u26a1 Commercial Proposal</div>\n' +
-'    <h1>Built for <span>' + GF('company') + '</span></h1>\n' +
-'    <p class="hero-meta">Prepared for <strong>' + GF('contact') + (GF('contactTitle') ? ', ' + GF('contactTitle') : '') + '</strong>&nbsp;\u00b7&nbsp;' + today + '</p>\n' +
+'    <div class="hero-tag">' + T.tag + '</div>\n' +
+'    <h1>' + T.builtFor + ' <span>' + GF('company') + '</span></h1>\n' +
+'    <p class="hero-meta">' + T.preparedFor + ' <strong>' + GF('contact') + (GF('contactTitle') ? ', ' + GF('contactTitle') : '') + '</strong>&nbsp;\u00b7&nbsp;' + today + '</p>\n' +
 '  </section>\n' +
 '\n' +
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">What we heard</span>\n' +
-'    <h2>Context &amp; Discovery</h2>\n' +
+'    <span class="section-tag">' + T.whatWeHeard + '</span>\n' +
+'    <h2>' + T.contextDiscovery + '</h2>\n' +
 '    <div class="card">\n' +
 '      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">' + GF('discovery').replace(/\n/g, '<br/>') + '</p>\n' +
 '    </div>\n' +
@@ -9927,8 +10036,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">Challenges identified</span>\n' +
-'    <h2>The three friction points<br/>we need to solve</h2>\n' +
+'    <span class="section-tag">' + T.challengesIdentified + '</span>\n' +
+'    <h2>' + T.frictionPoints + '</h2>\n' +
 '    <div class="pains">\n' +
 '      <div class="pain-card"><div class="pain-num">01</div><p>' + GF('pain1') + '</p></div>\n' +
 '      <div class="pain-card"><div class="pain-num">02</div><p>' + GF('pain2') + '</p></div>\n' +
@@ -9939,16 +10048,16 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">Declared goal</span>\n' +
-'    <h2>In their own words</h2>\n' +
+'    <span class="section-tag">' + T.declaredGoal + '</span>\n' +
+'    <h2>' + T.inTheirWords + '</h2>\n' +
 '    <blockquote>&ldquo;' + GF('goalQuote') + '&rdquo;</blockquote>\n' +
 '  </section>\n' +
 '\n' +
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">Root problem</span>\n' +
-'    <h2>The underlying diagnosis</h2>\n' +
+'    <span class="section-tag">' + T.rootProblem + '</span>\n' +
+'    <h2>' + T.underlyingDiagnosis + '</h2>\n' +
 '    <div class="card">\n' +
 '      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">' + GF('rootProblem').replace(/\n/g, '<br/>') + '</p>\n' +
 '    </div>\n' +
@@ -9957,8 +10066,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">Our proposal</span>\n' +
-'    <h2>What we recommend for ' + GF('company') + '</h2>\n' +
+'    <span class="section-tag">' + T.ourProposal + '</span>\n' +
+'    <h2>' + T.whatWeRecommend + ' ' + GF('company') + '</h2>\n' +
 '    <div class="option-card">\n' +
 '      <div class="option-letter">' + GF('option') + '</div>\n' +
 '      <h3>' + GF('optionName') + '</h3>\n' +
@@ -9973,8 +10082,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">Why this solution</span>\n' +
-'    <h2>Why it fits ' + GF('company') + '</h2>\n' +
+'    <span class="section-tag">' + T.whySolution + '</span>\n' +
+'    <h2>' + T.whyItFits + ' ' + GF('company') + '</h2>\n' +
 '    <div class="card teal">\n' +
 '      <p style="font-size:15px; color:var(--text); line-height:1.8;">' + GF('whySolution').replace(/\n/g, '<br/>') + '</p>\n' +
 '    </div>\n' +
@@ -9983,8 +10092,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <section>\n' +
-'    <span class="section-tag">Next steps</span>\n' +
-'    <h2>How we move forward</h2>\n' +
+'    <span class="section-tag">' + T.nextSteps + '</span>\n' +
+'    <h2>' + T.howWeMove + '</h2>\n' +
 '    <div class="steps">\n' +
 '      <div class="step"><div class="step-num">1</div><div><p>' + GF('nextStep1') + '</p></div></div>\n' +
 '      <div class="step"><div class="step-num">2</div><div><p>' + GF('nextStep2') + '</p></div></div>\n' +
@@ -9995,9 +10104,9 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 '  <div class="divider"></div>\n' +
 '\n' +
 '  <div class="cta-section">\n' +
-'    <h2>Ready to move forward?</h2>\n' +
-'    <p>Any questions? Let\'s talk \u2014 20 minutes is enough to align on everything.</p>\n' +
-'    <a href="' + GF('calendarLink') + '" target="_blank" class="cta-btn">Schedule a call \u2192</a>\n' +
+'    <h2>' + T.readyToMove + '</h2>\n' +
+'    <p>' + T.ctaSubtitle + '</p>\n' +
+'    <a href="' + GF('calendarLink') + '" target="_blank" class="cta-btn">' + T.scheduleCall + '</a>\n' +
 '  </div>\n' +
 '\n' +
 '  <div class="divider"></div>\n' +
@@ -10021,9 +10130,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
       // Email-compatible HTML (inline styles, no CSS vars, no external fonts)
       const generateEmailHTML = () => {
-        const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
-        const teal = '#5BBFB5';
-        const dark = '#1a1a2e';
+        const T = PROPOSAL_I18N[GF('language') || 'en'] || PROPOSAL_I18N['en'];
+        const today = new Date().toLocaleDateString(T.locale, { day:'numeric', month:'long', year:'numeric' });
+        const teal = GF('accentColor') || '#5BBFB5';
+        const dark = GF('darkColor') || '#1a1a2e';
         const muted = '#555';
         const border = '#e5e7eb';
         const featuresHTML = genForm.optionFeatures.filter(Boolean).map(f =>
@@ -10063,36 +10173,36 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       '<td style="padding-left:10px;font-size:18px;font-weight:800;color:#ffffff;">' + (GF('senderName')||'Your Company') + '</td>' +
       '</tr></table>') +
 '</td>' +
-'<td style="text-align:right;font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Commercial Proposal</td>' +
+'<td style="text-align:right;font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">' + T.footerLabel + '</td>' +
 '</tr></table></td></tr>' +
 
 // Hero
 '<tr><td style="padding:40px 40px 28px;background:' + dark + ';border-bottom:3px solid ' + teal + ';">' +
-'<p style="margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Built for</p>' +
+'<p style="margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.builtFor + '</p>' +
 '<h1 style="margin:0 0 12px;font-size:36px;font-weight:900;color:#ffffff;letter-spacing:-1px;">' + GF('company') + '</h1>' +
-'<p style="margin:0;font-size:13px;color:#9ca3af;">Prepared for <strong style="color:#e5e7eb;">' + GF('contact') + (GF('contactTitle') ? ', ' + GF('contactTitle') : '') + '</strong> &nbsp;·&nbsp; ' + today + '</p>' +
+'<p style="margin:0;font-size:13px;color:#9ca3af;">' + T.preparedFor + ' <strong style="color:#e5e7eb;">' + GF('contact') + (GF('contactTitle') ? ', ' + GF('contactTitle') : '') + '</strong> &nbsp;·&nbsp; ' + today + '</p>' +
 '</td></tr>' +
 
 // Section: Discovery
 '<tr><td style="padding:36px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">What we heard</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">Context &amp; Discovery</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.whatWeHeard + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.contextDiscovery + '</h2>' +
 '<div style="padding:20px 24px;background:#f9fafb;border:1px solid ' + border + ';border-radius:10px;">' +
 '<p style="margin:0;font-size:14px;color:#374151;line-height:1.8;">' + GF('discovery').replace(/\n/g,'<br>') + '</p>' +
 '</div></td></tr>' +
 
 // Section: Pain points
 '<tr><td style="padding:32px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Challenges identified</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">The friction points we need to solve</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.challengesIdentified + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.frictionPoints + '</h2>' +
 '<table cellpadding="0" cellspacing="0" style="width:100%;"><tr>' + painCards + '</tr></table>' +
 '</td></tr>' +
 
 // Section: Quote
 (GF('goalQuote') ? (
 '<tr><td style="padding:32px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Declared goal</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">In their own words</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.declaredGoal + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.inTheirWords + '</h2>' +
 '<blockquote style="margin:0;padding:20px 24px;background:#e6f7f6;border-left:4px solid ' + teal + ';border-radius:0 10px 10px 0;">' +
 '<p style="margin:0;font-size:17px;font-style:italic;color:' + dark + ';line-height:1.7;">&ldquo;' + GF('goalQuote') + '&rdquo;</p>' +
 '</blockquote></td></tr>'
@@ -10101,8 +10211,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 // Section: Root problem
 (GF('rootProblem') ? (
 '<tr><td style="padding:32px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Root problem</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">The underlying diagnosis</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.rootProblem + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.underlyingDiagnosis + '</h2>' +
 '<div style="padding:20px 24px;background:#f9fafb;border:1px solid ' + border + ';border-radius:10px;">' +
 '<p style="margin:0;font-size:14px;color:#374151;line-height:1.8;">' + GF('rootProblem').replace(/\n/g,'<br>') + '</p>' +
 '</div></td></tr>'
@@ -10110,8 +10220,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
 // Section: Solution
 '<tr><td style="padding:32px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Our proposal</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">What we recommend for ' + GF('company') + '</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.ourProposal + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.whatWeRecommend + ' ' + GF('company') + '</h2>' +
 '<div style="padding:28px;background:#f0faf9;border:1px solid #b2e4df;border-radius:12px;">' +
 '<div style="width:44px;height:44px;background:#e6f7f6;border:1px solid #b2e4df;border-radius:10px;text-align:center;line-height:44px;font-size:20px;font-weight:900;color:' + teal + ';margin-bottom:14px;">' + GF('option') + '</div>' +
 '<h3 style="margin:0 0 4px;font-size:20px;font-weight:800;color:' + dark + ';">' + GF('optionName') + '</h3>' +
@@ -10123,8 +10233,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 // Section: Why this solution
 (GF('whySolution') ? (
 '<tr><td style="padding:32px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Why this solution</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">Why it fits ' + GF('company') + '</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.whySolution + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.whyItFits + ' ' + GF('company') + '</h2>' +
 '<div style="padding:20px 24px;background:#e6f7f6;border:1px solid #b2e4df;border-radius:10px;">' +
 '<p style="margin:0;font-size:14px;color:' + dark + ';line-height:1.8;">' + GF('whySolution').replace(/\n/g,'<br>') + '</p>' +
 '</div></td></tr>'
@@ -10132,16 +10242,16 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
 // Section: Next steps
 '<tr><td style="padding:32px 40px 0;">' +
-'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">Next steps</p>' +
-'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">How we move forward</h2>' +
+'<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + teal + ';">' + T.nextSteps + '</p>' +
+'<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.howWeMove + '</h2>' +
 '<table cellpadding="0" cellspacing="0" style="width:100%;">' + nextSteps + '</table>' +
 '</td></tr>' +
 
 // CTA
 '<tr><td style="padding:40px;text-align:center;background:#f9fafb;margin-top:32px;">' +
-'<h2 style="margin:0 0 12px;font-size:22px;font-weight:800;color:' + dark + ';">Ready to move forward?</h2>' +
-'<p style="margin:0 0 24px;font-size:14px;color:' + muted + ';">20 minutes is enough to align on everything.</p>' +
-'<a href="' + GF('calendarLink') + '" style="display:inline-block;padding:14px 40px;background:' + teal + ';color:' + dark + ';font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;">Schedule a call &rarr;</a>' +
+'<h2 style="margin:0 0 12px;font-size:22px;font-weight:800;color:' + dark + ';">' + T.readyToMove + '</h2>' +
+'<p style="margin:0 0 24px;font-size:14px;color:' + muted + ';">' + T.ctaSubtitle + '</p>' +
+'<a href="' + GF('calendarLink') + '" style="display:inline-block;padding:14px 40px;background:' + teal + ';color:' + dark + ';font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;">' + T.scheduleCall + '</a>' +
 '</td></tr>' +
 
 // Footer
@@ -10342,7 +10452,23 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                           <div><label style={lStyle}>Contact name *</label><input style={iStyle} value={GF('contact')} onChange={e=>setGF('contact',e.target.value)} placeholder="Jorge Hidalgo" /></div>
                           <div><label style={lStyle}>Title / Role</label><input style={iStyle} value={GF('contactTitle')} onChange={e=>setGF('contactTitle',e.target.value)} placeholder="CEO & Partner" /></div>
                         </div>
-                        <div><label style={lStyle}>Industry</label><input style={iStyle} value={GF('industry')} onChange={e=>setGF('industry',e.target.value)} placeholder="ERP consulting" /></div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                          <div><label style={lStyle}>Industry</label><input style={iStyle} value={GF('industry')} onChange={e=>setGF('industry',e.target.value)} placeholder="ERP consulting" /></div>
+                          <div>
+                            <label style={lStyle}>Proposal language</label>
+                            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                              {[['en','🇬🇧 English'],['es','🇪🇸 Español'],['pt','🇧🇷 Português'],['fr','🇫🇷 Français']].map(([code,label]) => (
+                                <button key={code} onClick={() => setGF('language', code)}
+                                  style={{ padding:'6px 12px', borderRadius:6, border:'1px solid', fontSize:12, cursor:'pointer', fontWeight: GF('language')===code ? 700 : 400,
+                                    borderColor: GF('language')===code ? 'var(--globant-accent)' : 'var(--globant-border)',
+                                    background: GF('language')===code ? 'rgba(91,191,181,0.12)' : 'var(--globant-card)',
+                                    color: GF('language')===code ? 'var(--globant-accent)' : 'var(--globant-muted)' }}>
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                         {(GF('senderName') || GF('senderLogo')) && (
                           <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.2)', borderRadius:8 }}>
                             {GF('senderLogo') && <img src={GF('senderLogo')} alt="" style={{ height:20, maxWidth:80, objectFit:'contain' }} onError={e=>e.target.style.display='none'} />}
@@ -11963,6 +12089,8 @@ Return ONLY valid JSON:
           senderEmail: b.senderEmail || CURRENT_USER?.email || '',
           senderLogo:  b.senderLogo  || CLIENT_CONFIG.logo  || '',
           calendarLink: b.calendarLink || '',
+          accentColor: b.accentColor || '#5BBFB5',
+          darkColor:   b.darkColor   || '#0D0D1A',
         };
       });
       const [brandingSaved, setBrandingSaved] = useState(false);
@@ -12049,9 +12177,9 @@ Return ONLY valid JSON:
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12, flexShrink: 0 }}>
               {[
                 { key: 'profile', label: '🤖 AI Profile' },
-                { key: 'workspace', label: '🏢 Workspace' },
                 { key: 'proposals', label: '🏷️ Company Info' },
                 { key: 'integrations', label: '🔌 Integrations' },
+                { key: 'workspace', label: '🏢 Workspace' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
                   background: tab === t.key ? 'rgba(91,191,181,0.15)' : 'none',
@@ -12115,6 +12243,76 @@ Return ONLY valid JSON:
                           🗑 Remove logo
                         </button>
                       )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Color palette */}
+                <div>
+                  <label style={labelStyle}>Proposal color palette</label>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {/* Presets */}
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                      {[
+                        { label:'Teal',   accent:'#5BBFB5', dark:'#0D0D1A' },
+                        { label:'Indigo', accent:'#6366F1', dark:'#0D0D1A' },
+                        { label:'Violet', accent:'#8B5CF6', dark:'#0D0D1A' },
+                        { label:'Blue',   accent:'#3B82F6', dark:'#0D0D1A' },
+                        { label:'Cyan',   accent:'#06B6D4', dark:'#0D0D1A' },
+                        { label:'Emerald',accent:'#10B981', dark:'#0D0D1A' },
+                        { label:'Orange', accent:'#F97316', dark:'#0D0D1A' },
+                        { label:'Rose',   accent:'#F43F5E', dark:'#0D0D1A' },
+                        { label:'Slate',  accent:'#94A3B8', dark:'#0F172A' },
+                      ].map(preset => {
+                        const isActive = branding.accentColor === preset.accent && branding.darkColor === preset.dark;
+                        return (
+                          <button key={preset.label} onClick={() => setBranding(p=>({...p, accentColor: preset.accent, darkColor: preset.dark}))}
+                            title={preset.label}
+                            style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'6px 8px', borderRadius:8, border:'1px solid', cursor:'pointer',
+                              borderColor: isActive ? preset.accent : 'var(--globant-border)',
+                              background: isActive ? 'rgba(255,255,255,0.06)' : 'var(--globant-darker)',
+                            }}>
+                            <div style={{ width:28, height:28, borderRadius:6, background:preset.accent }} />
+                            <span style={{ fontSize:9, color: isActive ? preset.accent : 'var(--globant-muted)', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.3px' }}>{preset.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Custom pickers */}
+                    <div style={{ display:'flex', gap:10 }}>
+                      <div style={{ flex:1 }}>
+                        <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>ACCENT COLOR</label>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <input type="color" value={branding.accentColor || '#5BBFB5'}
+                            onChange={e => setBranding(p=>({...p, accentColor: e.target.value}))}
+                            style={{ width:36, height:36, borderRadius:6, border:'none', cursor:'pointer', padding:2, background:'var(--globant-darker)' }} />
+                          <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:12, flex:1 }}
+                            value={branding.accentColor || '#5BBFB5'}
+                            onChange={e => setBranding(p=>({...p, accentColor: e.target.value}))}
+                            placeholder="#5BBFB5" />
+                        </div>
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>DARK / BACKGROUND</label>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <input type="color" value={branding.darkColor || '#0D0D1A'}
+                            onChange={e => setBranding(p=>({...p, darkColor: e.target.value}))}
+                            style={{ width:36, height:36, borderRadius:6, border:'none', cursor:'pointer', padding:2, background:'var(--globant-darker)' }} />
+                          <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:12, flex:1 }}
+                            value={branding.darkColor || '#0D0D1A'}
+                            onChange={e => setBranding(p=>({...p, darkColor: e.target.value}))}
+                            placeholder="#0D0D1A" />
+                        </div>
+                      </div>
+                    </div>
+                    {/* Live preview strip */}
+                    <div style={{ borderRadius:8, overflow:'hidden', border:'1px solid var(--globant-border)', display:'flex', height:36 }}>
+                      <div style={{ flex:2, background: branding.darkColor || '#0D0D1A', display:'flex', alignItems:'center', paddingLeft:14 }}>
+                        <span style={{ fontSize:12, fontWeight:800, color: branding.accentColor || '#5BBFB5' }}>Preview</span>
+                      </div>
+                      <div style={{ flex:1, background: branding.accentColor || '#5BBFB5', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <span style={{ fontSize:11, fontWeight:800, color: branding.darkColor || '#0D0D1A' }}>CTA</span>
+                      </div>
                     </div>
                   </div>
                 </div>
