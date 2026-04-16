@@ -8937,6 +8937,28 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [execSummary, setExecSummary]         = useState('');
       const [execSummaryLoading, setExecSummaryLoading] = useState(false);
       const [execSummarySaving, setExecSummarySaving]   = useState(false);
+      // Proposal Generator wizard
+      const [showGenerator, setShowGenerator] = useState(false);
+      const [genStep, setGenStep]             = useState(1);
+      const DEFAULT_GEN = {
+        slug:'', company:'', contact:'', contactTitle:'', industry:'',
+        discovery:'', pain1:'', pain2:'', pain3:'', goalQuote:'', rootProblem:'',
+        option:'B',
+        optionName:'Setup + Advisory',
+        optionSubtitle:'Platform + Ongoing support',
+        optionDesc:'Everything in option A, plus monthly advisory sessions to optimize messages, review metrics and continuously improve the system.',
+        optionFeatures:['Full system setup','Access to the Oike platform','Monthly optimization session','Metrics review & message refinement','Ongoing support via WhatsApp'],
+        whySolution:'', nextStep1:'Discovery call to align on ICP and target accounts', nextStep2:'We build the economic proposal together', nextStep3:'Kick-off and system setup — week 1',
+        calendarLink:'https://calendar.app.google/j71NmNvCfgU9QCMZ6',
+      };
+      const [genForm, setGenForm] = useState(DEFAULT_GEN);
+      const GF = (k) => genForm[k] || '';
+      const setGF = (k, v) => setGenForm(p => ({...p, [k]: v}));
+      const OPTION_PRESETS = {
+        A: { optionName:'Setup + Autonomy', optionSubtitle:'Platform only', optionDesc:'We set up the full system — ICP, accounts, stakeholders, sequences — and your team operates independently from month 2.', optionFeatures:['Full system setup','Access to the Oike platform','Team training (2 sessions)','Full operational independence'] },
+        B: { optionName:'Setup + Advisory', optionSubtitle:'Platform + Ongoing support', optionDesc:'Everything in option A, plus monthly advisory sessions to optimize messages, review metrics and continuously improve the system.', optionFeatures:['Full system setup','Access to the Oike platform','Monthly optimization session','Metrics review & message refinement','Ongoing support via WhatsApp'] },
+        C: { optionName:'Setup + I execute', optionSubtitle:'Full-service', optionDesc:'Full setup + monthly retainer where I run prospecting continuously as an external BDR embedded in your team.', optionFeatures:['Full system setup','Daily outreach execution','Pipeline management in Oike','Qualified opportunity handoff','Weekly activity report'] },
+      };
 
       const STATUSES = ['Draft','Presented','Under Review','Accepted','Rejected','Expired'];
       const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
@@ -9718,11 +9740,342 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               <h1>Presentations</h1>
               <p>Track commercial presentations — linked to accounts, stakeholders and solutions</p>
             </div>
-            <button className="action-btn btn-primary" style={{ fontSize:12, padding:'8px 16px', marginTop:4 }}
-              onClick={() => { setShowNew(true); resetForm(); }}>
-              ➕ New Presentation
-            </button>
+            <div style={{ display:'flex', gap:10, marginTop:4 }}>
+              <button className="action-btn btn-ghost" style={{ fontSize:12, padding:'8px 16px' }}
+                onClick={() => { setGenForm(DEFAULT_GEN); setGenStep(1); setShowGenerator(true); }}>
+                🎨 Generate Proposal
+              </button>
+              <button className="action-btn btn-primary" style={{ fontSize:12, padding:'8px 16px' }}
+                onClick={() => { setShowNew(true); resetForm(); }}>
+                ➕ New Presentation
+              </button>
+            </div>
           </div>
+
+          {/* ── PROPOSAL GENERATOR WIZARD ── */}
+          {showGenerator && (() => {
+            const iStyle = { width:'100%', padding:'9px 12px', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:7, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box', fontFamily:'inherit' };
+            const lStyle = { fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:5, display:'block' };
+            const taStyle = { ...iStyle, minHeight:80, resize:'vertical', lineHeight:1.5 };
+
+            const generateHTML = () => {
+              const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+              const featuresHTML = genForm.optionFeatures.filter(Boolean).map(f =>
+                `<li>${f}</li>`
+              ).join('\n              ');
+              return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oike — ${GF('company')}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    :root { --teal:#5BBFB5; --dark:#0D0D1A; --card:#13131F; --card2:#1A1A2E; --border:rgba(255,255,255,0.07); --text:#E8E8F0; --muted:#7878A0; --teal-dim:rgba(91,191,181,0.1); --teal-border:rgba(91,191,181,0.25); }
+    body { font-family:'Inter',sans-serif; background:var(--dark); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+    nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 48px; background:rgba(13,13,26,0.85); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
+    .logo { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:800; color:var(--text); text-decoration:none; }
+    .logo-icon { width:30px; height:30px; background:var(--teal); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; color:#0D0D1A; }
+    .nav-cta { padding:10px 22px; background:var(--teal); color:#0D0D1A; font-weight:700; font-size:13px; border-radius:8px; text-decoration:none; }
+    section { padding:80px 48px; max-width:960px; margin:0 auto; }
+    .hero { padding-top:140px; padding-bottom:60px; }
+    .hero-tag { display:inline-flex; align-items:center; gap:8px; padding:5px 14px; background:var(--teal-dim); border:1px solid var(--teal-border); border-radius:100px; font-size:11px; font-weight:700; color:var(--teal); margin-bottom:28px; text-transform:uppercase; letter-spacing:0.5px; }
+    .hero h1 { font-size:clamp(36px,5vw,62px); font-weight:900; line-height:1.1; letter-spacing:-2px; margin-bottom:20px; }
+    .hero h1 span { background:linear-gradient(135deg,var(--teal) 0%,#a8edea 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    .hero-meta { font-size:14px; color:var(--muted); }
+    .hero-meta strong { color:var(--text); }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:36px; margin-bottom:16px; }
+    .card.teal { background:var(--teal-dim); border-color:var(--teal-border); }
+    .section-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--teal); margin-bottom:12px; display:block; }
+    h2 { font-size:clamp(22px,3vw,34px); font-weight:800; letter-spacing:-0.8px; margin-bottom:20px; line-height:1.2; }
+    .pains { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    .pain-card { padding:24px; background:rgba(248,113,113,0.05); border:1px solid rgba(248,113,113,0.15); border-radius:12px; }
+    .pain-num { font-size:28px; font-weight:900; color:rgba(248,113,113,0.4); margin-bottom:8px; }
+    .pain-card p { font-size:14px; color:var(--text); line-height:1.6; }
+    blockquote { padding:28px 32px; background:var(--teal-dim); border-left:4px solid var(--teal); border-radius:0 12px 12px 0; font-size:18px; font-style:italic; color:var(--text); line-height:1.7; margin:0; }
+    .features { list-style:none; display:flex; flex-direction:column; gap:10px; }
+    .features li { display:flex; align-items:flex-start; gap:10px; font-size:14px; }
+    .features li::before { content:'✓'; color:var(--teal); font-weight:700; flex-shrink:0; margin-top:2px; }
+    .option-card { padding:40px; background:var(--card2); border:1px solid var(--teal-border); border-radius:20px; box-shadow:0 0 40px rgba(91,191,181,0.08); }
+    .option-letter { width:52px; height:52px; border-radius:14px; background:var(--teal-dim); border:1px solid var(--teal-border); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:900; color:var(--teal); margin-bottom:20px; }
+    .option-card h3 { font-size:24px; font-weight:800; letter-spacing:-0.5px; margin-bottom:6px; }
+    .option-subtitle { font-size:12px; font-weight:600; color:var(--teal); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:18px; }
+    .option-card p { font-size:15px; color:var(--muted); line-height:1.7; margin-bottom:24px; }
+    .steps { display:flex; flex-direction:column; gap:14px; }
+    .step { display:flex; align-items:flex-start; gap:16px; padding:18px 20px; background:var(--card); border:1px solid var(--border); border-radius:12px; }
+    .step-num { width:30px; height:30px; border-radius:50%; background:var(--teal-dim); border:1px solid var(--teal-border); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--teal); flex-shrink:0; }
+    .step p { font-size:14px; color:var(--text); line-height:1.5; margin:4px 0 0; }
+    .cta-section { text-align:center; padding:80px 48px 120px; }
+    .cta-section h2 { font-size:clamp(26px,4vw,44px); font-weight:900; letter-spacing:-1px; margin-bottom:16px; }
+    .cta-section p { font-size:15px; color:var(--muted); max-width:460px; margin:0 auto 36px; }
+    .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:16px 44px; background:var(--teal); color:#0D0D1A; font-weight:800; font-size:15px; border-radius:12px; text-decoration:none; }
+    .divider { height:1px; background:var(--border); max-width:960px; margin:0 auto; }
+    footer { text-align:center; padding:28px 48px; font-size:13px; color:var(--muted); }
+    @media(max-width:700px){ nav{padding:14px 20px;} section{padding:60px 20px;} .pains{grid-template-columns:1fr;} .hero{padding-top:110px;} }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="#" class="logo"><div class="logo-icon">O</div> Oike</a>
+    <a href="${GF('calendarLink')}" target="_blank" class="nav-cta">Schedule a call →</a>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-tag">⚡ Commercial Proposal</div>
+    <h1>Built for <span>${GF('company')}</span></h1>
+    <p class="hero-meta">Prepared for <strong>${GF('contact')}${GF('contactTitle') ? ', '+GF('contactTitle') : ''}</strong>&nbsp;·&nbsp;${today}</p>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">What we heard</span>
+    <h2>Context & Discovery</h2>
+    <div class="card">
+      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">${GF('discovery').replace(/\n/g,'<br/>')}</p>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">Challenges identified</span>
+    <h2>The three friction points<br/>we need to solve</h2>
+    <div class="pains">
+      <div class="pain-card"><div class="pain-num">01</div><p>${GF('pain1')}</p></div>
+      <div class="pain-card"><div class="pain-num">02</div><p>${GF('pain2')}</p></div>
+      <div class="pain-card"><div class="pain-num">03</div><p>${GF('pain3')}</p></div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">Declared goal</span>
+    <h2>In their own words</h2>
+    <blockquote>"${GF('goalQuote')}"</blockquote>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">Root problem</span>
+    <h2>The underlying diagnosis</h2>
+    <div class="card">
+      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">${GF('rootProblem').replace(/\n/g,'<br/>')}</p>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">Our proposal</span>
+    <h2>What we recommend for ${GF('company')}</h2>
+    <div class="option-card">
+      <div class="option-letter">${GF('option')}</div>
+      <h3>${GF('optionName')}</h3>
+      <div class="option-subtitle">${GF('optionSubtitle')}</div>
+      <p>${GF('optionDesc')}</p>
+      <ul class="features">
+              ${featuresHTML}
+      </ul>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">Why this solution</span>
+    <h2>Why it fits ${GF('company')}</h2>
+    <div class="card teal">
+      <p style="font-size:15px; color:var(--text); line-height:1.8;">${GF('whySolution').replace(/\n/g,'<br/>')}</p>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section>
+    <span class="section-tag">Next steps</span>
+    <h2>How we move forward</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div><p>${GF('nextStep1')}</p></div></div>
+      <div class="step"><div class="step-num">2</div><div><p>${GF('nextStep2')}</p></div></div>
+      <div class="step"><div class="step-num">3</div><div><p>${GF('nextStep3')}</p></div></div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <div class="cta-section">
+    <h2>Ready to move forward?</h2>
+    <p>Any questions? Let's talk — 20 minutes is enough to align on everything.</p>
+    <a href="${GF('calendarLink')}" target="_blank" class="cta-btn">Schedule a call →</a>
+  </div>
+
+  <div class="divider"></div>
+  <footer><strong style="color:var(--text);">Oike</strong> — Sales Intelligence Platform &nbsp;·&nbsp; Ale Cadario &nbsp;·&nbsp;<a href="mailto:ale@alecadario.com" style="color:var(--teal);text-decoration:none;">ale@alecadario.com</a></footer>
+</body>
+</html>`;
+            };
+
+            const downloadProposal = () => {
+              const html = generateHTML();
+              const blob = new Blob([html], { type: 'text/html' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = (GF('slug') || 'proposal') + '.html';
+              a.click();
+              URL.revokeObjectURL(url);
+            };
+
+            const steps = ['Client', 'Discovery', 'Solution', 'Preview'];
+            return (
+              <div className="modal-overlay" onClick={() => setShowGenerator(false)}>
+                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:780, width:'95vw', maxHeight:'92vh', display:'flex', flexDirection:'column', padding:0, overflow:'hidden' }}>
+
+                  {/* Header */}
+                  <div style={{ padding:'20px 28px', borderBottom:'1px solid var(--globant-border)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+                    <div>
+                      <div style={{ fontSize:16, fontWeight:800, color:'var(--globant-text)' }}>🎨 Proposal Generator</div>
+                      <div style={{ fontSize:12, color:'var(--globant-muted)', marginTop:2 }}>Create a client-ready HTML proposal</div>
+                    </div>
+                    <button onClick={() => setShowGenerator(false)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:20 }}>✕</button>
+                  </div>
+
+                  {/* Step indicator */}
+                  <div style={{ padding:'14px 28px', borderBottom:'1px solid var(--globant-border)', display:'flex', gap:8, flexShrink:0 }}>
+                    {steps.map((s, i) => (
+                      <div key={s} onClick={() => i < genStep - 1 && setGenStep(i+1)} style={{ display:'flex', alignItems:'center', gap:6, cursor: i < genStep - 1 ? 'pointer' : 'default' }}>
+                        <div style={{ width:24, height:24, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, background: genStep > i+1 ? 'var(--globant-green)' : genStep === i+1 ? 'var(--globant-accent)' : 'var(--globant-card)', color: genStep >= i+1 ? '#0d1117' : 'var(--globant-muted)', border: genStep === i+1 ? 'none' : '1px solid var(--globant-border)' }}>
+                          {genStep > i+1 ? '✓' : i+1}
+                        </div>
+                        <span style={{ fontSize:12, fontWeight:600, color: genStep === i+1 ? 'var(--globant-text)' : 'var(--globant-muted)' }}>{s}</span>
+                        {i < steps.length - 1 && <span style={{ color:'var(--globant-border)', marginLeft:4 }}>›</span>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Body */}
+                  <div style={{ flex:1, overflowY:'auto', padding:'24px 28px' }}>
+
+                    {/* STEP 1 — CLIENT */}
+                    {genStep === 1 && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Basic info about the prospect. This appears in the hero of the proposal.</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                          <div><label style={lStyle}>Company name *</label><input style={iStyle} value={GF('company')} onChange={e=>setGF('company',e.target.value)} placeholder="Acme Corp" autoFocus /></div>
+                          <div><label style={lStyle}>URL slug *</label><input style={iStyle} value={GF('slug')} onChange={e=>setGF('slug',e.target.value.toLowerCase().replace(/\s+/g,'-'))} placeholder="acme-corp" /><div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>oike.app/{GF('slug')||'slug'}</div></div>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                          <div><label style={lStyle}>Contact name *</label><input style={iStyle} value={GF('contact')} onChange={e=>setGF('contact',e.target.value)} placeholder="Jorge Hidalgo" /></div>
+                          <div><label style={lStyle}>Title / Role</label><input style={iStyle} value={GF('contactTitle')} onChange={e=>setGF('contactTitle',e.target.value)} placeholder="CEO & Partner" /></div>
+                        </div>
+                        <div><label style={lStyle}>Industry</label><input style={iStyle} value={GF('industry')} onChange={e=>setGF('industry',e.target.value)} placeholder="ERP consulting" /></div>
+                      </div>
+                    )}
+
+                    {/* STEP 2 — DISCOVERY */}
+                    {genStep === 2 && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Everything you learned in the discovery call. The more specific, the more personalized the proposal looks.</div>
+                        <div><label style={lStyle}>What we heard (discovery context)</label><textarea style={{...taStyle, minHeight:100}} value={GF('discovery')} onChange={e=>setGF('discovery',e.target.value)} placeholder="In our conversation, we learned that Appex is the #1 ODOO partner in Bolivia — they went from #10 to #1 in 2 years. Today they manage 40+ prospects with only 2 commercial people and 100% inbound..." /></div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+                          <div><label style={lStyle}>Pain point 1</label><textarea style={{...taStyle, minHeight:70}} value={GF('pain1')} onChange={e=>setGF('pain1',e.target.value)} placeholder="No outbound prospecting system — all leads come from inbound only" /></div>
+                          <div><label style={lStyle}>Pain point 2</label><textarea style={{...taStyle, minHeight:70}} value={GF('pain2')} onChange={e=>setGF('pain2',e.target.value)} placeholder="Commercial team is too small to manage the full pipeline manually" /></div>
+                          <div><label style={lStyle}>Pain point 3</label><textarea style={{...taStyle, minHeight:70}} value={GF('pain3')} onChange={e=>setGF('pain3',e.target.value)} placeholder="Entering new markets (Mexico, DR) requires proactive outreach they don't have capacity for" /></div>
+                        </div>
+                        <div><label style={lStyle}>Client's declared goal (their words)</label><input style={iStyle} value={GF('goalQuote')} onChange={e=>setGF('goalQuote',e.target.value)} placeholder="We want to attack Mexico and the DR without hiring more people" /></div>
+                        <div><label style={lStyle}>Root problem / diagnosis</label><textarea style={{...taStyle, minHeight:90}} value={GF('rootProblem')} onChange={e=>setGF('rootProblem',e.target.value)} placeholder="They've grown to #1 by being reactive. The next stage of growth requires being proactive — a system that generates pipeline in new markets without depending on referrals or ODOO's platform." /></div>
+                      </div>
+                    )}
+
+                    {/* STEP 3 — SOLUTION */}
+                    {genStep === 3 && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Start from a template and customize freely. Every field is editable.</div>
+
+                        {/* Option selector */}
+                        <div>
+                          <label style={lStyle}>Starting template</label>
+                          <div style={{ display:'flex', gap:8 }}>
+                            {['A','B','C'].map(opt => (
+                              <button key={opt} onClick={() => setGenForm(p => ({...p, option:opt, ...OPTION_PRESETS[opt]}))}
+                                style={{ flex:1, padding:'10px', borderRadius:8, border:'1px solid', borderColor: GF('option')===opt ? 'var(--globant-accent)' : 'var(--globant-border)', background: GF('option')===opt ? 'rgba(91,191,181,0.1)' : 'var(--globant-card)', color: GF('option')===opt ? 'var(--globant-accent)' : 'var(--globant-muted)', fontWeight:700, cursor:'pointer', fontSize:13 }}>
+                                {opt} — {OPTION_PRESETS[opt].optionName}
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:6 }}>Selecting a template overwrites the fields below — customize them after.</div>
+                        </div>
+
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                          <div><label style={lStyle}>Option name</label><input style={iStyle} value={GF('optionName')} onChange={e=>setGF('optionName',e.target.value)} /></div>
+                          <div><label style={lStyle}>Subtitle / type</label><input style={iStyle} value={GF('optionSubtitle')} onChange={e=>setGF('optionSubtitle',e.target.value)} /></div>
+                        </div>
+                        <div><label style={lStyle}>Description</label><textarea style={taStyle} value={GF('optionDesc')} onChange={e=>setGF('optionDesc',e.target.value)} /></div>
+                        <div>
+                          <label style={lStyle}>Features (one per line)</label>
+                          <textarea style={{...taStyle, minHeight:110}} value={genForm.optionFeatures.join('\n')} onChange={e=>setGF('optionFeatures', e.target.value.split('\n'))} />
+                        </div>
+                        <div><label style={lStyle}>Why this solution fits this client</label><textarea style={{...taStyle, minHeight:90}} value={GF('whySolution')} onChange={e=>setGF('whySolution',e.target.value)} placeholder="Appex needs to attack new markets without hiring. Option B gives them the system + the ongoing guidance to operate it as a team, without needing to fully delegate execution." /></div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+                          <div><label style={lStyle}>Next step 1</label><input style={iStyle} value={GF('nextStep1')} onChange={e=>setGF('nextStep1',e.target.value)} /></div>
+                          <div><label style={lStyle}>Next step 2</label><input style={iStyle} value={GF('nextStep2')} onChange={e=>setGF('nextStep2',e.target.value)} /></div>
+                          <div><label style={lStyle}>Next step 3</label><input style={iStyle} value={GF('nextStep3')} onChange={e=>setGF('nextStep3',e.target.value)} /></div>
+                        </div>
+                        <div><label style={lStyle}>Calendar link</label><input style={iStyle} value={GF('calendarLink')} onChange={e=>setGF('calendarLink',e.target.value)} /></div>
+                      </div>
+                    )}
+
+                    {/* STEP 4 — PREVIEW */}
+                    {genStep === 4 && (
+                      <div>
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>Your proposal is ready. Download it and push it to GitHub as <strong style={{ color:'var(--globant-text)' }}>public/{GF('slug')||'proposal'}.html</strong> — it'll be live at <strong style={{ color:'var(--globant-accent)' }}>oike.app/{GF('slug')||'slug'}</strong>.</div>
+                        <div style={{ display:'flex', gap:10, marginBottom:20 }}>
+                          <button onClick={downloadProposal} style={{ flex:1, padding:'14px', borderRadius:10, background:'var(--globant-accent)', border:'none', color:'#0d1117', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                            ⬇️ Download {GF('slug')||'proposal'}.html
+                          </button>
+                          <button onClick={() => { const w=window.open(); w.document.write(generateHTML()); w.document.close(); }} style={{ padding:'14px 20px', borderRadius:10, background:'rgba(91,191,181,0.1)', border:'1px solid var(--globant-border)', color:'var(--globant-text)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                            👁 Preview
+                          </button>
+                        </div>
+                        <div style={{ padding:'20px 24px', background:'var(--globant-card)', borderRadius:10, border:'1px solid var(--globant-border)' }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14 }}>Summary</div>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, fontSize:13 }}>
+                            {[['Company', GF('company')], ['Contact', GF('contact') + (GF('contactTitle') ? `, ${GF('contactTitle')}` : '')], ['URL', `oike.app/${GF('slug')}`], ['Option', `${GF('option')} — ${GF('optionName')}`]].map(([k,v]) => (
+                              <div key={k} style={{ display:'flex', gap:8 }}>
+                                <span style={{ color:'var(--globant-muted)', minWidth:60 }}>{k}</span>
+                                <span style={{ color:'var(--globant-text)', fontWeight:500 }}>{v || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer nav */}
+                  <div style={{ padding:'16px 28px', borderTop:'1px solid var(--globant-border)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+                    <button onClick={() => genStep > 1 ? setGenStep(s=>s-1) : setShowGenerator(false)} style={{ padding:'9px 20px', borderRadius:8, border:'1px solid var(--globant-border)', background:'transparent', color:'var(--globant-muted)', cursor:'pointer', fontSize:13 }}>
+                      {genStep === 1 ? 'Cancel' : '← Back'}
+                    </button>
+                    <div style={{ fontSize:12, color:'var(--globant-muted)' }}>Step {genStep} of {steps.length}</div>
+                    {genStep < steps.length ? (
+                      <button onClick={() => setGenStep(s=>s+1)} style={{ padding:'9px 24px', borderRadius:8, border:'none', background:'var(--globant-accent)', color:'#0d1117', fontWeight:700, cursor:'pointer', fontSize:13 }}>
+                        Next →
+                      </button>
+                    ) : (
+                      <button onClick={downloadProposal} style={{ padding:'9px 24px', borderRadius:8, border:'none', background:'var(--globant-accent)', color:'#0d1117', fontWeight:700, cursor:'pointer', fontSize:13 }}>
+                        ⬇️ Download
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* New Proposal Modal */}
           {showNew && (
