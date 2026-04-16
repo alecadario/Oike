@@ -8955,9 +8955,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [showGenerator, setShowGenerator] = useState(false);
       const [genStep, setGenStep]             = useState(1);
       const [genCopied, setGenCopied]         = useState(false);
+      const [genGmail, setGenGmail]           = useState(false);
+      const [genAccSearch, setGenAccSearch]   = useState('');
+      const [genAccOpen, setGenAccOpen]       = useState(false);
+      const [genStkOpen, setGenStkOpen]       = useState(false);
+      const [genPolishing, setGenPolishing]   = useState(false);
       const _b = loadBranding();
       const DEFAULT_GEN = {
         slug:'', company:'', contact:'', contactTitle:'', industry:'',
+        accountId:'', stakeholderId:'',
         senderName:  _b.senderName  || CLIENT_CONFIG.name || '',
         senderLogo:  _b.senderLogo  || CLIENT_CONFIG.logo || '',
         senderEmail: _b.senderEmail || CURRENT_USER?.email || '',
@@ -8973,6 +8979,74 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [genForm, setGenForm] = useState(DEFAULT_GEN);
       const GF = (k) => genForm[k] || '';
       const setGF = (k, v) => setGenForm(p => ({...p, [k]: v}));
+
+      // AI Polish for proposal generator — rewrites discovery fields in better English
+      const polishDiscovery = async () => {
+        if (genPolishing) return;
+        setGenPolishing(true);
+        try {
+          const context = [
+            genForm.discovery ? 'Discovery context: ' + genForm.discovery : '',
+            genForm.pain1     ? 'Pain 1: '           + genForm.pain1     : '',
+            genForm.pain2     ? 'Pain 2: '           + genForm.pain2     : '',
+            genForm.pain3     ? 'Pain 3: '           + genForm.pain3     : '',
+            genForm.goalQuote ? 'Client goal quote: '+ genForm.goalQuote : '',
+            genForm.rootProblem? 'Root problem: '    + genForm.rootProblem: '',
+          ].filter(Boolean).join('\n');
+          if (!context.trim()) { setGenPolishing(false); return; }
+          const prompt = 'You are a senior B2B sales consultant writing commercial proposals.\n' +
+            'Rewrite the following raw discovery notes into sharp, professional English suitable for a commercial proposal.\n' +
+            'Keep each field short, punchy, and specific. Do not add fluff. Respond ONLY with a JSON object with these keys:\n' +
+            '{"discovery":"...","pain1":"...","pain2":"...","pain3":"...","goalQuote":"...","rootProblem":"..."}\n\n' +
+            'Raw notes:\n' + context;
+          const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 900 });
+          const jsonMatch = raw.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            setGenForm(p => ({
+              ...p,
+              discovery:   parsed.discovery   || p.discovery,
+              pain1:       parsed.pain1        || p.pain1,
+              pain2:       parsed.pain2        || p.pain2,
+              pain3:       parsed.pain3        || p.pain3,
+              goalQuote:   parsed.goalQuote    || p.goalQuote,
+              rootProblem: parsed.rootProblem  || p.rootProblem,
+            }));
+          }
+        } catch(e) { console.error('[polishDiscovery]', e); }
+        setGenPolishing(false);
+      };
+
+      const polishSolution = async () => {
+        if (genPolishing) return;
+        setGenPolishing(true);
+        try {
+          const context = [
+            genForm.optionName    ? 'Solution name: '       + genForm.optionName    : '',
+            genForm.optionDesc    ? 'Description: '         + genForm.optionDesc    : '',
+            genForm.whySolution   ? 'Why this fits client: '+ genForm.whySolution   : '',
+            genForm.company       ? 'Client company: '      + genForm.company       : '',
+            genForm.pain1         ? 'Main pain: '           + genForm.pain1         : '',
+          ].filter(Boolean).join('\n');
+          if (!context.trim()) { setGenPolishing(false); return; }
+          const prompt = 'You are a senior B2B sales consultant writing commercial proposals.\n' +
+            'Improve the following solution section to be more persuasive and professional in English.\n' +
+            'Keep language concrete, outcome-focused, and free of buzzwords. Respond ONLY with JSON:\n' +
+            '{"optionDesc":"...","whySolution":"..."}\n\n' +
+            'Current content:\n' + context;
+          const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 600 });
+          const jsonMatch = raw.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            setGenForm(p => ({
+              ...p,
+              optionDesc:  parsed.optionDesc  || p.optionDesc,
+              whySolution: parsed.whySolution || p.whySolution,
+            }));
+          }
+        } catch(e) { console.error('[polishSolution]', e); }
+        setGenPolishing(false);
+      };
       const OPTION_PRESETS = {
         A: { optionName:'Setup + Autonomy', optionSubtitle:'Platform only', optionDesc:'We set up the full system — ICP, accounts, stakeholders, sequences — and your team operates independently from month 2.', optionFeatures:['Full system setup','Access to the Oike platform','Team training (2 sessions)','Full operational independence'] },
         B: { optionName:'Setup + Advisory', optionSubtitle:'Platform + Ongoing support', optionDesc:'Everything in option A, plus monthly advisory sessions to optimize messages, review metrics and continuously improve the system.', optionFeatures:['Full system setup','Access to the Oike platform','Monthly optimization session','Metrics review & message refinement','Ongoing support via WhatsApp'] },
@@ -10095,6 +10169,29 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         }
       };
 
+      // Opens HTML in new window and triggers browser print-to-PDF dialog
+      const printAsPdf = (html) => {
+        const printHtml = html.replace('</body>', '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script></body>');
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.open();
+        w.document.write(printHtml);
+        w.document.close();
+      };
+
+      const openProposalInGmail = async () => {
+        const html = generateEmailHTML();
+        try {
+          const blob = new Blob([html], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+        } catch {
+          navigator.clipboard.writeText(html).catch(() => {});
+        }
+        window.open('https://mail.google.com/mail/?view=cm&fs=1', '_blank');
+        setGenGmail(true);
+        setTimeout(() => setGenGmail(false), 4000);
+      };
+
       // ── LIST VIEW ──
       return (
         <div>
@@ -10157,6 +10254,86 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     {genStep === 1 && (
                       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                         <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:4 }}>Basic info about the prospect. This appears in the hero of the proposal.</div>
+
+                        {/* Account picker */}
+                        <div style={{ position:'relative' }}>
+                          <label style={lStyle}>Link to account</label>
+                          <input style={iStyle} placeholder="Search account..."
+                            value={GF('accountId') ? (F(accounts.find(a=>a.id===GF('accountId')),'Account Name') || genAccSearch) : genAccSearch}
+                            onFocus={() => setGenAccOpen(true)}
+                            onBlur={() => setTimeout(() => setGenAccOpen(false), 150)}
+                            onChange={e => { setGenAccSearch(e.target.value); setGF('accountId',''); setGenAccOpen(true); }} />
+                          {GF('accountId') && (
+                            <button onClick={() => { setGF('accountId',''); setGF('stakeholderId',''); setGenAccSearch(''); }} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%) translateY(9px)', background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:14, lineHeight:1 }}>✕</button>
+                          )}
+                          {genAccOpen && (
+                            <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:'var(--globant-card)', border:'1px solid var(--globant-border)', borderRadius:6, maxHeight:180, overflowY:'auto', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                              {[...accounts]
+                                .filter(a => (F(a,'Account Name')||'').toLowerCase().includes(genAccSearch.toLowerCase()))
+                                .sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||''))
+                                .slice(0,20).map(acc => (
+                                <div key={acc.id} onMouseDown={() => {
+                                  const name = F(acc,'Account Name') || '';
+                                  const industry = F(acc,'Industry') || '';
+                                  setGenForm(p => ({
+                                    ...p,
+                                    accountId: acc.id,
+                                    stakeholderId: '',
+                                    company: name,
+                                    industry: industry || p.industry,
+                                    slug: p.slug || name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''),
+                                  }));
+                                  setGenAccSearch(''); setGenAccOpen(false);
+                                }} style={{ padding:'8px 12px', cursor:'pointer', fontSize:13, background:GF('accountId')===acc.id?'rgba(91,191,181,0.15)':'transparent', color:'var(--globant-text)' }}
+                                onMouseEnter={e=>e.currentTarget.style.background='rgba(91,191,181,0.1)'}
+                                onMouseLeave={e=>e.currentTarget.style.background=GF('accountId')===acc.id?'rgba(91,191,181,0.15)':'transparent'}>
+                                  <span style={{ fontWeight:600 }}>{F(acc,'Account Name')}</span>
+                                  {F(acc,'Industry') && <span style={{ color:'var(--globant-muted)', marginLeft:6, fontSize:11 }}>{F(acc,'Industry')}</span>}
+                                </div>
+                              ))}
+                              {accounts.filter(a => (F(a,'Account Name')||'').toLowerCase().includes(genAccSearch.toLowerCase())).length === 0 && (
+                                <div style={{ padding:'10px 12px', fontSize:12, color:'var(--globant-muted)' }}>No accounts found</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Stakeholder picker — filtered by selected account */}
+                        <div style={{ position:'relative' }}>
+                          <label style={lStyle}>Proposal directed to (stakeholder)</label>
+                          {(() => {
+                            const accStakeholders = GF('accountId')
+                              ? stakeholders.filter(s => linkedIds(s,'Account').includes(GF('accountId')))
+                              : stakeholders;
+                            const selectedStk = GF('stakeholderId') ? accStakeholders.find(s=>s.id===GF('stakeholderId')) : null;
+                            return (
+                              <div style={{ position:'relative' }}>
+                                <select style={{ ...iStyle, appearance:'none', paddingRight:30 }}
+                                  value={GF('stakeholderId')}
+                                  onChange={e => {
+                                    const stk = accStakeholders.find(s=>s.id===e.target.value);
+                                    if (stk) {
+                                      setGenForm(p => ({
+                                        ...p,
+                                        stakeholderId: stk.id,
+                                        contact: F(stk,'Name') || p.contact,
+                                        contactTitle: F(stk,'Title') || F(stk,'Role') || p.contactTitle,
+                                      }));
+                                    } else {
+                                      setGF('stakeholderId','');
+                                    }
+                                  }}>
+                                  <option value="">{GF('accountId') ? (accStakeholders.length ? '— pick a stakeholder —' : 'No stakeholders for this account') : '— select account first —'}</option>
+                                  {accStakeholders.map(s => (
+                                    <option key={s.id} value={s.id}>{F(s,'Name')}{F(s,'Title') ? ' · ' + F(s,'Title') : ''}</option>
+                                  ))}
+                                </select>
+                                <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'var(--globant-muted)', fontSize:12 }}>▼</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                           <div><label style={lStyle}>Company name *</label><input style={iStyle} value={GF('company')} onChange={e=>setGF('company',e.target.value)} placeholder="Acme Corp" autoFocus /></div>
                           <div><label style={lStyle}>URL slug</label><input style={iStyle} value={GF('slug')} onChange={e=>setGF('slug',e.target.value.toLowerCase().replace(/\s+/g,'-'))} placeholder="acme-corp" /><div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4 }}>oike.app/{GF('slug')||'slug'}</div></div>
@@ -10188,6 +10365,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                         </div>
                         <div><label style={lStyle}>Client's declared goal (their words)</label><input style={iStyle} value={GF('goalQuote')} onChange={e=>setGF('goalQuote',e.target.value)} placeholder="We want to attack Mexico and the DR without hiring more people" /></div>
                         <div><label style={lStyle}>Root problem / diagnosis</label><textarea style={{...taStyle, minHeight:90}} value={GF('rootProblem')} onChange={e=>setGF('rootProblem',e.target.value)} placeholder="They've grown to #1 by being reactive. The next stage of growth requires being proactive — a system that generates pipeline in new markets without depending on referrals or ODOO's platform." /></div>
+                        <button onClick={polishDiscovery} disabled={genPolishing}
+                          style={{ padding:'10px 18px', borderRadius:8, border:'1px solid rgba(167,139,250,0.4)', background:genPolishing?'rgba(167,139,250,0.05)':'rgba(167,139,250,0.1)', color:'#c4b5fd', fontWeight:700, fontSize:13, cursor:genPolishing?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
+                          {genPolishing ? '⏳ Improving...' : '✨ Polish with AI — rewrite in better English'}
+                        </button>
                       </div>
                     )}
 
@@ -10257,27 +10438,44 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                           <div><label style={lStyle}>Next step 2</label><input style={iStyle} value={GF('nextStep2')} onChange={e=>setGF('nextStep2',e.target.value)} /></div>
                           <div><label style={lStyle}>Next step 3</label><input style={iStyle} value={GF('nextStep3')} onChange={e=>setGF('nextStep3',e.target.value)} /></div>
                         </div>
+                        <button onClick={polishSolution} disabled={genPolishing}
+                          style={{ padding:'10px 18px', borderRadius:8, border:'1px solid rgba(167,139,250,0.4)', background:genPolishing?'rgba(167,139,250,0.05)':'rgba(167,139,250,0.1)', color:'#c4b5fd', fontWeight:700, fontSize:13, cursor:genPolishing?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
+                          {genPolishing ? '⏳ Improving...' : '✨ Polish with AI — sharpen description & fit'}
+                        </button>
                       </div>
                     )}
 
                     {/* STEP 4 — PREVIEW */}
                     {genStep === 4 && (
                       <div>
-                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>Your proposal is ready. Copy it to paste directly in Gmail, or download the webpage version to host at <strong style={{ color:'var(--globant-accent)' }}>oike.app/{GF('slug')||'slug'}</strong>.</div>
-                        <div style={{ display:'flex', gap:10, marginBottom:12 }}>
+                        <div style={{ fontSize:13, color:'var(--globant-muted)', marginBottom:16 }}>Your proposal is ready. Send it directly via Gmail, copy to paste in any email client, or download.</div>
+
+                        {/* Primary actions */}
+                        <div style={{ display:'flex', gap:10, marginBottom:10 }}>
+                          <button onClick={openProposalInGmail} style={{ flex:1, padding:'14px', borderRadius:10, background:'rgba(66,133,244,0.15)', border:'1px solid rgba(66,133,244,0.4)', color:'#60a5fa', fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                            {genGmail ? '✅ Copied! Paste in Gmail' : '📧 Open in Gmail'}
+                          </button>
                           <button onClick={copyProposalHTML} style={{ flex:1, padding:'14px', borderRadius:10, background:'var(--globant-accent)', border:'none', color:'#0d1117', fontWeight:800, fontSize:14, cursor:'pointer' }}>
                             {genCopied ? '✅ Copied!' : '📋 Copy for email'}
                           </button>
-                          <button onClick={() => { const w=window.open(); w.document.write(generateEmailHTML()); w.document.close(); }} style={{ padding:'14px 20px', borderRadius:10, background:'rgba(91,191,181,0.1)', border:'1px solid var(--globant-border)', color:'var(--globant-text)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
-                            👁 Preview
-                          </button>
                         </div>
-                        <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:16, paddingLeft:2 }}>
-                          Gmail → paste → it renders as formatted email. Also works in Outlook.
-                        </div>
+
+                        {genGmail && (
+                          <div style={{ padding:'10px 14px', borderRadius:8, background:'rgba(66,133,244,0.08)', border:'1px solid rgba(66,133,244,0.2)', fontSize:12, color:'#93c5fd', marginBottom:10 }}>
+                            Gmail is open. Paste with <strong>Ctrl+V</strong> (or ⌘V) directly in the message body — it renders as formatted HTML.
+                          </div>
+                        )}
+
+                        {/* Secondary actions */}
                         <div style={{ display:'flex', gap:10, marginBottom:20 }}>
-                          <button onClick={downloadProposal} style={{ flex:1, padding:'11px', borderRadius:10, background:'transparent', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
-                            ⬇️ Download webpage ({GF('slug')||'proposal'}.html)
+                          <button onClick={() => printAsPdf(generateHTML())} style={{ flex:1, padding:'10px', borderRadius:10, background:'transparent', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                            🖨️ Download PDF
+                          </button>
+                          <button onClick={() => { const w=window.open(); w.document.write(generateEmailHTML()); w.document.close(); }} style={{ flex:1, padding:'10px', borderRadius:10, background:'transparent', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                            👁 Preview email
+                          </button>
+                          <button onClick={downloadProposal} style={{ flex:1, padding:'10px', borderRadius:10, background:'transparent', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                            ⬇️ Webpage .html
                           </button>
                         </div>
                         <div style={{ padding:'20px 24px', background:'var(--globant-card)', borderRadius:10, border:'1px solid var(--globant-border)' }}>
@@ -11058,6 +11256,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       const [selAccIds, setSelAccIds] = useState([]);
       const [reportHtml, setReportHtml] = useState('');
       const [copied, setCopied]       = useState(false);
+      const [gmailOpened, setGmailOpened] = useState(false);
       const [generating, setGenerating] = useState(false);
       const [reportNotes, setReportNotes] = useState('');
 
@@ -11402,6 +11601,27 @@ Return ONLY valid JSON:
         }
       };
 
+      const openReportInGmail = async () => {
+        try {
+          const blob = new Blob([reportHtml], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+        } catch {
+          navigator.clipboard.writeText(reportHtml).catch(() => {});
+        }
+        window.open('https://mail.google.com/mail/?view=cm&fs=1', '_blank');
+        setGmailOpened(true);
+        setTimeout(() => setGmailOpened(false), 4000);
+      };
+
+      const printReportAsPdf = () => {
+        const printHtml = reportHtml.replace('</body>', '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script></body>');
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.open();
+        w.document.write(printHtml);
+        w.document.close();
+      };
+
       const toggleSol = (id) => setSelSolIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
       const toggleAcc = (id) => setSelAccIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
 
@@ -11521,18 +11741,26 @@ Return ONLY valid JSON:
                 </div>
               ) : (
                 <div>
-                  <div style={{ display:'flex', gap:10, marginBottom:12 }}>
-                    <button className="action-btn btn-primary" style={{ padding:'10px 20px', fontSize:13, fontWeight:700 }} onClick={copyHtml}>
+                  <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                    <button style={{ padding:'10px 18px', borderRadius:8, background:'rgba(66,133,244,0.15)', border:'1px solid rgba(66,133,244,0.4)', color:'#60a5fa', fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }} onClick={openReportInGmail}>
+                      {gmailOpened ? '✅ Copied! Paste in Gmail' : '📧 Open in Gmail'}
+                    </button>
+                    <button className="action-btn btn-primary" style={{ padding:'10px 18px', fontSize:13, fontWeight:700 }} onClick={copyHtml}>
                       {copied ? '✅ Copied!' : '📋 Copy HTML'}
                     </button>
-                    <button className="action-btn btn-ghost" style={{ padding:'10px 20px', fontSize:13 }}
-                      onClick={() => { setReportHtml(''); setCopied(false); }}>
+                    <button style={{ padding:'10px 16px', borderRadius:8, border:'1px solid var(--globant-border)', background:'transparent', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }} onClick={printReportAsPdf}>
+                      🖨️ PDF
+                    </button>
+                    <button className="action-btn btn-ghost" style={{ padding:'10px 16px', fontSize:13, marginLeft:'auto' }}
+                      onClick={() => { setReportHtml(''); setCopied(false); setGmailOpened(false); }}>
                       🔄 Reset
                     </button>
-                    <span style={{ fontSize:11, color:'var(--globant-muted)', alignSelf:'center', marginLeft:4 }}>
-                      Paste in Gmail → Format → Paste as HTML
-                    </span>
                   </div>
+                  {gmailOpened && (
+                    <div style={{ padding:'8px 12px', borderRadius:8, background:'rgba(66,133,244,0.08)', border:'1px solid rgba(66,133,244,0.2)', fontSize:12, color:'#93c5fd', marginBottom:10 }}>
+                      Gmail is open. Paste with <strong>Ctrl+V</strong> (or ⌘V) in the message body — it renders as formatted HTML.
+                    </div>
+                  )}
                   <div style={{ border:'1px solid var(--globant-border)', borderRadius:12, overflow:'hidden', background:'#f3f4f6' }}>
                     <iframe
                       srcDoc={reportHtml}
