@@ -4896,7 +4896,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
               {/* ── TAB NAVIGATION ── */}
               <div style={{ display: 'flex', gap: 4, padding: '4px', background: 'var(--globant-darker)', borderRadius: 12, marginTop: 12, marginBottom: 16, border: '1px solid var(--globant-border)' }}>
-                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline'], ['proposals', '📋 Proposals']].map(([tab, label]) => (
+                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline'], ['proposals', '📋 Presentations']].map(([tab, label]) => (
                   <button key={tab} onClick={() => setAccDetailTab(tab)}
                     style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
                       background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(91,191,181,0.2) 0%, rgba(91,191,181,0.08) 100%)' : 'transparent',
@@ -5519,7 +5519,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                               {editingOppNotes && (
                                 <div style={{ display: 'flex', gap: 8 }}>
                                   <button className="action-btn btn-primary" style={{ fontSize: 11 }} disabled={savingOppNotes}
-                                    onClick={async () => { setSavingOppNotes(true); try { await api.updateRecord(TABLE_IDS.opportunities, o.id, { 'Reason': oppNotes, 'Next step': oppNextStep, 'Stakeholders': oppStakeholder, 'Solutions': oppSolutionIds.map(id => ({ id })) }); setEditingOppNotes(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to save'); } setSavingOppNotes(false); }}>
+                                    onClick={async () => { setSavingOppNotes(true); try { await api.updateRecord(TABLE_IDS.opportunities, o.id, { 'Reason': oppNotes, 'Next step': oppNextStep, 'Stakeholders': oppStakeholder, 'Solutions': oppSolutionIds }); setEditingOppNotes(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to save'); } setSavingOppNotes(false); }}>
                                     {savingOppNotes ? '⏳ Saving...' : '💾 Save'}
                                   </button>
                                   <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setEditingOppNotes(false); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); }}>Cancel</button>
@@ -5590,14 +5590,14 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                 return (
                   <div className="card">
                     <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <h3>📋 Proposals ({accProposals.length})</h3>
+                      <h3>📋 Presentations ({accProposals.length})</h3>
                       <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
                         onClick={() => { setPageAndSave('proposals'); }}>
-                        + New in Proposals Hub
+                        + New Presentation
                       </button>
                     </div>
                     {accProposals.length === 0 ? (
-                      <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No proposals for this account yet.</p>
+                      <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No presentations for this account yet.</p>
                     ) : (
                       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                         {accProposals.map(p => {
@@ -8922,6 +8922,14 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [editAccOpen, setEditAccOpen] = useState(false);
       const [editSolOpen, setEditSolOpen] = useState(false);
       const [editStkOpen, setEditStkOpen] = useState(false);
+      // Notes + PPT + AI states
+      const [notes, setNotes]             = useState('');
+      const [noteSaving, setNoteSaving]   = useState(false);
+      const [pptText, setPptText]         = useState('');
+      const [pptParsing, setPptParsing]   = useState(false);
+      const [pptFileName, setPptFileName] = useState('');
+      const [aiRec, setAiRec]             = useState('');
+      const [aiLoading, setAiLoading]     = useState(false);
 
       const STATUSES = ['Draft','Presented','Under Review','Accepted','Rejected','Expired'];
       const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
@@ -8936,6 +8944,21 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (clearNavigateProposal) clearNavigateProposal();
         }
       }, [navigateToProposalId, clearNavigateProposal]);
+
+      // Sync notes + PPT content when switching presentation
+      useEffect(() => {
+        if (selectedId) {
+          const p = proposals.find(x => x.id === selectedId);
+          if (p) {
+            setNotes(p.fields?.['Notes'] || '');
+            setPptText(p.fields?.['PPT Content'] || '');
+            setPptFileName('');
+            setAiRec('');
+          }
+        } else {
+          setNotes(''); setPptText(''); setPptFileName(''); setAiRec('');
+        }
+      }, [selectedId]);
 
       const selectProposal = useCallback((id) => {
         setSelectedId(id || '');
@@ -9023,6 +9046,85 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onUpdateRecord) onUpdateRecord('proposals', proposal.id, { 'Status': newStatus });
           if (onLogActivity) onLogActivity();
         } catch(e) { console.error(e); }
+      };
+
+      const saveNotes = async () => {
+        if (!selected) return;
+        setNoteSaving(true);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.proposals, selected.id, { 'Notes': notes });
+          if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'Notes': notes });
+        } catch(e) { console.error('[saveNotes]', e); }
+        setNoteSaving(false);
+      };
+
+      const handlePptUpload = async (file) => {
+        if (!file) return;
+        if (!file.name.endsWith('.pptx')) { alert('Por favor subí un archivo .pptx'); return; }
+        if (typeof JSZip === 'undefined') { alert('JSZip no está disponible. Recargá la página e intentá de nuevo.'); return; }
+        setPptParsing(true);
+        setPptFileName(file.name);
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          const slideFiles = Object.keys(zip.files)
+            .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+            .sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+          let extracted = '';
+          for (const name of slideFiles) {
+            const xml = await zip.files[name].async('text');
+            const texts = [...xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g)]
+              .map(m => m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim())
+              .filter(Boolean);
+            if (texts.length) {
+              const num = name.match(/\d+/)[0];
+              extracted += `[Slide ${num}] ${texts.join(' ')}\n`;
+            }
+          }
+          extracted = extracted.trim();
+          setPptText(extracted);
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.proposals, selected.id, { 'PPT Content': extracted });
+          if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'PPT Content': extracted });
+        } catch(e) { console.error('[handlePptUpload]', e); alert('Error leyendo el archivo PPT. Asegurate de que sea un .pptx válido.'); }
+        setPptParsing(false);
+      };
+
+      const getAiRec = async () => {
+        if (!selected) return;
+        setAiLoading(true);
+        setAiRec('');
+        try {
+          const accId = linkedIds(selected, 'Account')[0];
+          const acc_ = accId ? accounts.find(a => a.id === accId) : null;
+          const accStakeholders = accId ? stakeholders.filter(s => linkedIds(s,'Account').includes(accId)) : [];
+          const stkList_ = linkedIds(selected,'Stakeholders').map(id => stakeholders.find(s=>s.id===id)).filter(Boolean);
+          const solList_ = linkedIds(selected,'Solutions').map(id => solutions.find(s=>s.id===id)).filter(Boolean);
+          const stkPool = accStakeholders.length ? accStakeholders : stkList_;
+          const stkContext = stkPool.map(s =>
+            `• ${F(s,'Name')||''} ${F(s,'Last name')||''} | Cargo: ${F(s,'Role')||'N/A'} | Seniority: ${F(s,'Seniority')||'N/A'} | Influence: ${F(s,'Level of Influence')||'N/A'} | Pain Points: ${F(s,'Pain Points')||'N/A'}`
+          ).join('\n');
+          const pptSnippet = pptText ? pptText.slice(0, 2500) : '';
+          const parts = [
+            pptSnippet ? `CONTENIDO DE LA PRESENTACIÓN:\n${pptSnippet}` : '',
+            F(selected,'Description') ? `DESCRIPCIÓN:\n${F(selected,'Description')}` : '',
+            notes ? `NOTAS INTERNAS:\n${notes}` : '',
+            solList_.length ? `SOLUCIONES INCLUIDAS: ${solList_.map(s=>F(s,'Name')).join(', ')}` : '',
+          ].filter(Boolean).join('\n\n');
+          const messages = [
+            { role: 'system', content: 'Eres un estratega de ventas B2B senior. Analizás presentaciones comerciales y recomendás con quién hablar y cómo abordarlos. Respondé en español, de forma directa y accionable. Máximo 350 palabras.' },
+            { role: 'user', content: `PRESENTACIÓN: "${F(selected,'Title')||'Sin título'}"\nCUENTA: ${acc_ ? F(acc_,'Account Name') : 'N/A'}\n\n${parts}\n\nSTAKEHOLDERS EN ESTA CUENTA:\n${stkContext || 'Sin stakeholders cargados.'}\n\n¿A quién le mando esta presentación primero y con qué argumento? Dame los top 2-3 con nombre, razón y ángulo de mensaje.` }
+          ];
+          const resp = await fetch('/api/openai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+            body: JSON.stringify({ messages, model: 'gpt-4o', max_tokens: 600 }),
+          });
+          const d = await resp.json();
+          setAiRec(d.content || 'No se pudo generar la recomendación. Intentá de nuevo.');
+        } catch(e) { console.error('[getAiRec]', e); setAiRec('Error al generar recomendación.'); }
+        setAiLoading(false);
       };
 
       const inputStyle = { width:'100%', padding:'8px 10px', background:'var(--globant-input)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box' };
@@ -9169,7 +9271,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           <div>
             <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
-                <button className="action-btn btn-ghost" style={{ fontSize:11, marginBottom:8 }} onClick={() => selectProposal('')}>← Back to Proposals</button>
+                <button className="action-btn btn-ghost" style={{ fontSize:11, marginBottom:8 }} onClick={() => selectProposal('')}>← Back to Presentations</button>
                 <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                   <h1 style={{ margin:0 }}>📋 {F(selected,'Title')}</h1>
                   <span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], border:`1px solid ${STATUS_COLOR[status]}50`, borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:700 }}>{status}</span>
@@ -9271,6 +9373,68 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 )}
               </div>
             </div>
+
+            {/* ── NOTES + PPT ANALYSIS ROW ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+
+              {/* Notes */}
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📝 Notes</div>
+                <textarea
+                  style={{ width:'100%', minHeight:120, padding:'8px 10px', background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', fontSize:13, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+                  placeholder="Notas internas sobre esta presentación: objeciones, contexto, próximos pasos..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                />
+                <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8 }}>
+                  <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={saveNotes} disabled={noteSaving}>
+                    {noteSaving ? '⏳ Guardando...' : '💾 Guardar notas'}
+                  </button>
+                </div>
+              </div>
+
+              {/* PPT Analysis */}
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📊 PPT Analysis</div>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(91,191,181,0.06)', border:'1px dashed rgba(91,191,181,0.4)', borderRadius:8, cursor:'pointer', fontSize:12, color:'var(--globant-green)', fontWeight:600, marginBottom:10 }}>
+                  <span style={{ fontSize:20 }}>📤</span>
+                  <span>{pptParsing ? 'Leyendo slides...' : pptFileName ? `✅ ${pptFileName}` : 'Subir archivo .pptx'}</span>
+                  <input type="file" accept=".pptx" style={{ display:'none' }} onChange={e => { if (e.target.files[0]) handlePptUpload(e.target.files[0]); }} />
+                </label>
+                {pptText ? (
+                  <div style={{ maxHeight:120, overflowY:'auto', padding:'8px 10px', background:'rgba(255,255,255,0.03)', borderRadius:6, border:'1px solid var(--globant-border)', fontSize:11, color:'var(--globant-muted)', lineHeight:1.5, whiteSpace:'pre-wrap' }}>
+                    {pptText.slice(0, 800)}{pptText.length > 800 ? '\n...' : ''}
+                  </div>
+                ) : (
+                  <p style={{ fontSize:12, color:'var(--globant-muted)' }}>Subí la PPT para extraer el contenido y habilitar la recomendación de IA.</p>
+                )}
+              </div>
+            </div>
+
+            {/* ── AI RECOMMENDATION ── */}
+            <div className="card" style={{ marginBottom:16 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: aiRec ? 14 : 0 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px' }}>🤖 ¿A quién le pusheás esto?</div>
+                <button className="action-btn btn-primary" style={{ fontSize:12, padding:'6px 16px' }} onClick={getAiRec} disabled={aiLoading}>
+                  {aiLoading ? '⏳ Analizando...' : '✨ Recomendar stakeholders'}
+                </button>
+              </div>
+              {!aiRec && !aiLoading && (
+                <p style={{ fontSize:12, color:'var(--globant-muted)', marginTop:8 }}>La IA analizará el contenido de la presentación, las notas y los stakeholders de la cuenta para decirte a quién contactar primero y con qué argumento.</p>
+              )}
+              {aiLoading && (
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 0', color:'var(--globant-muted)', fontSize:13 }}>
+                  <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⚙️</span> Analizando presentación y stakeholders...
+                </div>
+              )}
+              {aiRec && (
+                <div style={{ padding:'14px 16px', background:'rgba(91,191,181,0.06)', borderRadius:8, border:'1px solid rgba(91,191,181,0.2)', fontSize:13, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>
+                  {aiRec}
+                </div>
+              )}
+            </div>
+
           </div>
           </React.Fragment>
         );
@@ -9281,12 +9445,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         <div>
           <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
-              <h1>Proposals</h1>
-              <p>Track commercial proposals — linked to accounts, stakeholders and solutions</p>
+              <h1>Presentations</h1>
+              <p>Track commercial presentations — linked to accounts, stakeholders and solutions</p>
             </div>
             <button className="action-btn btn-primary" style={{ fontSize:12, padding:'8px 16px', marginTop:4 }}
               onClick={() => { setShowNew(true); resetForm(); }}>
-              ➕ New Proposal
+              ➕ New Presentation
             </button>
           </div>
 
@@ -9455,7 +9619,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
           {/* Filters */}
           <div className="filters-row" style={{ display:'flex', gap:10, alignItems:'center', marginBottom:16 }}>
-            <input className="input-field" style={{ maxWidth:300 }} placeholder="Search proposals..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <input className="input-field" style={{ maxWidth:300 }} placeholder="Search presentations..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             <select className="input-field" style={{ maxWidth:220, fontSize:12 }} value={filterAccountId} onChange={e => setFilterAccountId(e.target.value)}>
               <option value="">🏢 All accounts</option>
               {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
@@ -9466,7 +9630,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               <span style={{ fontSize:11, color:'var(--globant-green)', cursor:'pointer', padding:'4px 8px', background:'rgba(91,191,181,0.1)', borderRadius:5, fontWeight:600 }}
                 onClick={() => { setSearchTerm(''); setFilterStatus(''); setFilterAccountId(''); }}>✕ Clear</span>
             )}
-            <span style={{ fontSize:12, color:'var(--globant-muted)', marginLeft:'auto' }}>{filtered.length} proposal{filtered.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize:12, color:'var(--globant-muted)', marginLeft:'auto' }}>{filtered.length} presentation{filtered.length !== 1 ? 's' : ''}</span>
           </div>
 
           {/* Table */}
@@ -9484,7 +9648,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 </tr></thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--globant-muted)', padding:24 }}>No proposals found.</td></tr>
+                    <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--globant-muted)', padding:24 }}>No presentations found.</td></tr>
                   ) : filtered.map(p => {
                     const status = F(p,'Status') || 'Draft';
                     const acc = accounts.find(a => linkedIds(p,'Account').includes(a.id));
@@ -11387,7 +11551,6 @@ Return ONLY valid JSON:
         { icon: '📊', label: 'Strategy Overview', key: 'overview' },
         { icon: '🎯', label: 'ICP', key: 'icp' },
         { icon: '🛠️', label: 'Solutions Hub', key: 'solutionshub' },
-        { icon: '📋', label: 'Proposals', key: 'proposals' },
         { icon: '🏢', label: 'Accounts', key: 'accounts' },
         { icon: '👤', label: 'Contacts', key: 'contacts' },
         { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
