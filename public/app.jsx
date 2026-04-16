@@ -9732,6 +9732,179 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         );
       }
 
+      // ── PROPOSAL GENERATOR HELPERS (defined here to avoid Babel JSX parse issues with template literals) ──
+      const generateHTML = () => {
+        const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+        const featuresHTML = genForm.optionFeatures.filter(Boolean).map(f =>
+          '<li>' + f + '</li>'
+        ).join('\n              ');
+        return '<!DOCTYPE html>\n' +
+'<html lang="en">\n' +
+'<head>\n' +
+'  <meta charset="UTF-8" />\n' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n' +
+'  <title>Oike \u2014 ' + GF('company') + '</title>\n' +
+'  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />\n' +
+'  <style>\n' +
+'    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }\n' +
+'    :root { --teal:#5BBFB5; --dark:#0D0D1A; --card:#13131F; --card2:#1A1A2E; --border:rgba(255,255,255,0.07); --text:#E8E8F0; --muted:#7878A0; --teal-dim:rgba(91,191,181,0.1); --teal-border:rgba(91,191,181,0.25); }\n' +
+'    body { font-family:\'Inter\',sans-serif; background:var(--dark); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; }\n' +
+'    nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 48px; background:rgba(13,13,26,0.85); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }\n' +
+'    .logo { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:800; color:var(--text); text-decoration:none; }\n' +
+'    .logo-icon { width:30px; height:30px; background:var(--teal); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; color:#0D0D1A; }\n' +
+'    .nav-cta { padding:10px 22px; background:var(--teal); color:#0D0D1A; font-weight:700; font-size:13px; border-radius:8px; text-decoration:none; }\n' +
+'    section { padding:80px 48px; max-width:960px; margin:0 auto; }\n' +
+'    .hero { padding-top:140px; padding-bottom:60px; }\n' +
+'    .hero-tag { display:inline-flex; align-items:center; gap:8px; padding:5px 14px; background:var(--teal-dim); border:1px solid var(--teal-border); border-radius:100px; font-size:11px; font-weight:700; color:var(--teal); margin-bottom:28px; text-transform:uppercase; letter-spacing:0.5px; }\n' +
+'    .hero h1 { font-size:clamp(36px,5vw,62px); font-weight:900; line-height:1.1; letter-spacing:-2px; margin-bottom:20px; }\n' +
+'    .hero h1 span { background:linear-gradient(135deg,var(--teal) 0%,#a8edea 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }\n' +
+'    .hero-meta { font-size:14px; color:var(--muted); }\n' +
+'    .hero-meta strong { color:var(--text); }\n' +
+'    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:36px; margin-bottom:16px; }\n' +
+'    .card.teal { background:var(--teal-dim); border-color:var(--teal-border); }\n' +
+'    .section-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--teal); margin-bottom:12px; display:block; }\n' +
+'    h2 { font-size:clamp(22px,3vw,34px); font-weight:800; letter-spacing:-0.8px; margin-bottom:20px; line-height:1.2; }\n' +
+'    .pains { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }\n' +
+'    .pain-card { padding:24px; background:rgba(248,113,113,0.05); border:1px solid rgba(248,113,113,0.15); border-radius:12px; }\n' +
+'    .pain-num { font-size:28px; font-weight:900; color:rgba(248,113,113,0.4); margin-bottom:8px; }\n' +
+'    .pain-card p { font-size:14px; color:var(--text); line-height:1.6; }\n' +
+'    blockquote { padding:28px 32px; background:var(--teal-dim); border-left:4px solid var(--teal); border-radius:0 12px 12px 0; font-size:18px; font-style:italic; color:var(--text); line-height:1.7; margin:0; }\n' +
+'    .features { list-style:none; display:flex; flex-direction:column; gap:10px; }\n' +
+'    .features li { display:flex; align-items:flex-start; gap:10px; font-size:14px; }\n' +
+'    .features li::before { content:"\\2713"; color:var(--teal); font-weight:700; flex-shrink:0; margin-top:2px; }\n' +
+'    .option-card { padding:40px; background:var(--card2); border:1px solid var(--teal-border); border-radius:20px; box-shadow:0 0 40px rgba(91,191,181,0.08); }\n' +
+'    .option-letter { width:52px; height:52px; border-radius:14px; background:var(--teal-dim); border:1px solid var(--teal-border); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:900; color:var(--teal); margin-bottom:20px; }\n' +
+'    .option-card h3 { font-size:24px; font-weight:800; letter-spacing:-0.5px; margin-bottom:6px; }\n' +
+'    .option-subtitle { font-size:12px; font-weight:600; color:var(--teal); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:18px; }\n' +
+'    .option-card p { font-size:15px; color:var(--muted); line-height:1.7; margin-bottom:24px; }\n' +
+'    .steps { display:flex; flex-direction:column; gap:14px; }\n' +
+'    .step { display:flex; align-items:flex-start; gap:16px; padding:18px 20px; background:var(--card); border:1px solid var(--border); border-radius:12px; }\n' +
+'    .step-num { width:30px; height:30px; border-radius:50%; background:var(--teal-dim); border:1px solid var(--teal-border); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--teal); flex-shrink:0; }\n' +
+'    .step p { font-size:14px; color:var(--text); line-height:1.5; margin:4px 0 0; }\n' +
+'    .cta-section { text-align:center; padding:80px 48px 120px; }\n' +
+'    .cta-section h2 { font-size:clamp(26px,4vw,44px); font-weight:900; letter-spacing:-1px; margin-bottom:16px; }\n' +
+'    .cta-section p { font-size:15px; color:var(--muted); max-width:460px; margin:0 auto 36px; }\n' +
+'    .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:16px 44px; background:var(--teal); color:#0D0D1A; font-weight:800; font-size:15px; border-radius:12px; text-decoration:none; }\n' +
+'    .divider { height:1px; background:var(--border); max-width:960px; margin:0 auto; }\n' +
+'    footer { text-align:center; padding:28px 48px; font-size:13px; color:var(--muted); }\n' +
+'    @media(max-width:700px){ nav{padding:14px 20px;} section{padding:60px 20px;} .pains{grid-template-columns:1fr;} .hero{padding-top:110px;} }\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+'  <nav>\n' +
+'    <a href="#" class="logo"><div class="logo-icon">O</div> Oike</a>\n' +
+'    <a href="' + GF('calendarLink') + '" target="_blank" class="nav-cta">Schedule a call \u2192</a>\n' +
+'  </nav>\n' +
+'\n' +
+'  <section class="hero">\n' +
+'    <div class="hero-tag">\u26a1 Commercial Proposal</div>\n' +
+'    <h1>Built for <span>' + GF('company') + '</span></h1>\n' +
+'    <p class="hero-meta">Prepared for <strong>' + GF('contact') + (GF('contactTitle') ? ', ' + GF('contactTitle') : '') + '</strong>&nbsp;\u00b7&nbsp;' + today + '</p>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">What we heard</span>\n' +
+'    <h2>Context &amp; Discovery</h2>\n' +
+'    <div class="card">\n' +
+'      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">' + GF('discovery').replace(/\n/g, '<br/>') + '</p>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">Challenges identified</span>\n' +
+'    <h2>The three friction points<br/>we need to solve</h2>\n' +
+'    <div class="pains">\n' +
+'      <div class="pain-card"><div class="pain-num">01</div><p>' + GF('pain1') + '</p></div>\n' +
+'      <div class="pain-card"><div class="pain-num">02</div><p>' + GF('pain2') + '</p></div>\n' +
+'      <div class="pain-card"><div class="pain-num">03</div><p>' + GF('pain3') + '</p></div>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">Declared goal</span>\n' +
+'    <h2>In their own words</h2>\n' +
+'    <blockquote>&ldquo;' + GF('goalQuote') + '&rdquo;</blockquote>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">Root problem</span>\n' +
+'    <h2>The underlying diagnosis</h2>\n' +
+'    <div class="card">\n' +
+'      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">' + GF('rootProblem').replace(/\n/g, '<br/>') + '</p>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">Our proposal</span>\n' +
+'    <h2>What we recommend for ' + GF('company') + '</h2>\n' +
+'    <div class="option-card">\n' +
+'      <div class="option-letter">' + GF('option') + '</div>\n' +
+'      <h3>' + GF('optionName') + '</h3>\n' +
+'      <div class="option-subtitle">' + GF('optionSubtitle') + '</div>\n' +
+'      <p>' + GF('optionDesc') + '</p>\n' +
+'      <ul class="features">\n' +
+'              ' + featuresHTML + '\n' +
+'      </ul>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">Why this solution</span>\n' +
+'    <h2>Why it fits ' + GF('company') + '</h2>\n' +
+'    <div class="card teal">\n' +
+'      <p style="font-size:15px; color:var(--text); line-height:1.8;">' + GF('whySolution').replace(/\n/g, '<br/>') + '</p>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <section>\n' +
+'    <span class="section-tag">Next steps</span>\n' +
+'    <h2>How we move forward</h2>\n' +
+'    <div class="steps">\n' +
+'      <div class="step"><div class="step-num">1</div><div><p>' + GF('nextStep1') + '</p></div></div>\n' +
+'      <div class="step"><div class="step-num">2</div><div><p>' + GF('nextStep2') + '</p></div></div>\n' +
+'      <div class="step"><div class="step-num">3</div><div><p>' + GF('nextStep3') + '</p></div></div>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'\n' +
+'  <div class="cta-section">\n' +
+'    <h2>Ready to move forward?</h2>\n' +
+'    <p>Any questions? Let\'s talk \u2014 20 minutes is enough to align on everything.</p>\n' +
+'    <a href="' + GF('calendarLink') + '" target="_blank" class="cta-btn">Schedule a call \u2192</a>\n' +
+'  </div>\n' +
+'\n' +
+'  <div class="divider"></div>\n' +
+'  <footer><strong style="color:var(--text);">Oike</strong> \u2014 Sales Intelligence Platform &nbsp;\u00b7&nbsp; Ale Cadario &nbsp;\u00b7&nbsp;<a href="mailto:ale@alecadario.com" style="color:var(--teal);text-decoration:none;">ale@alecadario.com</a></footer>\n' +
+'</body>\n' +
+'</html>';
+      };
+
+      const downloadProposal = () => {
+        const html = generateHTML();
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (GF('slug') || 'proposal') + '.html';
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
       // ── LIST VIEW ──
       return (
         <div>
@@ -9758,177 +9931,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             const lStyle = { fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:5, display:'block' };
             const taStyle = { ...iStyle, minHeight:80, resize:'vertical', lineHeight:1.5 };
 
-            const generateHTML = () => {
-              const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
-              const featuresHTML = genForm.optionFeatures.filter(Boolean).map(f =>
-                `<li>${f}</li>`
-              ).join('\n              ');
-              return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Oike — ${GF('company')}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-    :root { --teal:#5BBFB5; --dark:#0D0D1A; --card:#13131F; --card2:#1A1A2E; --border:rgba(255,255,255,0.07); --text:#E8E8F0; --muted:#7878A0; --teal-dim:rgba(91,191,181,0.1); --teal-border:rgba(91,191,181,0.25); }
-    body { font-family:'Inter',sans-serif; background:var(--dark); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; }
-    nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 48px; background:rgba(13,13,26,0.85); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
-    .logo { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:800; color:var(--text); text-decoration:none; }
-    .logo-icon { width:30px; height:30px; background:var(--teal); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; color:#0D0D1A; }
-    .nav-cta { padding:10px 22px; background:var(--teal); color:#0D0D1A; font-weight:700; font-size:13px; border-radius:8px; text-decoration:none; }
-    section { padding:80px 48px; max-width:960px; margin:0 auto; }
-    .hero { padding-top:140px; padding-bottom:60px; }
-    .hero-tag { display:inline-flex; align-items:center; gap:8px; padding:5px 14px; background:var(--teal-dim); border:1px solid var(--teal-border); border-radius:100px; font-size:11px; font-weight:700; color:var(--teal); margin-bottom:28px; text-transform:uppercase; letter-spacing:0.5px; }
-    .hero h1 { font-size:clamp(36px,5vw,62px); font-weight:900; line-height:1.1; letter-spacing:-2px; margin-bottom:20px; }
-    .hero h1 span { background:linear-gradient(135deg,var(--teal) 0%,#a8edea 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-    .hero-meta { font-size:14px; color:var(--muted); }
-    .hero-meta strong { color:var(--text); }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:36px; margin-bottom:16px; }
-    .card.teal { background:var(--teal-dim); border-color:var(--teal-border); }
-    .section-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--teal); margin-bottom:12px; display:block; }
-    h2 { font-size:clamp(22px,3vw,34px); font-weight:800; letter-spacing:-0.8px; margin-bottom:20px; line-height:1.2; }
-    .pains { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
-    .pain-card { padding:24px; background:rgba(248,113,113,0.05); border:1px solid rgba(248,113,113,0.15); border-radius:12px; }
-    .pain-num { font-size:28px; font-weight:900; color:rgba(248,113,113,0.4); margin-bottom:8px; }
-    .pain-card p { font-size:14px; color:var(--text); line-height:1.6; }
-    blockquote { padding:28px 32px; background:var(--teal-dim); border-left:4px solid var(--teal); border-radius:0 12px 12px 0; font-size:18px; font-style:italic; color:var(--text); line-height:1.7; margin:0; }
-    .features { list-style:none; display:flex; flex-direction:column; gap:10px; }
-    .features li { display:flex; align-items:flex-start; gap:10px; font-size:14px; }
-    .features li::before { content:'✓'; color:var(--teal); font-weight:700; flex-shrink:0; margin-top:2px; }
-    .option-card { padding:40px; background:var(--card2); border:1px solid var(--teal-border); border-radius:20px; box-shadow:0 0 40px rgba(91,191,181,0.08); }
-    .option-letter { width:52px; height:52px; border-radius:14px; background:var(--teal-dim); border:1px solid var(--teal-border); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:900; color:var(--teal); margin-bottom:20px; }
-    .option-card h3 { font-size:24px; font-weight:800; letter-spacing:-0.5px; margin-bottom:6px; }
-    .option-subtitle { font-size:12px; font-weight:600; color:var(--teal); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:18px; }
-    .option-card p { font-size:15px; color:var(--muted); line-height:1.7; margin-bottom:24px; }
-    .steps { display:flex; flex-direction:column; gap:14px; }
-    .step { display:flex; align-items:flex-start; gap:16px; padding:18px 20px; background:var(--card); border:1px solid var(--border); border-radius:12px; }
-    .step-num { width:30px; height:30px; border-radius:50%; background:var(--teal-dim); border:1px solid var(--teal-border); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--teal); flex-shrink:0; }
-    .step p { font-size:14px; color:var(--text); line-height:1.5; margin:4px 0 0; }
-    .cta-section { text-align:center; padding:80px 48px 120px; }
-    .cta-section h2 { font-size:clamp(26px,4vw,44px); font-weight:900; letter-spacing:-1px; margin-bottom:16px; }
-    .cta-section p { font-size:15px; color:var(--muted); max-width:460px; margin:0 auto 36px; }
-    .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:16px 44px; background:var(--teal); color:#0D0D1A; font-weight:800; font-size:15px; border-radius:12px; text-decoration:none; }
-    .divider { height:1px; background:var(--border); max-width:960px; margin:0 auto; }
-    footer { text-align:center; padding:28px 48px; font-size:13px; color:var(--muted); }
-    @media(max-width:700px){ nav{padding:14px 20px;} section{padding:60px 20px;} .pains{grid-template-columns:1fr;} .hero{padding-top:110px;} }
-  </style>
-</head>
-<body>
-  <nav>
-    <a href="#" class="logo"><div class="logo-icon">O</div> Oike</a>
-    <a href="${GF('calendarLink')}" target="_blank" class="nav-cta">Schedule a call →</a>
-  </nav>
-
-  <section class="hero">
-    <div class="hero-tag">⚡ Commercial Proposal</div>
-    <h1>Built for <span>${GF('company')}</span></h1>
-    <p class="hero-meta">Prepared for <strong>${GF('contact')}${GF('contactTitle') ? ', '+GF('contactTitle') : ''}</strong>&nbsp;·&nbsp;${today}</p>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">What we heard</span>
-    <h2>Context & Discovery</h2>
-    <div class="card">
-      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">${GF('discovery').replace(/\n/g,'<br/>')}</p>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">Challenges identified</span>
-    <h2>The three friction points<br/>we need to solve</h2>
-    <div class="pains">
-      <div class="pain-card"><div class="pain-num">01</div><p>${GF('pain1')}</p></div>
-      <div class="pain-card"><div class="pain-num">02</div><p>${GF('pain2')}</p></div>
-      <div class="pain-card"><div class="pain-num">03</div><p>${GF('pain3')}</p></div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">Declared goal</span>
-    <h2>In their own words</h2>
-    <blockquote>"${GF('goalQuote')}"</blockquote>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">Root problem</span>
-    <h2>The underlying diagnosis</h2>
-    <div class="card">
-      <p style="font-size:15px; color:#c0c0d8; line-height:1.8;">${GF('rootProblem').replace(/\n/g,'<br/>')}</p>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">Our proposal</span>
-    <h2>What we recommend for ${GF('company')}</h2>
-    <div class="option-card">
-      <div class="option-letter">${GF('option')}</div>
-      <h3>${GF('optionName')}</h3>
-      <div class="option-subtitle">${GF('optionSubtitle')}</div>
-      <p>${GF('optionDesc')}</p>
-      <ul class="features">
-              ${featuresHTML}
-      </ul>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">Why this solution</span>
-    <h2>Why it fits ${GF('company')}</h2>
-    <div class="card teal">
-      <p style="font-size:15px; color:var(--text); line-height:1.8;">${GF('whySolution').replace(/\n/g,'<br/>')}</p>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section>
-    <span class="section-tag">Next steps</span>
-    <h2>How we move forward</h2>
-    <div class="steps">
-      <div class="step"><div class="step-num">1</div><div><p>${GF('nextStep1')}</p></div></div>
-      <div class="step"><div class="step-num">2</div><div><p>${GF('nextStep2')}</p></div></div>
-      <div class="step"><div class="step-num">3</div><div><p>${GF('nextStep3')}</p></div></div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <div class="cta-section">
-    <h2>Ready to move forward?</h2>
-    <p>Any questions? Let's talk — 20 minutes is enough to align on everything.</p>
-    <a href="${GF('calendarLink')}" target="_blank" class="cta-btn">Schedule a call →</a>
-  </div>
-
-  <div class="divider"></div>
-  <footer><strong style="color:var(--text);">Oike</strong> — Sales Intelligence Platform &nbsp;·&nbsp; Ale Cadario &nbsp;·&nbsp;<a href="mailto:ale@alecadario.com" style="color:var(--teal);text-decoration:none;">ale@alecadario.com</a></footer>
-</body>
-</html>`;
-            };
-
-            const downloadProposal = () => {
-              const html = generateHTML();
-              const blob = new Blob([html], { type: 'text/html' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = (GF('slug') || 'proposal') + '.html';
-              a.click();
-              URL.revokeObjectURL(url);
-            };
+            // generateHTML and downloadProposal are defined in component body above (outside JSX)
 
             const steps = ['Client', 'Discovery', 'Solution', 'Preview'];
             return (
