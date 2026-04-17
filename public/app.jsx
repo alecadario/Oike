@@ -4562,11 +4562,16 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
 
       const addSolutionToAccount = async (solId) => {
         if (!account) return;
+        if (currentSolIds.includes(solId)) return;
         try {
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Solutions': [...currentSolIds, solId] });
+          setShowSolPicker(false);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to add solution'); }
+        } catch (e) {
+          console.error('[addSolutionToAccount] Error:', e);
+          alert('Failed to add solution: ' + (e.message || 'unknown'));
+        }
       };
 
       const removeSolutionFromAccount = async (solId) => {
@@ -8185,6 +8190,55 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       // Combined: generate both Executive Summary + AI Recommendations at once
       const generateAll = () => Promise.all([generateSolExecSummary(), generateRecs()]);
 
+      // ── Markdown helpers (shared by AI Recs + Exec Summary) ──
+      // Parse inline **bold** → React nodes
+      const renderInlineMd = (text) => {
+        const parts = [];
+        const regex = /\*\*(.+?)\*\*/g;
+        let lastIndex = 0;
+        let match;
+        let key = 0;
+        while ((match = regex.exec(text)) !== null) {
+          if (match.index > lastIndex) parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+          parts.push(<strong key={key++} style={{ fontWeight: 700, color: 'var(--globant-text)' }}>{match[1]}</strong>);
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < text.length) parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+        return parts.length ? parts : text;
+      };
+
+      // Parse block-level markdown (paragraphs, bullets, numbered lists)
+      const renderMdBlocks = (text) => {
+        if (!text) return null;
+        const lines = text.split('\n');
+        const blocks = [];
+        let listBuffer = null; // { type: 'ul' | 'ol', items: [] }
+        const flushList = () => { if (listBuffer) { blocks.push(listBuffer); listBuffer = null; } };
+        lines.forEach(line => {
+          const trimmed = line.trim();
+          if (!trimmed) { flushList(); return; }
+          const bullet = trimmed.match(/^[-*•]\s+(.+)$/);
+          const numbered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+          if (bullet) {
+            if (!listBuffer || listBuffer.type !== 'ul') { flushList(); listBuffer = { type: 'ul', items: [] }; }
+            listBuffer.items.push(bullet[1]);
+          } else if (numbered) {
+            if (!listBuffer || listBuffer.type !== 'ol') { flushList(); listBuffer = { type: 'ol', items: [] }; }
+            listBuffer.items.push(numbered[1]);
+          } else {
+            flushList();
+            blocks.push({ type: 'p', text: trimmed });
+          }
+        });
+        flushList();
+        return blocks.map((blk, i) => {
+          if (blk.type === 'p') return <p key={i} style={{ margin: '0 0 8px 0' }}>{renderInlineMd(blk.text)}</p>;
+          if (blk.type === 'ul') return <ul key={i} style={{ margin: '0 0 8px 0', paddingLeft: 18 }}>{blk.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}>{renderInlineMd(it)}</li>)}</ul>;
+          if (blk.type === 'ol') return <ol key={i} style={{ margin: '0 0 8px 0', paddingLeft: 18 }}>{blk.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}>{renderInlineMd(it)}</li>)}</ol>;
+          return null;
+        });
+      };
+
       // Render AI recs with section cards
       const renderRecs = (text) => {
         if (!text) return null;
@@ -8199,13 +8253,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {sections.map((sec, i) => {
               const lines = sec.trim().split('\n');
-              const title = lines[0];
+              const title = lines[0].replace(/\*\*/g, '');
               const body = lines.slice(1).join('\n').trim();
               const st = sectionStyles[i % sectionStyles.length];
               return (
                 <div key={i} style={{ padding: '14px', borderRadius: 10, background: st.bg, borderLeft: `3px solid ${st.border}` }}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: st.color, marginBottom: 8 }}>{title}</div>
-                  <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap' }}>{body}</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)' }}>{renderMdBlocks(body)}</div>
                 </div>
               );
             })}
@@ -8219,13 +8273,21 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         setAddingAccount(true);
         try {
           const currentAccIds = linkedIds(selectedSol, 'Accounts - New markets');
+          if (currentAccIds.includes(accountId)) {
+            setShowAddAccount(false);
+            setAddAccSearch('');
+            setAddingAccount(false);
+            return;
+          }
           const newAccIds = [...currentAccIds, accountId];
-          await api.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'Accounts - New markets': newAccIds.map(id => ({ id })) });
+          // Airtable expects array of string IDs for multipleRecordLinks (same format as addSolutionToAccount)
+          await api.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'Accounts - New markets': newAccIds });
           setShowAddAccount(false);
           setAddAccSearch('');
           if (onLogActivity) onLogActivity();
         } catch (e) {
-          alert('Error adding account: ' + e.message);
+          console.error('[addAccountToSolution] Error:', e);
+          alert('Error adding account: ' + (e.message || 'unknown'));
         }
         setAddingAccount(false);
       };
@@ -8409,9 +8471,11 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 return (
                   <div style={{ fontSize: 12, lineHeight: 1.6 }}>
                     {lines.map((line, i) => {
-                      if (line.startsWith('### ')) return <h4 key={i} style={{ margin: '12px 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--globant-text)' }}>{line.replace('### ', '')}</h4>;
-                      if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 12, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0 }}>•</span>{line.slice(2)}</div>;
-                      return <p key={i} style={{ margin: '3px 0', color: 'var(--globant-text-secondary)' }}>{line}</p>;
+                      if (line.startsWith('### ')) return <h4 key={i} style={{ margin: '12px 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--globant-text)' }}>{renderInlineMd(line.replace('### ', '').replace(/\*\*/g, ''))}</h4>;
+                      if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 12, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0 }}>•</span>{renderInlineMd(line.slice(2))}</div>;
+                      const numMatch = line.match(/^(\d+[.)]\s+)(.+)$/);
+                      if (numMatch) return <div key={i} style={{ paddingLeft: 18, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0, color: 'var(--globant-muted)' }}>{numMatch[1]}</span>{renderInlineMd(numMatch[2])}</div>;
+                      return <p key={i} style={{ margin: '3px 0', color: 'var(--globant-text-secondary)' }}>{renderInlineMd(line)}</p>;
                     })}
                   </div>
                 );
