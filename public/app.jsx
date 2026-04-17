@@ -11066,6 +11066,69 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [filterSearch, setFilterSearch] = useState('');
       const [invitePreview, setInvitePreview] = useState(null); // {id, msg, generating}
 
+      // Campaign Context + AI Summary state
+      const [editingContext, setEditingContext] = useState(false);
+      const [contextDraft, setContextDraft] = useState('');
+      const [savingContext, setSavingContext] = useState(false);
+      const [generatingSummary, setGeneratingSummary] = useState(false);
+
+      const saveCampaignContext = async () => {
+        if (!selectedCampaign) return;
+        setSavingContext(true);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Context': contextDraft });
+          setEditingContext(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error('[saveCampaignContext] Error:', e);
+          alert('Failed to save context: ' + (e.message || 'unknown'));
+        }
+        setSavingContext(false);
+      };
+
+      const generateCampaignSummary = async () => {
+        if (!selectedCampaign) return;
+        const ctx = F(selectedCampaign, 'Context') || '';
+        if (!ctx.trim()) {
+          alert('Add campaign context first — the AI needs something to work with.');
+          return;
+        }
+        setGeneratingSummary(true);
+        try {
+          const name = F(selectedCampaign, 'Name') || '';
+          const type = F(selectedCampaign, 'Type') || '';
+          const template = F(selectedCampaign, 'Message Template') || '';
+          const asset = F(selectedCampaign, 'Asset URL') || '';
+          const notes = F(selectedCampaign, 'Notes') || '';
+
+          const prompt = `You are a senior B2B sales strategist for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
+
+Write a concise strategic summary (under 180 words) of this outreach campaign. Focus on: who should be targeted, what pain this asset solves, the best opening angle, and what outcome we want per touch. Be specific and actionable — this summary will be used as context when personalizing individual messages.
+
+CAMPAIGN: ${name}
+TYPE: ${type}
+ASSET: ${asset || 'None provided'}
+
+MANUAL CONTEXT (user-written):
+${ctx}
+
+${template ? `REFERENCE MESSAGE TEMPLATE:\n${template.slice(0, 400)}` : ''}
+${notes ? `ADDITIONAL NOTES:\n${notes.slice(0, 400)}` : ''}
+
+Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, Desired Outcome. Use **bold** for key phrases. No fluff.`;
+
+          const summary = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 500 });
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'AI Summary': summary });
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error('[generateCampaignSummary] Error:', e);
+          alert('Failed to generate summary: ' + (e.message || 'unknown'));
+        }
+        setGeneratingSummary(false);
+      };
+
       const TYPE_OPTIONS = ['White Paper', 'News / Article', 'Product Launch', 'Case Study', 'Cold Outreach'];
       const STATUS_OPTIONS = ['Draft', 'Active', 'Paused', 'Completed'];
       const STATUS_COLORS = { 'Draft': '#a78bfa', 'Active': '#4ade80', 'Paused': '#fbbf24', 'Completed': '#60a5fa' };
@@ -11175,6 +11238,8 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         const campaignType = F(selectedCampaign,'Type') || '';
         const template = F(selectedCampaign,'Message Template') || '';
         const assetUrl = F(selectedCampaign,'Asset URL') || '';
+        const campaignContext = F(selectedCampaign,'Context') || '';
+        const campaignAiSummary = F(selectedCampaign,'AI Summary') || '';
 
         const prompt = `B2B sales rep running a ${campaignType} campaign. Write ONE short personalized message. Max 3 sentences + subject if email.
 
@@ -11183,10 +11248,12 @@ ${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : '
 History: ${sOut || 'First contact'}
 
 CAMPAIGN: "${campaignName}" (${campaignType})
-${template ? `Reference angle (personalize — DO NOT copy verbatim, rewrite for this specific person):\n"${template.slice(0,400)}"` : ''}
+${campaignContext ? `\nCAMPAIGN CONTEXT (author-written — treat as strategic ground truth):\n${campaignContext.slice(0, 800)}\n` : ''}
+${campaignAiSummary ? `\nCAMPAIGN STRATEGIC BRIEF (AI-generated from context):\n${campaignAiSummary.slice(0, 800)}\n` : ''}
+${template ? `\nReference angle (personalize — DO NOT copy verbatim, rewrite for this specific person):\n"${template.slice(0,400)}"` : ''}
 ${assetUrl ? `Asset/resource to reference: ${assetUrl}` : ''}
 
-MISSION: Connect this ${campaignType} campaign to ${sName}'s specific context at ${accName}. Be direct, specific, and relevant to their role.
+MISSION: Connect this ${campaignType} campaign to ${sName}'s specific context at ${accName}. Align the message with the CAMPAIGN CONTEXT and STRATEGIC BRIEF above — those define the angle, pain, and outcome. Be direct, specific, and relevant to their role.
 BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.
 Sender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}
 If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the message.`;
@@ -11285,6 +11352,85 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{template}</div>
               </div>
             )}
+
+            {/* Campaign Context + AI Summary (mirror of Events pattern) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              {/* Context (manual input) */}
+              <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-accent)', textTransform: 'uppercase', letterSpacing: 1 }}>📝 Campaign Context</div>
+                  {!editingContext ? (
+                    <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
+                      onClick={() => { setContextDraft(F(selectedCampaign, 'Context') || ''); setEditingContext(true); }}>
+                      {F(selectedCampaign, 'Context') ? '✏️ Edit' : '➕ Add Context'}
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={saveCampaignContext} disabled={savingContext}>
+                        {savingContext ? '⏳' : '💾 Save'}
+                      </button>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingContext(false)}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+                {editingContext ? (
+                  <textarea
+                    className="input-field"
+                    style={{ width: '100%', minHeight: 120, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5 }}
+                    placeholder={`Write context the AI should know about this campaign:\n- Goals / outcome desired\n- ICP nuances (industries, roles)\n- Pain points this asset addresses\n- Messaging angle / tone\n- Triggers or timing reasons\n- What to avoid mentioning`}
+                    value={contextDraft}
+                    onChange={e => setContextDraft(e.target.value)} />
+                ) : (
+                  F(selectedCampaign, 'Context') ? (
+                    <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{F(selectedCampaign, 'Context')}</div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
+                      No context yet — click "Add Context" to tell the AI who this campaign targets, what pain it addresses, and your messaging angle.
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* AI Summary */}
+              <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: 1 }}>🧠 AI Summary</div>
+                  <button className="action-btn btn-primary" style={{ fontSize: 10 }}
+                    onClick={generateCampaignSummary} disabled={generatingSummary}>
+                    {generatingSummary ? '⏳ Generating...' : F(selectedCampaign, 'AI Summary') ? '🔄 Regenerate' : '✨ Generate Summary'}
+                  </button>
+                </div>
+                {F(selectedCampaign, 'AI Summary') ? (
+                  <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6 }}>
+                    {(() => {
+                      const summaryText = F(selectedCampaign, 'AI Summary');
+                      const lines = summaryText.split('\n').filter(l => l.trim());
+                      const parseInline = (text) => {
+                        const parts = [];
+                        const regex = /\*\*(.+?)\*\*/g;
+                        let lastIndex = 0, match, key = 0;
+                        while ((match = regex.exec(text)) !== null) {
+                          if (match.index > lastIndex) parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+                          parts.push(<strong key={key++} style={{ fontWeight: 700, color: 'var(--globant-text)' }}>{match[1]}</strong>);
+                          lastIndex = match.index + match[0].length;
+                        }
+                        if (lastIndex < text.length) parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+                        return parts.length ? parts : text;
+                      };
+                      return lines.map((line, i) => {
+                        if (line.startsWith('### ')) return <h4 key={i} style={{ margin: '8px 0 4px', fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>{parseInline(line.replace('### ', '').replace(/\*\*/g, ''))}</h4>;
+                        if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 12, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0 }}>•</span>{parseInline(line.slice(2))}</div>;
+                        return <p key={i} style={{ margin: '3px 0' }}>{parseInline(line)}</p>;
+                      });
+                    })()}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
+                    {F(selectedCampaign, 'Context') ? 'Click "Generate Summary" to have AI create a strategic brief that will anchor all messages from this campaign.' : 'Add context first, then generate the AI summary.'}
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Stats */}
             <div className="kpi-row" style={{ gridTemplateColumns:'repeat(3,1fr)', marginBottom:14 }}>
