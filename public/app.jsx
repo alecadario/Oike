@@ -270,6 +270,59 @@
       <span className="info-tip">ⓘ<span className="info-tip-text">{text}</span></span>
     );
 
+    // ── Stakeholder duplicate detection ──
+    // Returns { match, severity: 'hard' | 'soft', reason } or null
+    // Hard = email or LinkedIn URL exact match (strong signal)
+    // Soft = same name + last name + same account (possible homonym)
+    const findDuplicateStakeholder = (fields, existingStakeholders) => {
+      if (!Array.isArray(existingStakeholders) || existingStakeholders.length === 0) return null;
+      const norm = s => String(s || '').trim().toLowerCase();
+      const email = norm(fields['Email']);
+      const linkedin = norm(fields['LinkedIn']);
+      const firstName = norm(fields['Name']);
+      const lastName = norm(fields['Last name']);
+      const accountIds = Array.isArray(fields['Account']) ? fields['Account'] : (fields['Account'] ? [fields['Account']] : []);
+
+      for (const s of existingStakeholders) {
+        const f = s.fields || {};
+        const sEmail = norm(f['Email']);
+        const sLinkedin = norm(f['LinkedIn']);
+        const sFirstName = norm(f['Name']);
+        const sLastName = norm(f['Last name']);
+        const sAccountIds = Array.isArray(f['Account']) ? f['Account'] : [];
+
+        if (email && sEmail && email === sEmail) {
+          return { match: s, severity: 'hard', reason: 'Email already exists' };
+        }
+        if (linkedin && sLinkedin && linkedin === sLinkedin) {
+          return { match: s, severity: 'hard', reason: 'LinkedIn URL already exists' };
+        }
+        if (firstName && sFirstName && firstName === sFirstName &&
+            lastName && sLastName && lastName === sLastName &&
+            accountIds.length > 0 && sAccountIds.some(id => accountIds.includes(id))) {
+          return { match: s, severity: 'soft', reason: 'Same name already exists in same account' };
+        }
+      }
+      return null;
+    };
+
+    // Shows a confirm dialog for duplicate. Returns true if user wants to proceed anyway.
+    const confirmDuplicateStakeholder = (dup) => {
+      if (!dup) return true;
+      const m = dup.match;
+      const f = m.fields || {};
+      const name = `${f['Name'] || ''} ${f['Last name'] || ''}`.trim();
+      const email = f['Email'] || '';
+      const role = f['Role'] || '';
+      const displayName = name || email || 'existing record';
+      const subline = [role, email].filter(Boolean).join(' · ');
+      const header = dup.severity === 'hard'
+        ? `⚠️ Duplicate detected: ${dup.reason}`
+        : `⚠️ Possible duplicate: ${dup.reason}`;
+      const body = `\n\nExisting contact:\n${displayName}${subline ? `\n${subline}` : ''}\n\nClick OK to create anyway, or Cancel to skip.`;
+      return confirm(header + body);
+    };
+
     // Auto-activate account when outreach is logged.
     // Only escalates EARLY stages (empty, Prospect, Dormant) to Active.
     // Never downgrades later stages (Active, Negotiation, Won, Lost) — those are preserved.
@@ -2276,6 +2329,9 @@ Output ONLY the message, nothing else.`;
         if (fuNewInfluence) fields['Level of Influence'] = fuNewInfluence;
         if (CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name) fields['BDR Owner'] = CURRENT_USER.name;
         if (CURRENT_USER?.role === 'cp' && CURRENT_USER?.name) fields['CP Assigned'] = CURRENT_USER.name;
+        // Duplicate check
+        const dup = findDuplicateStakeholder(fields, stakeholders);
+        if (dup && !confirmDuplicateStakeholder(dup)) return;
         // Optimistic: show in UI instantly
         if (onAddRecord) onAddRecord('stakeholders', fields);
         // Close form immediately
@@ -2954,6 +3010,9 @@ Output ONLY the message, nothing else.`;
         // Campaign/Camapaña is a linked record field — cannot set via text input, skip
         if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
         if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
+        // Duplicate check
+        const dup = findDuplicateStakeholder(fields, stakeholders);
+        if (dup && !confirmDuplicateStakeholder(dup)) return;
         // Optimistic: show instantly
         if (onAddRecord) onAddRecord('stakeholders', fields);
         // Close form immediately
@@ -4420,6 +4479,9 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         if (newStkInfluence) fields['Level of Influence'] = newStkInfluence;
         if (CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name) fields['BDR Owner'] = CURRENT_USER.name;
         if (CURRENT_USER?.role === 'cp' && CURRENT_USER?.name) fields['CP Assigned'] = CURRENT_USER.name;
+        // Duplicate check
+        const dup = findDuplicateStakeholder(fields, stakeholders);
+        if (dup && !confirmDuplicateStakeholder(dup)) return;
         // Optimistic: show instantly
         if (onAddRecord) onAddRecord('stakeholders', fields);
         setNewStkName(''); setNewStkLastName(''); setNewStkRole(''); setNewStkEmail('');
@@ -5574,7 +5636,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
                                         <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }} disabled={!newOppStkName.trim() || creatingOppStk}
-                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; await api.createRecord(TABLE_IDS.stakeholders, { 'Name': firstName, ...(lastName ? { 'Last name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [{ id: account.id }] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to create stakeholder'); } setCreatingOppStk(false); }}>
+                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; const stkFields = { 'Name': firstName, ...(lastName ? { 'Last name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [account.id] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }; const dup = findDuplicateStakeholder(stkFields, stakeholders); if (dup && !confirmDuplicateStakeholder(dup)) { setCreatingOppStk(false); return; } await api.createRecord(TABLE_IDS.stakeholders, stkFields); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to create stakeholder'); } setCreatingOppStk(false); }}>
                                           {creatingOppStk ? '⏳' : '✨ Create'}
                                         </button>
                                       </div>
