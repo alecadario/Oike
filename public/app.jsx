@@ -486,7 +486,18 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           } else if (data.cached) {
             alert('Already enriched recently — no credits consumed.');
           } else {
-            alert(`No email found. Reason: ${data.reason || 'unknown'}${data.domain_used ? ` (domain tried: ${data.domain_used})` : ' (no company domain available)'}`);
+            // Dropcontact couldn't find it — offer manual LinkedIn search fallback
+            const reason = data.reason || 'unknown';
+            const domainInfo = data.domain_used ? `Domain tried: ${data.domain_used}` : 'No company domain was available on the account';
+            const fullName = `${F(stakeholder, 'Name') || ''} ${F(stakeholder, 'Last name') || ''}`.trim();
+            const liSearch = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(fullName + (accountName ? ' ' + accountName : ''))}`;
+            const shouldOpenLi = confirm(
+              `No email found by Dropcontact.\n\n` +
+              `Reason: ${reason}\n${domainInfo}\n\n` +
+              `Tip: small or private domains often aren't in enrichment DBs. Try manual search on LinkedIn → check their profile/contact info.\n\n` +
+              `Open LinkedIn search for "${fullName}" now?`
+            );
+            if (shouldOpenLi) window.open(liSearch, '_blank');
           }
         } catch (e) {
           console.error('[enrich] Error:', e);
