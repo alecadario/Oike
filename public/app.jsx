@@ -270,15 +270,18 @@
       <span className="info-tip">ⓘ<span className="info-tip-text">{text}</span></span>
     );
 
-    // Auto-activate account when outreach is logged
+    // Auto-activate account when outreach is logged.
+    // Only escalates EARLY stages (empty, Prospect, Dormant) to Active.
+    // Never downgrades later stages (Active, Negotiation, Won, Lost) — those are preserved.
     const activateAccountIfNeeded = async (apiInstance, accountIds, allAccounts) => {
       if (!apiInstance || !accountIds || !accountIds.length || !allAccounts) return;
+      const ACTIVATABLE_STATUSES = ['', 'Prospect', 'Dormant', 'No Status', 'Inactive', 'New'];
       try {
         for (const aid of accountIds) {
           const acc = allAccounts.find(a => a.id === aid);
           if (!acc) continue;
-          const currentStatus = F(acc, 'Inside Sales Status');
-          if (!currentStatus || currentStatus === 'No Status' || currentStatus === 'Inactive' || currentStatus === 'New') {
+          const currentStatus = String(F(acc, 'Inside Sales Status') || '').trim();
+          if (ACTIVATABLE_STATUSES.includes(currentStatus)) {
             await apiInstance.updateRecord(TABLE_IDS.accounts, aid, { 'Inside Sales Status': 'Active' });
           }
         }
@@ -3083,6 +3086,7 @@ Output ONLY the message, nothing else.`;
                 'Stakeholders invited': [...new Set([...currentInvited, stakeholder.id])],
               }).catch(e => console.error('[useMessage] event invite update failed:', e));
             }
+            await activateAccountIfNeeded(a, companyIds, data.accounts);
           })
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => console.error(e));
@@ -7248,6 +7252,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       await a.updateRecord(TABLE_IDS.events, selectedEventId, {
                         'Stakeholders invited': [...new Set([...currentInvited, s.id])],
                       }).catch(e => console.error('Event invite register failed:', e));
+                      await activateAccountIfNeeded(a, companyIds, data.accounts);
                       if (onLogActivity) onLogActivity();
                     }).catch(e => console.error('sendInviteMsg log failed:', e));
                     setInvitePreview(null);
@@ -8786,7 +8791,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   'Status': 'Sent', 'Message': msg || '',
                   'Notes': 'Sent from Solutions Hub',
                   'Logged By': CURRENT_USER?.name || '',
-                }).then(() => { if (onLogActivity) onLogActivity(); }).catch(console.error);
+                })
+                  .then(() => activateAccountIfNeeded(a, companyIds, data.accounts))
+                  .then(() => { if (onLogActivity) onLogActivity(); })
+                  .catch(console.error);
               }}
             />
           )}
@@ -11230,6 +11238,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
             'Stakeholders Reached': [...new Set([...currentReached, s.id])],
           }).catch(e => console.error('Campaign reached update failed:', e));
+          await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
         }).catch(e => console.error('Campaign send log failed:', e));
 
