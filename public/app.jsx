@@ -332,6 +332,13 @@
       const [quickMsgChannel, setQuickMsgChannel] = useState('LinkedIn');
       const [sendingQuickMsg, setSendingQuickMsg] = useState(false);
       const [showAIGenerator, setShowAIGenerator] = useState(false);
+      const [enrichLoading, setEnrichLoading] = useState(false);
+      const [localEmail, setLocalEmail] = useState(F(stakeholder, 'Email') || '');
+      const [emailMeta, setEmailMeta] = useState({
+        confidence: F(stakeholder, 'email_confidence') || null,
+        source: F(stakeholder, 'email_source') || '',
+        qualification: F(stakeholder, 'email_qualification') || '',
+      });
 
       const sName = F(stakeholder, 'Name') + (F(stakeholder, 'Last name') ? ` ${F(stakeholder, 'Last name')}` : '');
       const accNames = resolveLinked(stakeholder, 'Account', accounts, 'Account Name');
@@ -450,6 +457,44 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         setGenLoading('');
       };
 
+      // Email Enrichment: Dropcontact → Apollo waterfall via Netlify function
+      const enrichEmail = async () => {
+        if (enrichLoading) return;
+        const hasEmail = !!localEmail;
+        if (hasEmail && !confirm('Re-enrich this email? This will consume enrichment credits and may overwrite the current email.')) return;
+        setEnrichLoading(true);
+        try {
+          const res = await fetch('/api/enrich-stakeholder', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              stakeholder_id: stakeholder.id,
+              base_id: AIRTABLE_BASE_ID,
+              force: hasEmail,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) { logoutUser(); return; }
+          if (!res.ok) {
+            alert('Enrichment failed: ' + (data.error || `HTTP ${res.status}`));
+            return;
+          }
+          if (data.ok && data.email) {
+            setLocalEmail(data.email);
+            setEmailMeta({ confidence: data.confidence, source: data.source, qualification: data.qualification });
+            if (onRefresh) onRefresh();
+          } else if (data.cached) {
+            alert('Already enriched recently — no credits consumed.');
+          } else {
+            alert(`No email found. Reason: ${data.reason || 'unknown'}${data.domain_used ? ` (domain tried: ${data.domain_used})` : ' (no company domain available)'}`);
+          }
+        } catch (e) {
+          console.error('[enrich] Error:', e);
+          alert('Enrichment error: ' + (e.message || 'unknown'));
+        }
+        setEnrichLoading(false);
+      };
+
       const statusColor = { 'Replied': '#4ade80', 'Meeting Scheduled': '#60a5fa', 'Sent': '#fbbf24', 'Pending': '#a78bfa' };
       const painText = typeof localPain === 'string' ? localPain : String(localPain || '');
       const linkedinText = typeof localLinkedin === 'string' ? localLinkedin : String(localLinkedin || '');
@@ -464,8 +509,32 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 4 }}>
                   {role}{account && onNavigateToAccount ? <span> · <span style={{ color: 'var(--globant-green)', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { onClose(); onNavigateToAccount(account.id); }}>{accountName}</span></span> : (accNames.length ? ` · ${accNames.join(', ')}` : '')}
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  {F(stakeholder, 'Email') && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>✉️ {F(stakeholder, 'Email')}</span>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {localEmail ? (
+                      <>
+                        ✉️ {localEmail}
+                        {emailMeta.source && (
+                          <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>
+                            ({emailMeta.source}{emailMeta.confidence ? ` · ${emailMeta.confidence}%` : ''}{emailMeta.qualification ? ` · ${emailMeta.qualification}` : ''})
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ fontStyle: 'italic' }}>✉️ no email yet</span>
+                    )}
+                    <button
+                      onClick={enrichEmail}
+                      disabled={enrichLoading}
+                      title={localEmail ? 'Re-enrich email via Dropcontact + Apollo' : 'Find email via Dropcontact + Apollo'}
+                      style={{
+                        fontSize: 10, padding: '2px 8px', borderRadius: 6, cursor: enrichLoading ? 'wait' : 'pointer',
+                        background: 'rgba(91,191,181,0.12)', border: '1px solid rgba(91,191,181,0.3)',
+                        color: 'var(--globant-green)', fontWeight: 600, marginLeft: 4,
+                      }}>
+                      {enrichLoading ? '⏳ Enriching...' : localEmail ? '🔄 Re-enrich' : '🔍 Find email'}
+                    </button>
+                  </span>
                   {F(stakeholder, 'Phone number') && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>📞 {F(stakeholder, 'Phone number')}</span>}
                   {F(stakeholder, 'Level of Influence') && <span className="badge badge-accent" style={{ fontSize: 10 }}>{F(stakeholder, 'Level of Influence')}</span>}
                 </div>
