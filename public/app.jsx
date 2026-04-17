@@ -7778,7 +7778,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
     // ============ SOLUTIONS HUB ============
     function SolutionsHub({ data, api, onLogActivity, onAddRecord, onDeleteRecord, goToAccount, navigateToSolId, clearNavigateSol }) {
-      const { accounts, stakeholders, opportunities, outreach, solutions } = data;
+      const { accounts, stakeholders, opportunities, outreach, solutions, campaigns = [], events = [] } = data;
       const isAdmin = CURRENT_USER?.role === 'admin';
       const [selectedSolId, setSelectedSolId] = useState('');
       const [repliesModalSolId, setRepliesModalSolId] = useState('');
@@ -7804,7 +7804,13 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       const [savingNotes, setSavingNotes] = useState(false);
       const [uploadingFile, setUploadingFile] = useState(false);
       const [aiRecsMap, setAiRecsMap] = useState({});
-      const aiRecs = selectedSolId ? (aiRecsMap[selectedSolId] || '') : '';
+      // Prefer in-memory (just generated) → fallback to persisted Airtable field
+      const aiRecs = (() => {
+        if (!selectedSolId) return '';
+        if (aiRecsMap[selectedSolId] !== undefined) return aiRecsMap[selectedSolId];
+        const sol = solutions.find(s => s.id === selectedSolId);
+        return sol ? (F(sol, 'AI Strategic Recommendations') || '') : '';
+      })();
       const setAiRecs = (val) => setAiRecsMap(prev => ({ ...prev, [selectedSolId]: val }));
       const [loadingRecs, setLoadingRecs] = useState(false);
       const [showAddAccount, setShowAddAccount] = useState(false);
@@ -7812,7 +7818,12 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       const [addAccSearch, setAddAccSearch] = useState('');
       const [solExecSummaryMap, setSolExecSummaryMap] = useState({});
       const [loadingSolSummary, setLoadingSolSummary] = useState(false);
-      const solExecSummary = selectedSolId ? (solExecSummaryMap[selectedSolId] || '') : '';
+      const solExecSummary = (() => {
+        if (!selectedSolId) return '';
+        if (solExecSummaryMap[selectedSolId] !== undefined) return solExecSummaryMap[selectedSolId];
+        const sol = solutions.find(s => s.id === selectedSolId);
+        return sol ? (F(sol, 'AI Exec Summary') || '') : '';
+      })();
       const setSolExecSummary = (val) => setSolExecSummaryMap(prev => ({ ...prev, [selectedSolId]: val }));
 
       // ─── NEW SOLUTION ───
@@ -8118,7 +8129,15 @@ Write the Executive Summary with these sections (use ### headers):
 
 Be specific. Use real names from the data. No generic advice. Under 350 words total.`;
 
-          setSolExecSummary(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 800 }) || 'Could not generate summary.');
+          const summary = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 800 }) || 'Could not generate summary.';
+          setSolExecSummary(summary);
+          // Persist to Airtable (fire and forget — in-memory is source of truth for this session)
+          if (selectedSol && !selectedSol.id.startsWith('tmp_')) {
+            const a = api || new AirtableAPI();
+            a.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'AI Exec Summary': summary })
+              .then(() => { if (onLogActivity) onLogActivity(); })
+              .catch(e => console.warn('[exec summary] Airtable save failed (kept in memory):', e.message));
+          }
         } catch (e) {
           console.error(e);
           alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
@@ -8187,7 +8206,15 @@ What's weak? Stale accounts, low reply rates, missing stakeholder coverage?
 ### 📋 Next Actions
 Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 weeks.`;
 
-          setAiRecs(await callOpenAI({ prompt, temperature: 0.6, max_tokens: 1200 }) || 'No recommendations generated.');
+          const recs = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 1200 }) || 'No recommendations generated.';
+          setAiRecs(recs);
+          // Persist to Airtable (fire and forget)
+          if (selectedSol && !selectedSol.id.startsWith('tmp_')) {
+            const a = api || new AirtableAPI();
+            a.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'AI Strategic Recommendations': recs })
+              .then(() => { if (onLogActivity) onLogActivity(); })
+              .catch(e => console.warn('[ai recs] Airtable save failed (kept in memory):', e.message));
+          }
         } catch (e) { console.error(e); alert('Failed to generate recommendations'); }
         setLoadingRecs(false);
       };
@@ -8486,6 +8513,64 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 );
               })()}
             </div>
+
+            {/* Linked Campaigns + Events */}
+            {(() => {
+              const linkedCampaignIds = linkedIds(selectedSol, 'Campaign');
+              const linkedEventIds = linkedIds(selectedSol, 'Events');
+              const linkedCampaigns = campaigns.filter(c => linkedCampaignIds.includes(c.id));
+              const linkedEvents = events.filter(e => linkedEventIds.includes(e.id));
+              if (linkedCampaigns.length === 0 && linkedEvents.length === 0) return null;
+              return (
+                <div className="card" style={{ borderLeft: '3px solid #a78bfa', marginBottom: 16, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <h3 style={{ margin: 0, fontSize: 14 }}>🔗 Linked Campaigns & Events</h3>
+                    <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{linkedCampaigns.length + linkedEvents.length} linked</span>
+                  </div>
+
+                  {linkedCampaigns.length > 0 && (
+                    <div style={{ marginBottom: linkedEvents.length > 0 ? 12 : 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>📣 Campaigns ({linkedCampaigns.length})</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {linkedCampaigns.map(c => {
+                          const cType = F(c, 'Type') || '';
+                          const cStatus = F(c, 'Status') || '';
+                          const typeIcon = { 'White Paper': '📄', 'News / Article': '📰', 'Product Launch': '🚀', 'Case Study': '📊', 'Cold Outreach': '🎯' }[cType] || '📣';
+                          const statusColor = { 'Draft': '#a78bfa', 'Active': '#4ade80', 'Paused': '#fbbf24', 'Completed': '#60a5fa' }[cStatus] || '#666';
+                          return (
+                            <div key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', fontSize: 12 }}>
+                              <span>{typeIcon}</span>
+                              <span style={{ fontWeight: 600 }}>{F(c, 'Name')}</span>
+                              {cStatus && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: `${statusColor}22`, color: statusColor, fontWeight: 700, border: `1px solid ${statusColor}44` }}>{cStatus}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {linkedEvents.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>🎤 Events ({linkedEvents.length})</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {linkedEvents.map(e => {
+                          const evStart = e.fields?.['Starting'];
+                          const dateStr = evStart ? new Date(evStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                          const isPast = evStart ? new Date(evStart) < new Date() : false;
+                          return (
+                            <div key={e.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', fontSize: 12, opacity: isPast ? 0.6 : 1 }}>
+                              <span>🎤</span>
+                              <span style={{ fontWeight: 600 }}>{F(e, 'Event Name')}</span>
+                              {dateStr && <span style={{ fontSize: 10, color: 'var(--globant-muted)' }}>· {dateStr}{isPast ? ' (past)' : ''}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Two columns: Notes + Accounts */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
