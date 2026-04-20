@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Oike × UrbanFlip · Onoma · Urbantech</title>
-  <meta name="description" content="Conversación de descubrimiento. Sales Intelligence for Humans." />
+  <meta name="description" content="De crecimiento orgánico a motor comercial escalable." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -23,6 +23,7 @@
       --orange:    #E08552;
       --border:    #2A2A44;
       --gold:      #D4AF6F;
+      --red:       #e57373;
     }
 
     html { scroll-behavior: smooth; scroll-padding-top: 0; }
@@ -35,7 +36,6 @@
       overflow-x: hidden;
     }
 
-    /* ── Animated background gradient ── */
     body::before {
       content: '';
       position: fixed;
@@ -49,112 +49,55 @@
 
     /* ── Side progress nav ── */
     .nav-dots {
-      position: fixed;
-      right: 32px;
-      top: 50%;
-      transform: translateY(-50%);
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      z-index: 100;
+      position: fixed; right: 32px; top: 50%; transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 14px; z-index: 100;
     }
     .nav-dots a {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.12);
-      transition: all 0.3s;
-      position: relative;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: rgba(255,255,255,0.12); transition: all 0.3s; position: relative;
     }
-    .nav-dots a:hover {
-      background: var(--green);
-      transform: scale(1.4);
-    }
+    .nav-dots a:hover { background: var(--green); transform: scale(1.4); }
     .nav-dots a.active {
       background: var(--green);
       box-shadow: 0 0 16px rgba(91,191,181,0.6);
     }
     .nav-dots a span {
-      position: absolute;
-      right: 22px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 11px;
-      color: var(--muted);
-      white-space: nowrap;
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
+      position: absolute; right: 22px; top: 50%; transform: translateY(-50%);
+      font-size: 11px; color: var(--muted); white-space: nowrap;
+      opacity: 0; transition: opacity 0.2s; pointer-events: none;
     }
     .nav-dots a:hover span { opacity: 1; }
     @media (max-width: 768px) { .nav-dots { display: none; } }
 
     /* ── Section base ── */
     section {
-      min-height: 100vh;
-      padding: 96px 32px 80px;
-      max-width: 1100px;
-      margin: 0 auto;
-      position: relative;
-      z-index: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
+      min-height: 100vh; padding: 96px 32px 80px;
+      max-width: 1100px; margin: 0 auto; position: relative; z-index: 1;
+      display: flex; flex-direction: column; justify-content: center;
     }
 
     .section-num {
-      display: inline-block;
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--orange);
-      letter-spacing: 2px;
-      margin-bottom: 12px;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.8s ease;
+      display: inline-block; font-size: 14px; font-weight: 800;
+      color: var(--orange); letter-spacing: 2px; margin-bottom: 12px;
+      opacity: 0; transform: translateY(20px); transition: all 0.8s ease;
     }
     .section-num.in-view { opacity: 1; transform: translateY(0); }
 
-    h1 {
-      font-size: clamp(40px, 7vw, 84px);
-      font-weight: 900;
-      line-height: 1.05;
-      letter-spacing: -0.02em;
-      margin-bottom: 16px;
-    }
+    h1 { font-size: clamp(40px, 7vw, 84px); font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 16px; }
     h2 {
-      font-size: clamp(32px, 5vw, 56px);
-      font-weight: 800;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
-      margin-bottom: 24px;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.8s ease 0.1s;
+      font-size: clamp(32px, 5vw, 56px); font-weight: 800; line-height: 1.1;
+      letter-spacing: -0.02em; margin-bottom: 24px;
+      opacity: 0; transform: translateY(20px); transition: all 0.8s ease 0.1s;
     }
     h2.in-view { opacity: 1; transform: translateY(0); }
-    h3 {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--green);
-      margin-bottom: 12px;
-    }
-    h4 {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
-    }
-
+    h3 { font-size: 20px; font-weight: 700; color: var(--green); margin-bottom: 12px; }
+    h4 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
     p { color: var(--muted); font-size: 16px; margin-bottom: 14px; }
     p strong, li strong { color: var(--text); font-weight: 600; }
 
     .lead {
-      font-size: clamp(18px, 2.2vw, 22px);
-      color: var(--text);
-      line-height: 1.5;
-      max-width: 720px;
-      opacity: 0;
-      transform: translateY(20px);
+      font-size: clamp(18px, 2.2vw, 22px); color: var(--text); line-height: 1.5;
+      max-width: 760px; opacity: 0; transform: translateY(20px);
       transition: all 0.8s ease 0.2s;
     }
     .lead.in-view { opacity: 1; transform: translateY(0); }
@@ -163,523 +106,275 @@
     .orange { color: var(--orange); }
 
     /* ── HERO ── */
-    .hero {
-      min-height: 100vh;
-      text-align: left;
-      padding-top: 0;
-      padding-bottom: 0;
-      justify-content: center;
-    }
+    .hero { min-height: 100vh; text-align: left; padding-top: 0; padding-bottom: 0; justify-content: center; }
     .hero .brand {
-      display: inline-block;
-      font-weight: 900;
-      font-size: clamp(80px, 14vw, 180px);
+      display: inline-block; font-weight: 900; font-size: clamp(80px, 14vw, 180px);
       background: linear-gradient(135deg, var(--green) 0%, var(--green-dk) 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: -0.04em;
-      line-height: 1;
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: -0.04em; line-height: 1;
       animation: brand-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
     .hero .tagline {
-      font-size: clamp(18px, 2.5vw, 28px);
-      color: var(--muted);
-      font-style: italic;
-      margin-top: 8px;
-      animation: fadeUp 1s ease 0.3s both;
+      font-size: clamp(18px, 2.5vw, 28px); color: var(--muted); font-style: italic;
+      margin-top: 8px; animation: fadeUp 1s ease 0.3s both;
     }
-    .hero .for-block {
-      margin-top: 56px;
-      animation: fadeUp 1s ease 0.6s both;
-    }
-    .hero .for-label {
-      font-size: 13px;
-      color: var(--muted);
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
+    .hero .for-block { margin-top: 56px; animation: fadeUp 1s ease 0.6s both; }
+    .hero .for-label { font-size: 13px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
     .hero .for-names {
-      font-size: clamp(28px, 4.5vw, 52px);
-      font-weight: 800;
-      letter-spacing: -0.02em;
+      font-size: clamp(28px, 4.5vw, 52px); font-weight: 800; letter-spacing: -0.02em;
     }
     .hero .for-names span { color: var(--orange); }
-    .hero .meeting-type {
-      color: var(--orange);
-      font-size: clamp(15px, 2vw, 18px);
-      margin-top: 6px;
-    }
-    .hero .author {
-      margin-top: 80px;
-      animation: fadeUp 1s ease 0.9s both;
-    }
-    .hero .author-name { font-weight: 700; font-size: 16px; }
-    .hero .author-meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+    .hero .meeting-type { color: var(--orange); font-size: clamp(15px, 2vw, 18px); margin-top: 6px; }
     .hero .scroll-hint {
-      position: absolute;
-      bottom: 40px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: var(--muted);
-      font-size: 12px;
-      letter-spacing: 2px;
+      position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+      color: var(--muted); font-size: 12px; letter-spacing: 2px;
       animation: bob 2s ease infinite;
     }
 
-    @keyframes brand-in {
-      from { opacity: 0; transform: translateY(40px) scale(0.95); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes bob {
-      0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.6; }
-      50% { transform: translateX(-50%) translateY(-8px); opacity: 1; }
-    }
+    @keyframes brand-in { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes bob { 0%,100% { transform: translateX(-50%) translateY(0); opacity: 0.6; } 50% { transform: translateX(-50%) translateY(-8px); opacity: 1; } }
 
-    /* ── Cards ── */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 20px;
-      margin-top: 32px;
-    }
-    .grid-3 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
-      margin-top: 32px;
-    }
+    /* ── Cards & grids ── */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 32px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 32px; }
 
     .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 24px 26px;
-      transition: all 0.4s ease;
-      opacity: 0;
-      transform: translateY(20px);
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px 26px; transition: all 0.4s ease;
+      opacity: 0; transform: translateY(20px);
     }
     .card.in-view { opacity: 1; transform: translateY(0); }
     .card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(91,191,181,0.4);
+      transform: translateY(-4px); border-color: rgba(91,191,181,0.4);
       background: var(--card-hi);
     }
     .card.green { border-left: 3px solid var(--green); }
     .card.orange { border-left: 3px solid var(--orange); }
-    .card.red { border-left: 3px solid #e57373; }
+    .card.red { border-left: 3px solid var(--red); }
+    .card.gold { border-left: 3px solid var(--gold); }
 
-    .card ul, .section-content ul {
-      list-style: none;
-      padding: 0;
-    }
+    .card ul, .section-content ul { list-style: none; padding: 0; }
     .card li, .section-content > ul > li {
-      position: relative;
-      padding-left: 22px;
-      margin-bottom: 10px;
-      color: var(--text);
-      font-size: 15px;
-      line-height: 1.6;
+      position: relative; padding-left: 22px; margin-bottom: 10px;
+      color: var(--text); font-size: 15px; line-height: 1.6;
     }
     .card li::before, .section-content > ul > li::before {
-      content: '→';
-      position: absolute;
-      left: 0;
-      color: var(--green);
-      font-weight: 700;
+      content: '→'; position: absolute; left: 0; color: var(--green); font-weight: 700;
     }
     .card.orange li::before { color: var(--orange); }
-    .card.red li::before { color: #e57373; content: '✕'; }
+    .card.red li::before { color: var(--red); content: '✕'; }
 
-    /* ── Timeline (career) ── */
-    .timeline {
-      position: relative;
-      padding-left: 32px;
-      margin-top: 32px;
+    /* ── Big KPI display ── */
+    .kpi-hero {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px; margin-top: 36px;
     }
-    .timeline::before {
-      content: '';
-      position: absolute;
-      left: 8px;
-      top: 8px;
-      bottom: 8px;
-      width: 2px;
-      background: linear-gradient(180deg, var(--green) 0%, var(--orange) 100%);
-    }
-    .timeline-item {
-      position: relative;
-      padding-bottom: 22px;
-      opacity: 0;
-      transform: translateX(-20px);
+    .kpi-hero-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px 24px; text-align: center;
+      opacity: 0; transform: translateY(20px);
       transition: all 0.6s ease;
     }
-    .timeline-item.in-view { opacity: 1; transform: translateX(0); }
-    .timeline-item::before {
-      content: '';
-      position: absolute;
-      left: -32px;
-      top: 6px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--bg);
-      border: 3px solid var(--green);
+    .kpi-hero-card.in-view { opacity: 1; transform: translateY(0); }
+    .kpi-hero-card .big-num {
+      font-size: clamp(40px, 6vw, 64px); font-weight: 900; line-height: 1;
+      background: linear-gradient(135deg, var(--green) 0%, var(--orange) 100%);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .timeline-item:last-child::before { border-color: var(--orange); background: var(--orange); }
-    .timeline-item .role {
-      font-weight: 700;
-      color: var(--text);
-      font-size: 16px;
+    .kpi-hero-card .kpi-label {
+      font-size: 13px; color: var(--muted); margin-top: 10px;
+      line-height: 1.4; max-width: 240px; margin-left: auto; margin-right: auto;
     }
-    .timeline-item .company {
-      color: var(--green);
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .timeline-item .desc {
-      color: var(--muted);
-      font-size: 14px;
-      margin-top: 2px;
+    .kpi-hero-card .kpi-source {
+      font-size: 10px; color: var(--muted); margin-top: 8px; opacity: 0.6;
+      font-style: italic;
     }
 
-    /* ── Group table (3 columns: UrbanFlip / Onoma / Urbantech) ── */
+    /* ── Group table (3 columns) ── */
     .group-table {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-top: 24px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 24px;
     }
-    @media (max-width: 768px) {
-      .group-table { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 768px) { .group-table { grid-template-columns: 1fr; } }
     .group-col {
-      background: var(--card);
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      transition: transform 0.3s ease, border-color 0.3s ease;
-      opacity: 0;
-      transform: translateY(20px);
+      background: var(--card); border-radius: 14px; overflow: hidden;
+      border: 1px solid var(--border); transition: transform 0.3s ease, border-color 0.3s ease;
+      opacity: 0; transform: translateY(20px);
+      display: flex; flex-direction: column;
     }
     .group-col.in-view { opacity: 1; transform: translateY(0); }
-    .group-col:hover {
-      transform: translateY(-4px);
-      border-color: rgba(91,191,181,0.4);
-    }
+    .group-col:hover { transform: translateY(-4px); border-color: rgba(91,191,181,0.4); }
     .group-col .header {
       padding: 16px 18px;
       background: linear-gradient(135deg, var(--green) 0%, var(--green-dk) 100%);
-      color: #0A0A14;
-      font-weight: 800;
-      font-size: 17px;
+      color: #0A0A14; font-weight: 800; font-size: 17px;
     }
-    .group-col .body {
-      padding: 18px;
-    }
+    .group-col .body { padding: 18px; flex: 1; }
     .group-col .subtitle {
-      font-size: 11px;
-      color: var(--orange);
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      margin-bottom: 8px;
+      font-size: 11px; color: var(--orange); font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;
     }
-    .group-col .desc {
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.55;
-      margin-bottom: 14px;
+    .group-col .pain {
+      color: var(--text); font-size: 14px; line-height: 1.55; margin-bottom: 14px;
     }
-    .group-col .icp {
-      padding: 10px 12px;
-      background: rgba(91,191,181,0.06);
-      border-left: 2px solid var(--green);
-      border-radius: 0 8px 8px 0;
-      font-size: 13px;
-      color: var(--text);
+    .group-col .proposal {
+      padding: 12px 14px; background: rgba(91,191,181,0.08);
+      border-left: 2px solid var(--green); border-radius: 0 8px 8px 0;
+      font-size: 13px; color: var(--text); line-height: 1.5;
     }
-    .group-col .icp strong {
-      display: block;
-      font-size: 10px;
-      color: var(--green);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      margin-bottom: 4px;
+    .group-col .proposal strong {
+      display: block; font-size: 10px; color: var(--green);
+      letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .group-col .kpi-target {
+      display: inline-block; margin-top: 12px; padding: 4px 10px;
+      background: rgba(224,133,82,0.15); color: var(--orange);
+      border-radius: 8px; font-size: 11px; font-weight: 700;
+      border: 1px solid rgba(224,133,82,0.3);
     }
 
-    /* ── Hypothesis blocks ── */
-    .hypothesis {
-      background: var(--card);
-      border-left: 3px solid var(--green);
-      border-radius: 0 12px 12px 0;
-      padding: 22px 26px;
-      margin-bottom: 16px;
-      opacity: 0;
-      transform: translateX(-20px);
-      transition: all 0.7s ease;
+    /* ── Quote callout ── */
+    .quote-box {
+      background: linear-gradient(135deg, rgba(91,191,181,0.10) 0%, rgba(224,133,82,0.06) 100%);
+      border-left: 4px solid var(--green); padding: 22px 28px;
+      border-radius: 0 14px 14px 0;
+      font-size: clamp(17px, 2.2vw, 21px); font-style: italic;
+      color: var(--text); line-height: 1.5; margin: 24px 0;
     }
-    .hypothesis.in-view { opacity: 1; transform: translateX(0); }
-    .hypothesis h4 {
-      color: var(--green);
-      font-size: 18px;
+    .quote-box strong { color: var(--green); font-style: normal; }
+
+    .client-quote {
+      background: var(--card); border-left: 4px solid var(--orange);
+      padding: 24px 32px; border-radius: 0 14px 14px 0; margin: 28px 0;
+      position: relative;
+    }
+    .client-quote::before {
+      content: '"'; position: absolute; left: 16px; top: 0;
+      font-size: 72px; color: var(--orange); opacity: 0.25;
+      line-height: 1; font-family: Georgia, serif;
+    }
+    .client-quote p {
+      color: var(--text); font-size: clamp(17px, 2vw, 19px);
+      font-style: italic; line-height: 1.55; margin-bottom: 8px;
+      padding-left: 30px;
+    }
+    .client-quote .attribution {
+      padding-left: 30px; font-size: 12px; color: var(--orange);
+      letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
+      margin-top: 12px; font-style: normal;
+    }
+
+    /* ── Method flow ── */
+    .method-flow {
+      display: flex; gap: 12px; margin-top: 28px;
+      flex-wrap: wrap; justify-content: stretch;
+    }
+    .method-step {
+      flex: 1; min-width: 170px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px; position: relative;
+      opacity: 0; transform: translateY(20px); transition: all 0.6s ease;
+    }
+    .method-step.in-view { opacity: 1; transform: translateY(0); }
+    .method-step .step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--green), var(--green-dk));
+      color: #0A0A14; font-weight: 900; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
       margin-bottom: 12px;
     }
-    .hypothesis .h-label {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 1.5px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      margin-right: 6px;
-      vertical-align: middle;
-    }
-    .hypothesis .h-hyp {
-      background: rgba(91,191,181,0.18);
-      color: var(--green);
-    }
-    .hypothesis .h-imp {
-      background: rgba(224,133,82,0.18);
-      color: var(--orange);
-    }
-    .hypothesis p { color: var(--text); margin-bottom: 12px; }
-    .hypothesis p:last-child { margin-bottom: 0; }
+    .method-step h4 { font-size: 14px; color: var(--text); }
+    .method-step p { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0; }
 
-    /* ── Stack diagram ── */
-    .stack {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-top: 24px;
-      flex-wrap: wrap;
+    /* ── Pain / gain comparison ── */
+    .vs-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 28px;
     }
-    .stack-box {
-      flex: 1;
-      min-width: 180px;
-      background: var(--card);
+    @media (max-width: 768px) { .vs-grid { grid-template-columns: 1fr; } }
+    .vs-card {
+      background: var(--card); border-radius: 14px; padding: 24px;
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 18px;
-      text-align: center;
+      opacity: 0; transform: translateY(20px); transition: all 0.6s ease;
     }
-    .stack-box.oike { border-color: var(--green); background: rgba(91,191,181,0.08); }
-    .stack-box .label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
-    .stack-box .name { font-size: 18px; font-weight: 800; color: var(--text); margin-top: 6px; }
-    .stack-box.oike .name { color: var(--green); }
-    .stack-box .what { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .stack-arrow { font-size: 28px; color: var(--green); }
-    @media (max-width: 768px) {
-      .stack { flex-direction: column; }
-      .stack-arrow { transform: rotate(90deg); }
+    .vs-card.in-view { opacity: 1; transform: translateY(0); }
+    .vs-card.bad { border-left: 3px solid var(--red); }
+    .vs-card.good { border-left: 3px solid var(--green); }
+    .vs-card h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+    .vs-card.bad h3 { color: var(--red); }
+    .vs-card.good h3 { color: var(--green); }
+    .vs-card .row {
+      padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
     }
+    .vs-card .row:last-child { border-bottom: none; }
+    .vs-card .row .label { color: var(--muted); font-size: 13px; }
+    .vs-card .row .val {
+      font-weight: 800; font-size: 15px;
+    }
+    .vs-card.bad .val { color: var(--red); }
+    .vs-card.good .val { color: var(--green); }
 
-    /* ── Question groups ── */
-    .q-group {
-      margin-bottom: 28px;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.6s ease;
-    }
-    .q-group.in-view { opacity: 1; transform: translateY(0); }
-    .q-group h4 {
-      font-size: 13px;
-      color: var(--orange);
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
+    /* ── Questions ── */
     .q-list {
-      background: var(--card);
-      border-radius: 12px;
-      padding: 8px 0;
-      border: 1px solid var(--border);
+      background: var(--card); border-radius: 12px; padding: 8px 0;
+      border: 1px solid var(--border); margin-top: 24px;
     }
     .q-list .q {
-      padding: 12px 22px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text);
-      font-size: 15px;
-      transition: background 0.2s;
+      padding: 14px 22px; border-bottom: 1px solid var(--border);
+      color: var(--text); font-size: 15px; transition: background 0.2s;
     }
     .q-list .q:last-child { border-bottom: none; }
     .q-list .q:hover { background: rgba(91,191,181,0.05); }
     .q-list .q::before {
-      content: '?';
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      line-height: 20px;
-      text-align: center;
-      background: var(--orange);
-      color: var(--bg);
-      border-radius: 50%;
-      font-weight: 800;
-      font-size: 12px;
-      margin-right: 12px;
-      vertical-align: middle;
+      content: '?'; display: inline-block; width: 20px; height: 20px;
+      line-height: 20px; text-align: center;
+      background: var(--orange); color: var(--bg); border-radius: 50%;
+      font-weight: 800; font-size: 12px; margin-right: 12px; vertical-align: middle;
     }
 
     /* ── Steps timeline ── */
-    .steps {
-      margin-top: 32px;
-    }
+    .steps { margin-top: 32px; }
     .step {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      gap: 24px;
-      padding: 20px 0;
-      border-bottom: 1px solid var(--border);
-      align-items: center;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.6s ease;
+      display: grid; grid-template-columns: 140px 1fr; gap: 24px;
+      padding: 20px 0; border-bottom: 1px solid var(--border); align-items: center;
+      opacity: 0; transform: translateY(20px); transition: all 0.6s ease;
     }
     .step.in-view { opacity: 1; transform: translateY(0); }
     .step:last-child { border-bottom: none; }
     .step .when {
       background: linear-gradient(135deg, var(--orange) 0%, #b85f30 100%);
-      color: #0A0A14;
-      padding: 10px 18px;
-      border-radius: 10px;
-      font-weight: 800;
-      text-align: center;
-      font-size: 14px;
-      letter-spacing: 0.5px;
+      color: #0A0A14; padding: 10px 18px; border-radius: 10px;
+      font-weight: 800; text-align: center; font-size: 14px; letter-spacing: 0.5px;
     }
-    .step .what {
-      color: var(--text);
-      font-size: 16px;
-      line-height: 1.5;
-    }
-    @media (max-width: 768px) {
-      .step { grid-template-columns: 1fr; gap: 8px; }
-      .step .when { justify-self: start; }
-    }
+    .step .what { color: var(--text); font-size: 16px; line-height: 1.5; }
+    @media (max-width: 768px) { .step { grid-template-columns: 1fr; gap: 8px; } .step .when { justify-self: start; } }
 
     /* ── Closing ── */
-    .closing {
-      text-align: center;
-      padding-top: 120px;
+    .closing { text-align: center; padding-top: 120px; }
+    .closing .big-line {
+      font-size: clamp(26px, 4vw, 44px); font-weight: 800; color: var(--text);
+      line-height: 1.25; max-width: 800px; margin: 32px auto; letter-spacing: -0.01em;
     }
-    .closing blockquote {
-      font-size: clamp(20px, 3vw, 32px);
-      font-style: italic;
-      color: var(--text);
-      line-height: 1.45;
-      max-width: 760px;
-      margin: 0 auto 32px;
-      position: relative;
-      padding: 0 40px;
-    }
-    .closing blockquote::before,
-    .closing blockquote::after {
-      font-size: 60px;
-      color: var(--green);
-      opacity: 0.4;
-      position: absolute;
-      line-height: 1;
-    }
-    .closing blockquote::before { content: '"'; left: 0; top: -10px; }
-    .closing blockquote::after { content: '"'; right: 0; bottom: -30px; }
+    .closing .big-line span { color: var(--green); }
     .closing .signature {
-      margin-top: 64px;
-      padding-top: 32px;
-      border-top: 1px solid var(--border);
-      max-width: 560px;
-      margin-left: auto;
-      margin-right: auto;
+      margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--border);
+      max-width: 560px; margin-left: auto; margin-right: auto;
     }
-    .closing .signature .name {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--text);
-    }
-    .closing .signature .role {
-      color: var(--green);
-      font-size: 14px;
-      margin-top: 4px;
-    }
+    .closing .signature .name { font-size: 22px; font-weight: 800; color: var(--text); }
+    .closing .signature .role { color: var(--green); font-size: 14px; margin-top: 4px; }
     .closing .signature .links {
-      margin-top: 18px;
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      flex-wrap: wrap;
+      margin-top: 18px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;
     }
     .closing .signature .links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 14px;
-      transition: color 0.2s;
-      border-bottom: 1px solid transparent;
-      padding-bottom: 2px;
+      color: var(--muted); text-decoration: none; font-size: 14px;
+      transition: color 0.2s; border-bottom: 1px solid transparent; padding-bottom: 2px;
     }
-    .closing .signature .links a:hover {
-      color: var(--green);
-      border-bottom-color: var(--green);
-    }
+    .closing .signature .links a:hover { color: var(--green); border-bottom-color: var(--green); }
 
-    /* ── Highlight box (problema/solución) ── */
-    .quote-box {
-      background: linear-gradient(135deg, rgba(91,191,181,0.10) 0%, rgba(224,133,82,0.06) 100%);
-      border-left: 4px solid var(--green);
-      padding: 22px 28px;
-      border-radius: 0 14px 14px 0;
-      font-size: clamp(17px, 2.2vw, 21px);
-      font-style: italic;
-      color: var(--text);
-      line-height: 1.5;
-      margin: 24px 0;
-    }
-    .quote-box strong { color: var(--green); font-style: normal; }
-
-    /* ── Stats inline ── */
-    .stats-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 14px;
-      margin: 28px 0;
-    }
-    .stat {
-      background: var(--card);
-      padding: 20px;
-      border-radius: 12px;
-      text-align: center;
-      border: 1px solid var(--border);
-    }
-    .stat .num {
-      font-size: 36px;
-      font-weight: 900;
-      background: linear-gradient(135deg, var(--green) 0%, var(--orange) 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      line-height: 1;
-    }
-    .stat .label {
-      font-size: 12px;
-      color: var(--muted);
-      margin-top: 6px;
-      letter-spacing: 0.5px;
-    }
-
-    /* ── Footer ── */
     footer {
-      padding: 40px 32px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 12px;
-      border-top: 1px solid var(--border);
-      margin-top: 80px;
-      position: relative;
-      z-index: 1;
+      padding: 40px 32px; text-align: center; color: var(--muted);
+      font-size: 12px; border-top: 1px solid var(--border); margin-top: 80px;
+      position: relative; z-index: 1;
     }
     footer a { color: var(--green); text-decoration: none; }
   </style>
@@ -689,14 +384,15 @@
   <!-- Side progress nav -->
   <nav class="nav-dots">
     <a href="#hero" data-section="hero" class="active"><span>Inicio</span></a>
-    <a href="#objetivo" data-section="objetivo"><span>01 · Objetivo</span></a>
-    <a href="#quien-soy" data-section="quien-soy"><span>02 · Quién soy</span></a>
-    <a href="#oike" data-section="oike"><span>03 · Qué es Oike</span></a>
-    <a href="#ustedes" data-section="ustedes"><span>04 · Lo que sé de ustedes</span></a>
-    <a href="#hipotesis" data-section="hipotesis"><span>05 · Hipótesis</span></a>
-    <a href="#preguntas" data-section="preguntas"><span>06 · Preguntas</span></a>
-    <a href="#pasos" data-section="pasos"><span>07 · Próximos pasos</span></a>
-    <a href="#cierre" data-section="cierre"><span>08 · Cierre</span></a>
+    <a href="#contexto" data-section="contexto"><span>01 · Su contexto</span></a>
+    <a href="#problema" data-section="problema"><span>02 · Por qué el orgánico frena</span></a>
+    <a href="#kpis" data-section="kpis"><span>03 · Qué pasa con outbound</span></a>
+    <a href="#pain" data-section="pain"><span>04 · Su pain, línea por línea</span></a>
+    <a href="#propuesta" data-section="propuesta"><span>05 · Qué proponemos</span></a>
+    <a href="#metodo" data-section="metodo"><span>06 · Cómo lo hacemos</span></a>
+    <a href="#calibrar" data-section="calibrar"><span>07 · Para calibrar</span></a>
+    <a href="#pasos" data-section="pasos"><span>08 · Próximos pasos</span></a>
+    <a href="#cierre" data-section="cierre"><span>Cierre</span></a>
   </nav>
 
   <!-- ───────── HERO ───────── -->
@@ -704,374 +400,394 @@
     <div class="brand">OIKE</div>
     <div class="tagline">Sales Intelligence for Humans</div>
     <div class="for-block">
-      <div class="for-label">Presentación para</div>
+      <div class="for-label">Preparación para</div>
       <div class="for-names"><span>UrbanFlip</span> · <span>Onoma</span> · <span>Urbantech</span></div>
-      <div class="meeting-type">Primera reunión de descubrimiento</div>
-    </div>
-    <div class="author">
-      <div class="author-name">Alejandra Cadario</div>
-      <div class="author-meta">Fundadora de Oike · alecadario.com · oike.app</div>
+      <div class="meeting-type">De crecimiento orgánico a motor comercial escalable</div>
     </div>
     <div class="scroll-hint">↓ SCROLL</div>
   </section>
 
-  <!-- ───────── 01. OBJETIVO ───────── -->
-  <section id="objetivo">
+  <!-- ───────── 01. SU CONTEXTO ───────── -->
+  <section id="contexto">
     <div class="section-num">01.</div>
-    <h2>Objetivo de esta reunión</h2>
-    <div class="lead">
-      Esta no es una reunión de venta. Es una conversación de <span class="accent">descubrimiento</span>.
+    <h2>El punto de partida</h2>
+
+    <div class="client-quote">
+      <p>"Hasta ahora el crecimiento ha sido muy orgánico a través de LinkedIn y escribiendo a gente. Ahora lo que queremos es convertir esto en una empresa <strong style="color:var(--green);font-style:normal;">escalable</strong>. Escalar radicalmente la base de inversores, la base de compradores, y la generación de negocio en Urbantech. Montar motores generadores de negocio y no depender únicamente de que la gente te recomiende o te vea por LinkedIn."</p>
+      <div class="attribution">— El brief que nos diste</div>
     </div>
-    <p style="margin-top:18px;max-width:760px;font-size:17px;">
-      Mi objetivo hoy es escuchar más de lo que hablo, entender el negocio desde adentro, y salir con contexto suficiente para armar una propuesta quirúrgica — no un paquete genérico.
+
+    <p style="margin-top:16px;font-size:17px;">
+      Esa frase es el norte de esta conversación. Todo lo que viene a continuación sale de ahí.
     </p>
 
-    <div class="grid-2">
+    <h3 style="margin-top:36px;">Lo que tienen hoy — activos reales</h3>
+    <div class="grid-3">
       <div class="card green">
-        <h3>✓ Lo que vamos a cubrir</h3>
-        <ul>
-          <li>Quién soy y por qué estoy del otro lado de la mesa</li>
-          <li>Qué es Oike y qué problema resuelve <span style="color:var(--muted);font-size:13px;">(no feature dump)</span></li>
-          <li>Lo que ya sé de ustedes <span style="color:var(--muted);font-size:13px;">(research previo + hipótesis a validar)</span></li>
-          <li>Preguntas abiertas — acá ustedes hablan, yo tomo notas</li>
-          <li>Próximos pasos — cierre con plazo concreto</li>
-        </ul>
+        <h4>🔗 Marca personal fuerte</h4>
+        <p style="font-size:14px;">22K seguidores en LinkedIn. La gente te ve y escribe directo. Ese canal <strong>no se desactiva, se complementa.</strong></p>
+      </div>
+      <div class="card green">
+        <h4>🏢 3 líneas con ICP claro</h4>
+        <p style="font-size:14px;">UrbanFlip, Onoma, Urbantech. Cada una con deal sizes atractivos y compradores/inversores identificables.</p>
+      </div>
+      <div class="card green">
+        <h4>📊 Attio recién implementado</h4>
+        <p style="font-size:14px;">Infraestructura en su lugar. Falta el motor que la alimente con leads calificados y los haga moverse.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:32px;">La pregunta que se plantea sola</h3>
+    <div class="quote-box">
+      Si el founder deja de postear una semana, <strong>¿qué pasa con el pipeline?</strong><br>
+      Hoy se seca. Ese es el techo del orgánico puro.
+    </div>
+  </section>
+
+  <!-- ───────── 02. POR QUÉ EL ORGÁNICO FRENA ───────── -->
+  <section id="problema">
+    <div class="section-num">02.</div>
+    <h2>Por qué el orgánico solo llega hasta acá</h2>
+
+    <p style="font-size:17px;max-width:760px;">
+      El crecimiento orgánico es <strong>excelente arrancando</strong>, pero tiene un techo matemático. A partir de cierto punto, escalar requiere sistema, no más esfuerzo individual.
+    </p>
+
+    <div class="kpi-hero">
+      <div class="kpi-hero-card">
+        <div class="big-num">10-30%</div>
+        <div class="kpi-label">Del pipeline total que aporta LinkedIn orgánico en empresas B2B establecidas</div>
+        <div class="kpi-source">LinkedIn B2B Institute 2023</div>
+      </div>
+      <div class="kpi-hero-card">
+        <div class="big-num">3-5×</div>
+        <div class="kpi-label">Crecimiento promedio al combinar orgánico + outbound estructurado vs solo orgánico</div>
+        <div class="kpi-source">HubSpot State of Marketing</div>
+      </div>
+      <div class="kpi-hero-card">
+        <div class="big-num">78%</div>
+        <div class="kpi-label">De las empresas B2B que escalan a €5M+ ARR tienen outbound sistematizado</div>
+        <div class="kpi-source">SaaStr + Pavilion 2024</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:40px;">Lo que ustedes están viendo — traducido en síntomas típicos</h3>
+    <div class="grid-2">
+      <div class="card orange">
+        <h4>⚠️ Inversores</h4>
+        <p style="font-size:14px;">Entran a UrbanFlip por recomendación o por post en LinkedIn. <strong>No hay un proceso activo</strong> para identificar a los 5.000 potenciales inversores calificados en España que aún no te conocen.</p>
+      </div>
+      <div class="card orange">
+        <h4>⚠️ Compradores internacionales</h4>
+        <p style="font-size:14px;">Onoma vende propiedades de €1-4M. <strong>Cada venta empieza de cero</strong> — no hay base de compradores con criterios registrados para hacer matching proactivo cuando entra inventario nuevo.</p>
+      </div>
+      <div class="card orange">
+        <h4>⚠️ Urbantech sin motor</h4>
+        <p style="font-size:14px;">Producto listo, mercado identificado (50-100 empresas target en España). <strong>Pero sin ritual de outbound</strong> para mapear stakeholders, abrir conversaciones, cerrar.</p>
+      </div>
+      <div class="card orange">
+        <h4>⚠️ Dependencia del founder</h4>
+        <p style="font-size:14px;">Sos cara, canal y cierre. <strong>Lo que posteás mueve pipeline. Lo que no posteás, no.</strong> Eso es riesgo operativo, no solo de crecimiento.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 03. POR QUÉ EL OUTBOUND FALLA EN 80% DE EMPRESAS ───────── -->
+  <section id="kpis">
+    <div class="section-num">03.</div>
+    <h2>Por qué el 80% de las empresas <span class="orange">fracasan</span> intentando outbound</h2>
+    <div class="lead">
+      No es un problema de herramientas. Es un problema de método. Los datos lo confirman.
+    </div>
+
+    <div class="kpi-hero" style="margin-top:32px;">
+      <div class="kpi-hero-card">
+        <div class="big-num">1-3%</div>
+        <div class="kpi-label">Reply rate típico en cold email B2B sin personalización real</div>
+        <div class="kpi-source">Woodpecker / HubSpot benchmarks</div>
+      </div>
+      <div class="kpi-hero-card">
+        <div class="big-num">64%</div>
+        <div class="kpi-label">Del tiempo de un SDR se pierde en tareas administrativas (carga de datos, búsqueda manual)</div>
+        <div class="kpi-source">Salesforce State of Sales</div>
+      </div>
+      <div class="kpi-hero-card">
+        <div class="big-num">47%</div>
+        <div class="kpi-label">De los SDRs alcanza quota en un trimestre típico</div>
+        <div class="kpi-source">InsideSales / The Bridge Group</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:44px;">Las 5 razones reales del fracaso (no son las que parecen)</h3>
+
+    <div class="grid-2" style="margin-top:16px;">
+      <div class="card red">
+        <h4 style="color:var(--red);">1. Data cruda, no inteligencia</h4>
+        <p style="font-size:14px;">Listas genéricas compradas en Apollo sin contexto del stakeholder, del momento, ni de la cuenta. Resultado: reply rate de 1%.</p>
       </div>
       <div class="card red">
-        <h3 style="color:#e57373;">✕ Lo que NO va a pasar hoy</h3>
-        <ul>
-          <li>No voy a tirar pricing en la reunión</li>
-          <li>No voy a ofrecer paquetes ni pedir firma</li>
-          <li>No voy a hablar mal de Attio ni de competencia</li>
-          <li>No voy a hacer demo técnica larga de Oike</li>
-        </ul>
+        <h4 style="color:var(--red);">2. Mensajes disfrazados de personalizados</h4>
+        <p style="font-size:14px;">"Hi {{firstName}}, I saw you at {{company}}..." — la IA lo escupe, el receptor lo detecta a 20 metros. Templates ≠ personalización.</p>
       </div>
-    </div>
-  </section>
-
-  <!-- ───────── 02. QUIÉN SOY ───────── -->
-  <section id="quien-soy">
-    <div class="section-num">02.</div>
-    <h2>Quién soy</h2>
-    <div class="lead">
-      Soy <strong style="color:var(--text);">Alejandra Cadario</strong>. Boliviana, he vivido y trabajado en seis países. <span class="accent">20 años en ventas B2B reales</span> — no teoría, no consultoría de papel.
-    </div>
-
-    <div class="stats-row">
-      <div class="stat"><div class="num">20</div><div class="label">AÑOS EN VENTAS B2B</div></div>
-      <div class="stat"><div class="num">6</div><div class="label">PAÍSES</div></div>
-      <div class="stat"><div class="num">5</div><div class="label">INDUSTRIAS</div></div>
-      <div class="stat"><div class="num">€M+</div><div class="label">TICKETS CERRADOS</div></div>
-    </div>
-
-    <h3 style="margin-top:32px;">La trayectoria</h3>
-    <div class="timeline">
-      <div class="timeline-item">
-        <div class="role">Trade Marketing</div>
-        <div class="company">Red Bull · Santa Cruz</div>
-        <div class="desc">Primer rol comercial</div>
+      <div class="card red">
+        <h4 style="color:var(--red);">3. Sin ritmo diario consistente</h4>
+        <p style="font-size:14px;">Prospección en bursts de 1 día al mes no funciona. El ritmo (30-50 touches bien hechos por día) es lo que genera resultado.</p>
       </div>
-      <div class="timeline-item">
-        <div class="role">Sales &amp; Marketing Manager</div>
-        <div class="company">Laboratorios IFA</div>
-        <div class="desc">Equipo de visitadores médicos</div>
+      <div class="card red">
+        <h4 style="color:var(--red);">4. Follow-up inexistente o débil</h4>
+        <p style="font-size:14px;">80% de las respuestas llegan después del <strong>4to</strong> follow-up. La mayoría de empresas se rinde al 2do.</p>
       </div>
-      <div class="timeline-item">
-        <div class="role">Head of Foreign Trade</div>
-        <div class="company">Grupo Union Columbia</div>
-        <div class="desc">Import/export</div>
+      <div class="card red">
+        <h4 style="color:var(--red);">5. Stack fragmentado sin método</h4>
+        <p style="font-size:14px;">Apollo + Clay + Lemlist + HubSpot + Excel. 5 herramientas, 0 integración. Nadie lee la data. Nadie itera.</p>
       </div>
-      <div class="timeline-item">
-        <div class="role">Commercial Manager Norteamérica</div>
-        <div class="company">Pure Organic Foods · Toronto</div>
-        <div class="desc">4 años</div>
-      </div>
-      <div class="timeline-item">
-        <div class="role">BDR / Business Consultant</div>
-        <div class="company">Strommar, Speexx, Globant · Madrid</div>
-        <div class="desc">Ventas tech B2B</div>
-      </div>
-      <div class="timeline-item">
-        <div class="role">Sr. Business Consultant + Fundadora</div>
-        <div class="company">Globant MENA · Oike</div>
-        <div class="desc">Hoy</div>
+      <div class="card gold">
+        <h4 style="color:var(--gold);">⚡ La regla real</h4>
+        <p style="font-size:14px;">Las empresas que <strong>sí escalan</strong> resuelven los 5 problemas con un sistema coordinado, no con más herramientas.</p>
       </div>
     </div>
 
-    <div class="quote-box" style="margin-top:40px;">
-      No soy una ingeniera que un día pensó <em>"voy a hacer un CRM"</em>.<br>
-      Soy <strong>una vendedora que se cansó de ver equipos comerciales con diez herramientas distintas, sin método, sin disciplina, que igual no cerraban</strong>. Oike nació de ahí.
-    </div>
+    <h3 style="margin-top:44px;">Cuando el outbound se hace bien — los números cambian</h3>
 
-    <h3 style="margin-top:24px;">Qué aporto a esta conversación</h3>
-    <ul style="margin-top:8px;">
-      <li>Experiencia directa vendiendo tickets altos a decisores senior</li>
-      <li>Entiendo la dinámica de venta consultiva, no transaccional</li>
-      <li>He construido equipos comerciales desde cero en distintos países e industrias</li>
-      <li>Hoy mismo construyo Oike con clientes reales — mi mano está en el día a día</li>
-    </ul>
-  </section>
-
-  <!-- ───────── 03. QUÉ ES OIKE ───────── -->
-  <section id="oike">
-    <div class="section-num">03.</div>
-    <h2>Qué es Oike</h2>
-
-    <div class="quote-box">
-      Oike es la herramienta que usa un vendedor para saber <strong>a quién hablarle</strong>, <strong>qué decirle</strong>, y <strong>qué hacer hoy</strong> para mover pipeline — sin depender de motivación, sin depender del founder, y sin necesitar cuatro herramientas distintas.
-    </div>
-
-    <h3 style="margin-top:32px;">El problema que resolvemos</h3>
-    <p>En 20 años vendiendo B2B vi el mismo patrón: empresas que compran CRM, herramientas de email, de enriquecimiento, de LinkedIn automation, y siguen sin pipeline predecible.</p>
-    <p style="font-size:18px;color:var(--text);font-weight:600;margin-top:8px;">El problema nunca fue la tecnología. <span class="orange">Fue el método.</span></p>
-
-    <ul style="margin-top:14px;">
-      <li>Los equipos no cargan información porque es complejo</li>
-      <li>No saben leer los datos porque no hay estructura</li>
-      <li>No actúan sobre ellos porque nadie les dijo qué acción tomar hoy</li>
-    </ul>
-
-    <h3 style="margin-top:36px;">Qué hace Oike concretamente</h3>
-    <div class="grid-3">
-      <div class="card">
-        <h4>👥 Cuentas y stakeholders</h4>
-        <p style="font-size:14px;">Base de datos viva, multi-tenant, enriquecida automáticamente.</p>
+    <div class="vs-grid">
+      <div class="vs-card bad">
+        <h3>❌ Outbound mal armado</h3>
+        <div class="row"><span class="label">Reply rate</span><span class="val">1-3%</span></div>
+        <div class="row"><span class="label">Meeting rate</span><span class="val">&lt;1%</span></div>
+        <div class="row"><span class="label">Follow-ups promedio</span><span class="val">1.5</span></div>
+        <div class="row"><span class="label">Touches / SDR / día</span><span class="val">10-15</span></div>
+        <div class="row"><span class="label">% respuestas accionables</span><span class="val">~20%</span></div>
       </div>
-      <div class="card">
-        <h4>✨ Mensajes con IA</h4>
-        <p style="font-size:14px;">Personalización real con contexto del stakeholder y del negocio.</p>
-      </div>
-      <div class="card">
-        <h4>📊 Pipeline y oportunidades</h4>
-        <p style="font-size:14px;">Estado de cada conversación, sin inventar stages.</p>
-      </div>
-      <div class="card">
-        <h4>📅 Action plan diario</h4>
-        <p style="font-size:14px;">Oike te dice qué hacer hoy, no qué podrías hacer.</p>
-      </div>
-      <div class="card">
-        <h4>🎯 Estrategia integrada</h4>
-        <p style="font-size:14px;">No es solo ejecución, es método aplicado.</p>
-      </div>
-      <div class="card">
-        <h4>📧 Sync con Gmail</h4>
-        <p style="font-size:14px;">Tu correo es parte del sistema, no algo aparte.</p>
+      <div class="vs-card good">
+        <h3>✓ Outbound sistematizado</h3>
+        <div class="row"><span class="label">Reply rate</span><span class="val">8-15%</span></div>
+        <div class="row"><span class="label">Meeting rate</span><span class="val">2-5%</span></div>
+        <div class="row"><span class="label">Follow-ups promedio</span><span class="val">5-7</span></div>
+        <div class="row"><span class="label">Touches / SDR / día</span><span class="val">40-60</span></div>
+        <div class="row"><span class="label">% respuestas accionables</span><span class="val">55-70%</span></div>
       </div>
     </div>
 
-    <h3 style="margin-top:44px;">Dónde vive Oike en el stack</h3>
-    <div class="stack">
-      <div class="stack-box oike">
-        <div class="label">MOTOR</div>
-        <div class="name">Oike</div>
-        <div class="what">Inteligencia + acción</div>
-      </div>
-      <div class="stack-arrow">→</div>
-      <div class="stack-box">
-        <div class="label">CRM</div>
-        <div class="name">Attio</div>
-        <div class="what">Repositorio de deals</div>
-      </div>
-      <div class="stack-arrow">→</div>
-      <div class="stack-box">
-        <div class="label">CIERRE</div>
-        <div class="name">Pipeline</div>
-        <div class="what">Conversiones</div>
-      </div>
-    </div>
-    <p style="margin-top:18px;font-size:16px;color:var(--text);">
-      Oike vive <strong style="color:var(--green);">aguas arriba del CRM</strong>. Cuando un lead responde y pasa a oportunidad, se sincroniza al CRM. <strong>No reemplazamos Attio. Lo complementamos.</strong>
+    <p style="margin-top:24px;font-size:15px;max-width:760px;">
+      <strong style="color:var(--green);">La diferencia no es horas trabajadas. Es sistema.</strong> La ecuación simple: ICP claro + data enriquecida + mensaje con contexto + ritmo diario + seguimiento multi-canal = pipeline predecible.
     </p>
   </section>
 
-  <!-- ───────── 04. LO QUE SÉ DE USTEDES ───────── -->
-  <section id="ustedes">
+  <!-- ───────── 04. SU PAIN POR LÍNEA ───────── -->
+  <section id="pain">
     <div class="section-num">04.</div>
-    <h2>Lo que sé de ustedes</h2>
+    <h2>Lo que se juega cada línea</h2>
     <div class="lead">
-      Antes de que me cuenten, déjenme mostrarles lo que entendí. <span class="accent">Me corrigen lo que esté mal.</span>
+      Tomamos tu audio y lo traducimos a problema concreto por línea. Corrígennos lo que no matche.
     </div>
 
-    <h3 style="margin-top:36px;">El grupo en una mirada</h3>
     <div class="group-table">
       <div class="group-col">
         <div class="header">UrbanFlip</div>
         <div class="body">
-          <div class="subtitle">Inversión inmobiliaria</div>
-          <div class="desc">Compra, reforma y venta de propiedades. Escalar base de inversores.</div>
-          <div class="icp"><strong>ICP</strong>Retail €10K → Family offices €1M+</div>
+          <div class="subtitle">INVERSIÓN INMOBILIARIA</div>
+          <p class="pain">
+            <strong>El objetivo:</strong> escalar inversores desde €10K hasta family offices €1M+.
+            <br><br>
+            <strong>El problema:</strong> hoy llegan por LinkedIn o recomendados. Hay un universo enorme de inversores calificados (analistas Deloitte, socios consultoría, banqueros, family offices independientes) que <strong>nunca escucharon de UrbanFlip</strong> — y son exactamente el perfil.
+            <br><br>
+            <strong>Complejidad:</strong> conviven 3 segmentos con ticket distinto. No se captan igual.
+          </p>
         </div>
       </div>
+
       <div class="group-col">
         <div class="header">Onoma</div>
         <div class="body">
-          <div class="subtitle">Venta de propiedades</div>
-          <div class="desc">Venden propiedades reformadas de €1M-€4M a compradores internacionales.</div>
-          <div class="icp"><strong>ICP</strong>Compradores LatAm, Middle East, US, Europa</div>
+          <div class="subtitle">VENTA DE PROPIEDADES €1M-€4M</div>
+          <p class="pain">
+            <strong>El objetivo:</strong> construir base de compradores internacionales con criterios registrados para matching proactivo.
+            <br><br>
+            <strong>El problema:</strong> cada venta arranca de cero. Sin base de compradores ni red de colaboradores estructurada, dependés del prospect que llega por LinkedIn en el momento justo.
+            <br><br>
+            <strong>Oro enterrado:</strong> el canal indirecto (personal shoppers, brokers internacionales, banca privada) tiene acceso a 10-100 compradores cada uno. Un aliado bien activado multiplica.
+          </p>
         </div>
       </div>
+
       <div class="group-col">
         <div class="header">Urbantech</div>
         <div class="body">
-          <div class="subtitle">Infraestructura de pagos</div>
-          <div class="desc">Pagos especializados en real estate. Portfolios grandes de alquiler.</div>
-          <div class="icp"><strong>ICP</strong>Operadores con 1.000-3.000 propiedades en alquiler</div>
+          <div class="subtitle">INFRAESTRUCTURA DE PAGOS</div>
+          <p class="pain">
+            <strong>El objetivo:</strong> penetrar 50-100 target accounts (operadores de alquiler media estancia) más 12-15 plataformas de crowdfunding ya identificadas.
+            <br><br>
+            <strong>El problema:</strong> producto listo, mercado acotado e identificable — pero sin motor comercial. Hoy = cero outbound.
+            <br><br>
+            <strong>Ventaja única:</strong> el mensaje se escribe solo — "Stripe les cobra X, nosotros Y, para su vertical específica." ROI cuantificable. Lo difícil es estructurar la ejecución.
+          </p>
         </div>
-      </div>
-    </div>
-
-    <div class="grid-2" style="margin-top:36px;">
-      <div class="card green">
-        <h3>✓ Fortalezas</h3>
-        <ul>
-          <li><strong>Founder con 22K seguidores en LinkedIn</strong> — marca personal fuerte, diferenciador real</li>
-          <li><strong>Tres líneas con ICPs claros</strong> — deal sizes atractivos en cada una</li>
-          <li><strong>Attio ya implementado en UrbanFlip</strong> — hay intención de estructurar</li>
-          <li><strong>Modelo de negocio probado</strong> — el grupo crece, el producto existe</li>
-        </ul>
-      </div>
-      <div class="card orange">
-        <h3 style="color:var(--orange);">⚠️ Gaps</h3>
-        <ul>
-          <li><strong>Crecimiento 100% orgánico</strong> — si el founder deja de postear una semana, el pipeline se seca</li>
-          <li><strong>Sin base de datos estructurada</strong> de compradores ni inversores — cada venta empieza de cero</li>
-          <li><strong>Urbantech sin go-to-market</strong> — producto listo, sin motor comercial</li>
-          <li><strong>Dependencia del founder</strong> — es cara, canal y cierre</li>
-          <li><strong>Sin procesos de prospección activa</strong> — cero outbound, cero secuencias</li>
-        </ul>
       </div>
     </div>
   </section>
 
-  <!-- ───────── 05. HIPÓTESIS ───────── -->
-  <section id="hipotesis">
+  <!-- ───────── 05. QUÉ PROPONEMOS ───────── -->
+  <section id="propuesta">
     <div class="section-num">05.</div>
-    <h2>Hipótesis de mercado</h2>
+    <h2>Qué hacemos con cada línea</h2>
     <div class="lead">
-      Estas son las hipótesis con las que llego. Cada una es una pregunta que me gustaría <span class="accent">confirmar o descartar</span> con ustedes.
+      Cada línea tiene su motor propio. No es un paquete, es un plan quirúrgico.
     </div>
 
-    <div style="margin-top:36px;">
-      <div class="hypothesis">
-        <h4>UrbanFlip · Inversores</h4>
-        <p><span class="h-label h-hyp">HIPÓTESIS</span>El family office español típicamente invierte en real estate vía 3 canales: <strong>banca privada, asesor patrimonial directo, o clubes de inversión</strong>. Los inversores retail (€10K-€50K) y los de ticket medio (€50K-€500K) responden a canales diferentes.</p>
-        <p><span class="h-label h-imp">IMPLICACIÓN</span>Probablemente necesitan <strong>tres motores de captación distintos</strong>, no uno. Segmentar por ticket es tan importante como segmentar por sector.</p>
+    <div class="group-table" style="margin-top:36px;">
+      <div class="group-col">
+        <div class="header">UrbanFlip</div>
+        <div class="body">
+          <div class="subtitle">DOS MOTORES EN PARALELO</div>
+          <div class="proposal">
+            <strong>Motor A · Directo</strong>
+            Outbound personalizado a HNWI identificados por profesión: socios Tier-1 consulting, C-levels tech, directivos banca, family offices independientes. ICP fino, mensaje adaptado al ticket.
+          </div>
+          <div class="proposal" style="margin-top:10px;">
+            <strong>Motor B · Indirecto (multiplicador)</strong>
+            Outbound a banca privada, EAFs, gestores patrimoniales y bróker financieros. <strong>1 aliado activado = acceso a 20-100 inversores</strong>. Multiplica por orden de magnitud.
+          </div>
+          <span class="kpi-target">Target: 10-20 nuevos inversores calificados/mes en 90 días</span>
+        </div>
       </div>
 
-      <div class="hypothesis">
-        <h4>Onoma · Compradores internacionales</h4>
-        <p><span class="h-label h-hyp">HIPÓTESIS</span>Los compradores de €1M-€4M en España están concentrados en corredores específicos: <strong>españoles repatriados (Londres, NY), latinos de Miami y CDMX, árabes del Golfo con oficinas en Londres, tech people del norte de Europa</strong> buscando segunda residencia.</p>
-        <p><span class="h-label h-imp">IMPLICACIÓN</span>El canal indirecto (personal shoppers, brokers, banca privada) probablemente <strong>convierte mejor que el directo</strong> para el ticket alto. Una base estructurada de aliados vale oro.</p>
+      <div class="group-col">
+        <div class="header">Onoma</div>
+        <div class="body">
+          <div class="subtitle">CANAL INDIRECTO COMO CORE</div>
+          <div class="proposal">
+            <strong>Red de colaboradores estructurada</strong>
+            Mapeo y activación de personal shoppers, brokers internacionales, banqueros privados y abogados de Golden Visa en Madrid, Londres, Miami, CDMX, Dubai.
+          </div>
+          <div class="proposal" style="margin-top:10px;">
+            <strong>Base de compradores con criterios</strong>
+            Cada lead que entra queda estructurado con sus preferencias (zona, precio, tipología, timing). Cuando entra propiedad nueva → matching automático → comunicación personalizada.
+          </div>
+          <span class="kpi-target">Target: 30-50 colaboradores activos en 6 meses</span>
+        </div>
       </div>
 
-      <div class="hypothesis">
-        <h4>Urbantech · Operadores de alquiler</h4>
-        <p><span class="h-label h-hyp">HIPÓTESIS</span>Los operadores con 1.000-3.000 propiedades en alquiler en España son un universo identificable y acotado — probablemente <strong>entre 50 y 100 empresas target total</strong>. Es un mercado de account-based selling puro.</p>
-        <p><span class="h-label h-imp">IMPLICACIÓN</span>No necesitan volumen, necesitan <strong>penetración</strong>. Trabajo quirúrgico de mapeo de cuentas, identificación de stakeholders (CFO, Head of Ops, CTO según el caso), y secuencias de alto valor.</p>
+      <div class="group-col">
+        <div class="header">Urbantech</div>
+        <div class="body">
+          <div class="subtitle">ACCOUNT-BASED SELLING PURO</div>
+          <div class="proposal">
+            <strong>Mapeo quirúrgico de cuentas</strong>
+            Las 50-100 operadoras de alquiler media estancia en España + las 12-15 plataformas de crowdfunding ya identificadas. Stakeholder mapping: CFO, Head of Ops, CTO.
+          </div>
+          <div class="proposal" style="margin-top:10px;">
+            <strong>Mensaje con ROI cuantificable</strong>
+            Cada touch incluye el ahorro estimado vs Stripe, adaptado al volumen de transacciones del prospect. Ritual diario de 20 touches + seguimiento multicanal (email + LinkedIn + cold call si aplica).
+          </div>
+          <span class="kpi-target">Target: 10-15 meetings con decisores en 90 días</span>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ───────── 06. PREGUNTAS ───────── -->
-  <section id="preguntas">
+  <!-- ───────── 06. MÉTODO OIKE ───────── -->
+  <section id="metodo">
     <div class="section-num">06.</div>
-    <h2>Lo que no puedo saber desde afuera</h2>
+    <h2>Cómo lo hacemos — método Oike</h2>
     <div class="lead">
-      Estas son las preguntas que necesito que me respondan. <span class="accent">No hay orden específico</span> — lo que salga en la conversación, sale.
+      Oike no es una herramienta que se instala y listo. Es un <strong style="color:var(--green);">método operativo</strong> que se implementa en 5 pasos concretos.
     </div>
 
-    <div style="margin-top:36px;">
-      <div class="q-group">
-        <h4>Sobre el equipo</h4>
-        <div class="q-list">
-          <div class="q">¿Quién está dedicado a ventas hoy además del founder?</div>
-          <div class="q">¿Qué experiencia tienen en outbound estructurado?</div>
-          <div class="q">¿Cuánto bandwidth semanal tienen para construir algo nuevo, además de su trabajo actual?</div>
-        </div>
+    <div class="method-flow">
+      <div class="method-step">
+        <div class="step-num">1</div>
+        <h4>Mapeo ICP fino</h4>
+        <p>Definimos el perfil exacto por línea. No "dueños de empresa" — específicos: "CFOs de operadoras con 1.000+ pisos en Madrid y Barcelona".</p>
       </div>
+      <div class="method-step">
+        <div class="step-num">2</div>
+        <h4>Enriquecimiento</h4>
+        <p>Cada stakeholder con sus pain points, noticias, señales, contexto de empresa. Nada de listas crudas.</p>
+      </div>
+      <div class="method-step">
+        <div class="step-num">3</div>
+        <h4>Mensaje con contexto</h4>
+        <p>IA que lee toda la historia conversacional y propone el siguiente paso estratégico. No templates.</p>
+      </div>
+      <div class="method-step">
+        <div class="step-num">4</div>
+        <h4>Ritmo diario</h4>
+        <p>Oike te dice qué hacer hoy, no qué podrías hacer. Action plan concreto para el BDR, cada mañana.</p>
+      </div>
+      <div class="method-step">
+        <div class="step-num">5</div>
+        <h4>Tracking + iteración</h4>
+        <p>Sync con Gmail + Attio. Métricas reales de qué funciona, qué no. Ajuste semanal.</p>
+      </div>
+    </div>
 
-      <div class="q-group">
-        <h4>Sobre el negocio</h4>
-        <div class="q-list">
-          <div class="q">¿Cuánto pipeline / revenue generan por línea hoy?</div>
-          <div class="q">¿Cuál es la meta de crecimiento para los próximos 12 meses, por línea?</div>
-          <div class="q">¿Cuál es la línea que más les quita el sueño hoy? ¿Cuál tiene más urgencia?</div>
-        </div>
-      </div>
+    <h3 style="margin-top:44px;">Dónde vive Oike en su stack</h3>
+    <p style="font-size:16px;margin-top:8px;">
+      <strong style="color:var(--green);">Oike se ubica aguas arriba de Attio</strong>, no lo reemplaza. Oike es el motor que identifica, enriquece, mapea, mensajea y ritualiza la prospección. Cuando un lead responde y pasa a oportunidad → sync automático al CRM (Attio). Attio queda como repositorio del deal. Oike alimenta el pipeline.
+    </p>
+    <p style="font-size:16px;margin-top:10px;">
+      <strong>Resumen:</strong> mantienen Attio exactamente como lo tienen. Oike suma el motor que hoy no tienen.
+    </p>
+  </section>
 
-      <div class="q-group">
-        <h4>Sobre lo que intentaron antes</h4>
-        <div class="q-list">
-          <div class="q">¿Han hecho outbound antes? ¿Qué funcionó, qué no?</div>
-          <div class="q">¿Por qué eligieron Attio? ¿Cómo lo están adoptando hoy?</div>
-          <div class="q">¿Evaluaron otras herramientas (Apollo, Clay, Lemlist, HubSpot)? ¿Qué les pareció?</div>
-        </div>
-      </div>
+  <!-- ───────── 07. PARA CALIBRAR ───────── -->
+  <section id="calibrar">
+    <div class="section-num">07.</div>
+    <h2>5 preguntas para calibrar</h2>
+    <div class="lead">
+      Antes de mandar propuesta, necesito confirmar 5 datos. Podemos cubrirlos en 15 minutos en la próxima call o por email.
+    </div>
 
-      <div class="q-group">
-        <h4>Sobre la visión</h4>
-        <div class="q-list">
-          <div class="q">Si imaginan este grupo en 12 meses, ¿qué cambió?</div>
-          <div class="q">¿Qué los frenó de hacer outbound hasta ahora?</div>
-          <div class="q">¿Cómo miden éxito en ventas hoy?</div>
-        </div>
-      </div>
+    <div class="q-list">
+      <div class="q"><strong>Equipo.</strong> ¿Quién está dedicado a ventas hoy además vos? ¿Cuánto bandwidth semanal tienen para ejecutar un motor de prospección?</div>
+      <div class="q"><strong>Prioridad.</strong> De las 3 líneas, ¿cuál te quita más el sueño hoy? ¿UrbanFlip, Onoma o Urbantech? Arrancamos por ahí.</div>
+      <div class="q"><strong>Meta concreta.</strong> ¿Cuántos inversores nuevos / compradores / clientes Urbantech necesitarías cerrar en los próximos 6 meses para sentir que el motor funcionó?</div>
+      <div class="q"><strong>Intentos previos.</strong> ¿Probaron outbound antes con otras herramientas (Apollo, Clay, Lemlist)? ¿Qué pasó?</div>
+      <div class="q"><strong>Cierre interno.</strong> ¿Quiénes toman la decisión sobre una inversión como esta en el grupo? ¿Solo vos o hay socios?</div>
     </div>
   </section>
 
-  <!-- ───────── 07. PRÓXIMOS PASOS ───────── -->
+  <!-- ───────── 08. PRÓXIMOS PASOS ───────── -->
   <section id="pasos">
-    <div class="section-num">07.</div>
+    <div class="section-num">08.</div>
     <h2>Próximos pasos</h2>
-    <div class="lead">
-      Al final de esta reunión, mi compromiso con ustedes es <span class="accent">concreto</span>:
-    </div>
 
     <div class="steps">
       <div class="step">
         <div class="when">HOY</div>
-        <div class="what">Escuchar, tomar notas, procesar contexto. <strong>No ofertar.</strong></div>
+        <div class="what">Conversamos. Yo escucho, tomo notas, proceso. <strong>No ofertas, no pricing.</strong></div>
       </div>
       <div class="step">
         <div class="when">48-72h</div>
-        <div class="what">Procesar lo conversado. Identificar línea prioritaria, alcance correcto, formato de trabajo.</div>
+        <div class="what">Proceso lo conversado. Identifico línea prioritaria, alcance correcto, formato de trabajo.</div>
       </div>
       <div class="step">
         <div class="when">5 DÍAS</div>
-        <div class="what">Propuesta personalizada con recomendación concreta: <strong>qué atacar primero</strong>, con qué nivel de mi involucramiento, y pricing ajustado al equipo real.</div>
+        <div class="what">Propuesta personalizada: <strong>qué atacar primero</strong>, con qué nivel de mi involucramiento, y pricing ajustado al equipo real.</div>
       </div>
       <div class="step">
         <div class="when">7-10 DÍAS</div>
-        <div class="what">Segunda reunión: revisamos la propuesta juntos, ajustamos, deciden.</div>
+        <div class="what">Segunda reunión: revisamos juntos, ajustamos, deciden.</div>
       </div>
-    </div>
-
-    <div class="quote-box" style="margin-top:40px;">
-      Lo que les pido hoy: <strong>transparencia</strong> sobre dónde están, qué les duele, y qué les entusiasma. Cuanto más honestos sean hoy, mejor propuesta les armo.
     </div>
   </section>
 
-  <!-- ───────── 08. CIERRE ───────── -->
+  <!-- ───────── CIERRE ───────── -->
   <section id="cierre" class="closing">
-    <div class="section-num">08.</div>
-    <h2>Una nota final antes de empezar</h2>
+    <h2 style="text-align:center;">Un cierre honesto</h2>
 
-    <blockquote>
-      Crecí en Santa Cruz de la Sierra. Ahí aprendí lo más importante que sé: <span class="accent">empatía, conversación genuina, y el arte de construir relaciones</span>.
-    </blockquote>
-
-    <p style="font-size:18px;max-width:680px;margin:0 auto;color:var(--text);">
-      En Santa Cruz no te enseñan frameworks de ventas.<br>
-      Te enseñan a <strong style="color:var(--green);">mirar a los ojos, escuchar, y generar confianza</strong>.
+    <p class="big-line">
+      El problema nunca fue la tecnología.<br>
+      Fue el <span>método.</span>
     </p>
 
-    <p style="font-size:22px;font-style:italic;color:var(--green);margin-top:32px;font-weight:600;">
-      Esta reunión va a funcionar mejor si la tratamos así.
+    <p style="font-size:17px;color:var(--text);max-width:640px;margin:0 auto;">
+      Tienen la marca, el producto y la ambición. Lo que falta es el motor que convierta todo eso en pipeline predecible, <strong style="color:var(--green);">sin que dependa de vos postear un lunes por la mañana.</strong>
     </p>
 
     <div class="signature">
       <div class="name">Alejandra Cadario</div>
-      <div class="role">Fundadora de Oike</div>
+      <div class="role">Fundadora · Oike</div>
       <div class="links">
         <a href="mailto:team@alecadario.com">team@alecadario.com</a>
         <a href="https://oike.app" target="_blank" rel="noopener">oike.app</a>
@@ -1085,33 +801,25 @@
   </footer>
 
   <script>
-    // ── Scroll-triggered fade-ins ──
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('in-view');
-        }
+        if (entry.isIntersecting) entry.target.classList.add('in-view');
       });
     }, { threshold: 0.15 });
 
-    document.querySelectorAll('.section-num, h2, .lead, .card, .group-col, .hypothesis, .q-group, .step, .timeline-item').forEach(el => {
+    document.querySelectorAll('.section-num, h2, .lead, .card, .group-col, .kpi-hero-card, .method-step, .vs-card, .step').forEach(el => {
       observer.observe(el);
     });
 
-    // Stagger delays for grouped elements
-    document.querySelectorAll('.grid-2, .grid-3, .group-table').forEach(grid => {
+    document.querySelectorAll('.grid-2, .grid-3, .group-table, .kpi-hero, .method-flow, .vs-grid').forEach(grid => {
       [...grid.children].forEach((child, i) => {
         child.style.transitionDelay = `${i * 80}ms`;
       });
-    });
-    document.querySelectorAll('.timeline-item').forEach((el, i) => {
-      el.style.transitionDelay = `${i * 100}ms`;
     });
     document.querySelectorAll('.step').forEach((el, i) => {
       el.style.transitionDelay = `${i * 120}ms`;
     });
 
-    // ── Active dot on scroll ──
     const sections = document.querySelectorAll('section');
     const dots = document.querySelectorAll('.nav-dots a');
     const activeObserver = new IntersectionObserver((entries) => {
