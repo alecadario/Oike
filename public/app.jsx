@@ -12909,9 +12909,9 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           return `${s.id} | ${F(s, 'Name')} ${F(s, 'Last name') || ''} | ${F(s, 'Role') || '?'} | ${accName ? F(accName, 'Account Name') : '?'} | ${industry || '?'} | pain: ${painText || 'n/a'}`;
         }).join('\n');
 
-        const prompt = `You are helping a B2B founder pick which of their stakeholders would genuinely benefit from seeing a LinkedIn post they wrote.
+        const prompt = `You are helping a B2B founder reach out to specific stakeholders with a thoughtful message inspired by a LinkedIn post they just wrote. The goal is NOT to broadcast the post. The goal is to OPEN CONVERSATIONS with people for whom the insight is genuinely relevant.
 
-POST THEY WROTE:
+THE POST (use as INSPIRATION — extract the key insight, don't just paste the link):
 """
 ${content.slice(0, 2500)}
 """
@@ -12919,25 +12919,42 @@ ${content.slice(0, 2500)}
 STAKEHOLDER POOL (ID | name | role | account | industry | pain):
 ${pool}
 
-RULES:
-- Pick UP TO 15 stakeholders with REAL relevance (not forced). It's fine to return fewer if only 5-8 genuinely fit.
-- Rank by match strength: high (direct pain/role match) · medium (industry or contextual match) · low (peripheral, optional)
-- For each, write a personalized intro message (2-3 sentences max) that:
-  · References their specific context (role, pain, industry) — make it clear you thought of them
-  · Frames the post as value FOR THEM, not a pitch
-  · Feels like a friend sharing, not marketing
-  · Ends with subtle invitation (optional question or open loop)
-  · Use [POST_URL] placeholder for the link — will be replaced on send
-- NO generic greetings ("Hope you're well"). NO "just wanted to share". Natural only.
-- Match the voice energy of the post itself.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOW TO WRITE THE INTRO MESSAGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is OUTREACH, not content distribution. Each intro should:
+
+1. **Open with their context** — reference their role, pain, situation. Make it clear you thought of THEM specifically (not a copy-paste blast).
+
+2. **Tease the insight** from the post — share the key idea in your OWN voice (1-2 sentences). Do NOT paste the post. Do NOT just say "check out my post". Frame the insight as something you've been thinking about.
+
+3. **CTA tailored to match score:**
+   • HIGH match → Direct invitation to a call ("worth jumping on a 15-min call?", "want to grab a coffee?", "open to chatting more about this?")
+   • MEDIUM match → Soft engagement ("curious what you think", "would love your take", "happy to send more if useful")
+   • LOW match → Light tease, no hard CTA ("might resonate", "thought of you")
+
+4. **Optional** post link: only mention it as a soft afterthought if it adds value ("dropped my full take on LinkedIn — happy to share if you want"). NEVER lead with the link. NEVER make it the CTA. The CTA is the conversation, not the read.
+
+5. **Voice rules** (CRITICAL — avoid AI-tells):
+   • NO "Hope you're well", "Just wanted to share", "I came across..."
+   • NO generic openers. Dive straight into THEIR context.
+   • Conversational, like a Slack DM to a friend who happens to be a CFO
+   • Short. 3-4 sentences max. No paragraphs.
+   • Match the founder's voice from the post (rhythm, register)
+   • Use [POST_URL] placeholder ONLY if you actually mention sharing the post (optional)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Pick UP TO 15 stakeholders with REAL relevance (not forced — fewer is better than padding).
 
 Return ONLY valid JSON array:
 [
   {
     "stakeholder_id": "recXXX",
     "match_score": "high | medium | low",
-    "match_reason": "One line explaining the match",
-    "intro_message": "Personalized 2-3 sentence intro, uses [POST_URL]"
+    "match_reason": "One line explaining why this person specifically",
+    "intro_message": "Personalized 3-4 sentence intro that opens with their context, teases the insight in your own voice, and ends with a CTA tailored to match score (call for high, soft engagement for medium, tease for low)"
   }
 ]
 
@@ -12964,7 +12981,10 @@ No markdown, no commentary. JSON only.`;
         setSendingKey(key);
 
         const postUrl = F(post, 'LinkedIn URL') || '';
-        const messageWithUrl = (rec.intro_message || '').replace(/\[POST_URL\]/g, postUrl || '(add your LinkedIn post URL to this post first)');
+        // If URL exists → substitute. If not → strip the placeholder cleanly (some AIs may leave orphan punctuation, best effort)
+        const messageWithUrl = postUrl
+          ? (rec.intro_message || '').replace(/\[POST_URL\]/g, postUrl)
+          : (rec.intro_message || '').replace(/\s*[:—-]?\s*\[POST_URL\]\s*\.?/g, '').trim();
         const postTitle = F(post, 'Title') || 'LinkedIn post';
         const sName = F(stk, 'Name') || '';
         const email = F(stk, 'Email') || '';
@@ -13433,8 +13453,8 @@ No markdown, no commentary. JSON only.`;
                               <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setRecipientsByPost(prev => { const next = { ...prev }; delete next[post.id]; return next; })}>✕ Close</button>
                             </div>
                             {!linkedinUrl && (
-                              <div style={{ padding: '6px 10px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 6, fontSize: 11, color: '#fbbf24', marginBottom: 10 }}>
-                                ⚠️ No LinkedIn URL saved for this post yet. The intro message won't include a link — add the LinkedIn URL to this post first (use Post on LinkedIn action).
+                              <div style={{ padding: '6px 10px', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: 6, fontSize: 11, color: 'var(--globant-info)', marginBottom: 10 }}>
+                                ℹ️ No LinkedIn URL saved for this post. That's fine — the intros are insight + conversation-driven, not link-dependent. If you add the URL later (Post on LinkedIn action), it'll appear only where the AI chose to reference it.
                               </div>
                             )}
                             {recipientsByPost[post.id].map((rec, i) => {
@@ -13467,7 +13487,9 @@ No markdown, no commentary. JSON only.`;
                                     💡 {rec.match_reason}
                                   </div>
                                   <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.5, padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 6, marginBottom: 8, whiteSpace: 'pre-wrap' }}>
-                                    {(rec.intro_message || '').replace(/\[POST_URL\]/g, linkedinUrl || '[add post URL first]')}
+                                    {linkedinUrl
+                                      ? (rec.intro_message || '').replace(/\[POST_URL\]/g, linkedinUrl)
+                                      : (rec.intro_message || '').replace(/\s*[:—-]?\s*\[POST_URL\]\s*\.?/g, '').trim()}
                                   </div>
                                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                     {alreadySent ? (
