@@ -1711,6 +1711,13 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
       const lastMessages = sOutreach.slice(0, 3).map(o => `[${F(o, 'Channel')} ${formatDate(o.fields?.['Date'])}] ${(F(o, 'Message') || '').slice(0, 100)}`).join('\n');
 
+      // Conversation stats for preview + history summary
+      const convoReplyCount = sOutreach.filter(o => ['Replied','Received'].includes(F(o, 'Status'))).length;
+      const convoLastFromThem = sOutreach.find(o => ['Replied','Received'].includes(F(o, 'Status')));
+      const convoDaysSinceTheirLast = convoLastFromThem?.fields?.['Date']
+        ? Math.floor((Date.now() - new Date(convoLastFromThem.fields['Date']).getTime()) / (1000*60*60*24))
+        : null;
+
       // Event reference
       const events = data.events || [];
       const selectedEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
@@ -1790,10 +1797,49 @@ Keep it natural — write for the ear, not the eye.`,
           const chGuide = channelPrompts[selectedChannel];
           const touchCount = sOutreach.length;
 
-          // Build context blocks per mode
+          // ── Build rich conversation history (bi-directional, chronological) ──
+          // Extract content from Message field OR Notes (for Gmail-synced inbound emails)
+          const extractContent = (o) => {
+            const msg = F(o, 'Message') || '';
+            if (msg.trim()) return msg.trim();
+            // Gmail sync stores received emails in Notes with prefix [gmsg:ID]\nSubject\n\nSnippet
+            const notes = F(o, 'Notes') || '';
+            const cleaned = notes.replace(/^\[gmsg:[^\]]+\]\s*/, '').trim();
+            return cleaned || '(no content captured)';
+          };
+          // Direction: YOU if sent by you, THEY if received/replied from contact
+          const directionOf = (o) => {
+            const status = String(F(o, 'Status') || '').toLowerCase();
+            if (status === 'received' || status === 'replied') return 'THEY';
+            // Gmail sync edge case — if Notes has [gmsg:] and no explicit Status, infer from Notes direction
+            return 'YOU';
+          };
+          // Sort oldest-first for narrative arc (sOutreach is newest-first → reverse)
+          const chronological = [...sOutreach].reverse().slice(-10);
+          const replyCount = sOutreach.filter(o => ['Replied','Received'].includes(F(o,'Status'))).length;
+          const lastDate = sOutreach[0]?.fields?.['Date'];
+          const daysSinceLast = lastDate ? Math.floor((Date.now() - new Date(lastDate).getTime()) / (1000*60*60*24)) : null;
+          const lastFromThem = sOutreach.find(o => ['Replied','Received'].includes(F(o,'Status')));
+          const daysSinceTheirLast = lastFromThem?.fields?.['Date']
+            ? Math.floor((Date.now() - new Date(lastFromThem.fields['Date']).getTime()) / (1000*60*60*24))
+            : null;
+
           const historyBlock = sOutreach.length > 0
-            ? `━━━ CONVERSATION HISTORY (${touchCount} message${touchCount !== 1 ? 's' : ''} sent — no replies) ━━━
-${sOutreach.slice(0, 6).map(o => `${F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'} · ${F(o,'Channel')||'?'}: "${(F(o,'Message')||'').slice(0,120)}"`).join('\n')}`
+            ? `━━━ FULL CONVERSATION HISTORY (chronological, oldest → newest) ━━━
+${chronological.map(o => {
+  const d = F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '?';
+  const ch = F(o,'Channel') || '?';
+  const dir = directionOf(o);
+  const st = F(o,'Status') || '';
+  const content = extractContent(o).slice(0, 400);
+  return `[${d} · ${ch} · ${dir} · ${st}]\n"${content}"`;
+}).join('\n\n')}
+
+━━━ CONVERSATION STATS ━━━
+- Total touches: ${touchCount}
+- Replies from them: ${replyCount}
+- Days since ANY activity: ${daysSinceLast !== null ? daysSinceLast : 'n/a'}
+- Days since THEY last engaged: ${daysSinceTheirLast !== null ? daysSinceTheirLast : 'never engaged'}`
             : '';
 
           const firstContactBlock = [
@@ -1822,10 +1868,32 @@ ${sOutreach.slice(0, 6).map(o => `${F(o,'Date') ? new Date(F(o,'Date')).toLocale
             mission = `MISSION: First message to ${sName} — they don't know you yet. Open a conversation, earn a reply. No pitch. Genuine curiosity. One sentence intro: who you are, your role, ${COMPANY_PROFILE.companyName}.`;
             contextBlock = firstContactBlock ? `━━━ CONTEXT (use this, don't invent) ━━━\n${firstContactBlock}` : '→ No specific data. Infer from role and industry.';
           } else if (tab === 'followup') {
-            mission = `MISSION: Follow-up #${touchCount} to ${sName} — no reply yet. Read every previous message below and write something completely different. New angle, new hook. Must feel like a natural continuation, not a reset.`;
+            const replyState = replyCount > 0 ? `${replyCount} repl${replyCount>1?'ies':'y'} from them` : 'no replies yet';
+            mission = `MISSION: Follow-up #${touchCount} to ${sName} (${replyState}).
+
+━━━ STRATEGIC ANALYSIS (do this silently before writing) ━━━
+1. Read the FULL history above and diagnose the state:
+   • ENGAGED — they're replying, conversation is active → advance it with a concrete next step
+   • QUESTION_PENDING — they asked something last and it wasn't answered → answer it directly + add value
+   • STALLED — you answered, they went quiet → gentle nudge with NEW signal or angle
+   • OBJECTION — they raised a concern → address it honestly, don't dodge
+   • GHOSTED — multiple sends, zero engagement → try a radically different angle (shorter, question-first, pattern-interrupt)
+   • POST_MEETING — a meeting happened → confirm next step referenced in history
+2. What was the LAST signal from them (if any)? Anchor your message to that signal.
+3. DO NOT repeat phrases, angles, or openers used in previous messages. Variety is the point.
+
+Write the next message strategically advancing from the current state. Feel like a natural continuation, NOT a reset or an opener.`;
             contextBlock = historyBlock || '→ No previous messages found.';
           } else if (tab === 'breakup') {
-            mission = `MISSION: Last message to ${sName} — ${touchCount} attempts, no reply. Ultra-short (max 3 sentences). Read the history, pick one honest observation from it, and close the loop with zero pressure. Leave a door open but make it clear you won't reach out again. No guilt-tripping, no final pitch. Human, warm, final.`;
+            mission = `MISSION: Last message to ${sName} — ${touchCount} attempts, ${replyCount > 0 ? `${replyCount} reply(ies) earlier but now silent` : 'no reply ever'}. Ultra-short (max 3 sentences).
+
+━━━ STRATEGIC ANALYSIS (do silently) ━━━
+1. Read the history: what did you offer/ask that didn't land?
+2. Pick ONE honest observation (not a pitch) that reflects the real state of the thread.
+3. Close the loop with zero pressure. Make it clear this is the last touch from your side.
+4. Leave a door open (e.g., "if X changes for you") but don't beg.
+
+Human, warm, final. No guilt-tripping, no final pitch, no "just one more thing".`;
             contextBlock = historyBlock || '→ No previous messages found.';
           }
 
@@ -1912,7 +1980,9 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             {/* Context preview */}
             <div style={{ padding: '8px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, marginBottom: 12, borderLeft: '3px solid var(--globant-green)', fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.5 }}>
               <strong style={{ color: 'var(--globant-green)' }}>Context loaded:</strong>{' '}
-              {painText ? '✅ Pain points' : '⚠️ No pain points'} · {linkedinText ? '✅ LinkedIn news' : '⚠️ No LinkedIn news'} · {newsText ? '✅ Company news' : '⚠️ No company news'} · {intelNotesText ? '✅ Intel notes' : '⚠️ No intel notes'} · {sOutreach.length > 0 ? `✅ ${sOutreach.length} previous touches` : '⚠️ No history'}
+              {painText ? '✅ Pain points' : '⚠️ No pain points'} · {linkedinText ? '✅ LinkedIn news' : '⚠️ No LinkedIn news'} · {newsText ? '✅ Company news' : '⚠️ No company news'} · {intelNotesText ? '✅ Intel notes' : '⚠️ No intel notes'} · {sOutreach.length > 0
+                ? `✅ ${sOutreach.length} touch${sOutreach.length!==1?'es':''}${convoReplyCount > 0 ? ` · ${convoReplyCount} repl${convoReplyCount>1?'ies':'y'} from them` : ''}${convoDaysSinceTheirLast !== null ? ` · last from them ${convoDaysSinceTheirLast}d ago` : ''}`
+                : '⚠️ No history'}
             </div>
 
             {/* Step 1: Channel */}
