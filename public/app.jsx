@@ -4412,7 +4412,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
       };
 
       // CP Briefings: use message (send + log)
-      const cpUseMessage = async (stakeholder, channel, message, ccList = [], _eventId = null) => {
+      const cpUseMessage = async (stakeholder, channel, message, ccList = [], eventId = null) => {
         const sn = F(stakeholder, 'Name') || '';
         const email = F(stakeholder, 'Email') || '';
         const phone = F(stakeholder, 'Phone number') || '';
@@ -4440,11 +4440,19 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             'Account': companyIds, 'Stakeholder': [stakeholder.id],
             'Channel': channel, 'Date': new Date().toISOString(),
             'Status': 'Sent', 'Message': message || '',
-            'Notes': `Auto-logged from CP Briefings`,
+            'Notes': `Auto-logged from CP Briefings${eventId ? ' (event invite)' : ''}`,
             'Logged By': CURRENT_USER?.name || '',
             ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
+          // If an event was referenced, register stakeholder as invited (bidirectional link auto-syncs to Stakeholder.Events)
+          if (eventId) {
+            const ev = data.events?.find(e => e.id === eventId);
+            const currentInvited = ev ? linkedIds(ev, 'Stakeholders invited') : [];
+            await a.updateRecord(TABLE_IDS.events, eventId, {
+              'Stakeholders invited': [...new Set([...currentInvited, stakeholder.id])],
+            }).catch(e => console.error('[cpUseMessage] event invite update failed:', e));
+          }
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Auto-log failed:', e); }
@@ -8936,10 +8944,20 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                   'Account': companyIds, 'Stakeholder': [s.id],
                   'Channel': ch, 'Date': new Date().toISOString(),
                   'Status': 'Sent', 'Message': msg || '',
-                  'Notes': 'Sent from Solutions Hub',
+                  'Notes': `Sent from Solutions Hub${evId ? ' (event invite)' : ''}`,
                   'Logged By': CURRENT_USER?.name || '',
                 })
-                  .then(() => activateAccountIfNeeded(a, companyIds, data.accounts))
+                  .then(async () => {
+                    // If event referenced, register stakeholder as invited (bidirectional link auto-syncs both sides)
+                    if (evId) {
+                      const ev = data.events?.find(e => e.id === evId);
+                      const currentInvited = ev ? linkedIds(ev, 'Stakeholders invited') : [];
+                      await a.updateRecord(TABLE_IDS.events, evId, {
+                        'Stakeholders invited': [...new Set([...currentInvited, s.id])],
+                      }).catch(e => console.error('[SolutionsHub onSend] event invite update failed:', e));
+                    }
+                    await activateAccountIfNeeded(a, companyIds, data.accounts);
+                  })
                   .then(() => { if (onLogActivity) onLogActivity(); })
                   .catch(console.error);
               }}
