@@ -3322,6 +3322,29 @@ Output ONLY the message, nothing else.`;
             await new Promise(r => setTimeout(r, 250));
           } catch (e) { failed++; console.error(e); }
         }
+        // ── Helper: find or create an account (used by update pass) ──
+        const resolveOrCreateAccount = async (row) => {
+          if (!row.accountName) return null;
+          const key = row.accountName.toLowerCase().trim();
+          let matched = accountMap.get(key);
+          if (matched) return matched;
+          try {
+            const newAccFields = { 'Account Name': row.accountName.trim() };
+            if (row.website) newAccFields['Website'] = row.website;
+            if (row.industry) newAccFields['Industry'] = row.industry;
+            if (row.country) newAccFields['Country'] = row.country;
+            const newAcc = await a.createRecord(TABLE_IDS.accounts, newAccFields);
+            if (newAcc?.id) {
+              matched = { id: newAcc.id, fields: newAccFields };
+              accountMap.set(key, matched);
+              accountsCreated++;
+              if (row.website) accountWebsiteUpdated.add(newAcc.id);
+              if (row.industry) accountIndustryUpdated.add(newAcc.id);
+            }
+          } catch (e) { console.warn('[resolveOrCreateAccount] failed:', e); }
+          return matched;
+        };
+
         // ── Update pass for duplicates (if enabled) ──
         for (const row of toUpdate) {
           try {
@@ -3345,6 +3368,17 @@ Output ONLY the message, nothing else.`;
             if (row.source && !F(existing, 'Source')) updates['Source'] = row.source;
             if (row.country && !F(existing, 'Country')) updates['Country'] = row.country;
 
+            // Account field — if stakeholder has no account and CSV provides one, link it (creating the account if needed)
+            const existingAccIds = linkedIds(existing, 'Account');
+            let linkedAcc = existingAccIds.length > 0 ? accounts.find(ac => ac.id === existingAccIds[0]) || accountMap.get((row.accountName || '').toLowerCase().trim()) : null;
+            if (existingAccIds.length === 0 && row.accountName) {
+              const resolvedAcc = await resolveOrCreateAccount(row);
+              if (resolvedAcc?.id) {
+                updates['Account'] = [resolvedAcc.id];
+                linkedAcc = resolvedAcc;
+              }
+            }
+
             if (Object.keys(updates).length > 0) {
               await a.updateRecord(TABLE_IDS.stakeholders, existing.id, updates);
               updated++;
@@ -3353,22 +3387,20 @@ Output ONLY the message, nothing else.`;
             }
 
             // Also update the linked account's Website/Industry if empty (same logic as creation)
-            const existingAccIds = linkedIds(existing, 'Account');
-            const existingAcc = existingAccIds.length > 0 ? accounts.find(ac => ac.id === existingAccIds[0]) : null;
-            if (existingAcc) {
+            if (linkedAcc) {
               const accUpdate = {};
-              if (row.website && !accountWebsiteUpdated.has(existingAcc.id) && !F(existingAcc, 'Website')) {
+              if (row.website && !accountWebsiteUpdated.has(linkedAcc.id) && !F(linkedAcc, 'Website')) {
                 accUpdate['Website'] = row.website;
-                accountWebsiteUpdated.add(existingAcc.id);
+                accountWebsiteUpdated.add(linkedAcc.id);
                 websitesAdded++;
               }
-              if (row.industry && !accountIndustryUpdated.has(existingAcc.id) && !F(existingAcc, 'Industry')) {
+              if (row.industry && !accountIndustryUpdated.has(linkedAcc.id) && !F(linkedAcc, 'Industry')) {
                 accUpdate['Industry'] = row.industry;
-                accountIndustryUpdated.add(existingAcc.id);
+                accountIndustryUpdated.add(linkedAcc.id);
                 industriesAdded++;
               }
               if (Object.keys(accUpdate).length > 0) {
-                try { await a.updateRecord(TABLE_IDS.accounts, existingAcc.id, accUpdate); } catch {}
+                try { await a.updateRecord(TABLE_IDS.accounts, linkedAcc.id, accUpdate); } catch {}
               }
             }
             await new Promise(r => setTimeout(r, 250));
