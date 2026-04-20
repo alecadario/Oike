@@ -12274,6 +12274,11 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       const [analyzingPostId, setAnalyzingPostId] = useState('');
       const [engagementAnalysis, setEngagementAnalysis] = useState({}); // {postId: analysisResult}
 
+      // Recipients recommender state (Library tab)
+      const [findingRecipientsFor, setFindingRecipientsFor] = useState('');
+      const [recipientsByPost, setRecipientsByPost] = useState({}); // {postId: [{stakeholder_id, match_score, match_reason, intro_message}]}
+      const [sendingKey, setSendingKey] = useState(''); // `${postId}:${stkId}:${channel}` while sending
+
       const TAGS = ['Sales', 'Personal', 'Strategy', 'Lead gen', 'Industry insight', 'Lesson learned', 'Contrarian', 'Story', 'Framework'];
       const TYPES = ['Short Post', 'Long Post', 'Article'];
       const TONES = ['direct', 'personal', 'technical', 'inspirational', 'contrarian'];
@@ -12854,6 +12859,158 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
         }
       };
 
+      // ── Find recipients for a post (AI ranks stakeholders + writes personalized intros) ──
+      const findRecipients = async (post) => {
+        const content = F(post, 'Content') || '';
+        if (!content.trim()) { alert('Post has no content'); return; }
+        setFindingRecipientsFor(post.id);
+
+        // Filter candidates: exclude protected statuses + recent outreach
+        const SEVEN_DAYS = 7 * 86400000;
+        const nowMs = Date.now();
+        const recentStkIds = new Set();
+        outreach.forEach(o => {
+          const ts = new Date(o.fields?.['Date'] || 0).getTime();
+          if (nowMs - ts < SEVEN_DAYS) {
+            linkedIds(o, 'Stakeholder').forEach(id => recentStkIds.add(id));
+          }
+        });
+        const PROTECTED = ['DNC', 'Bounced', 'Left Company', 'Not Interested'];
+
+        const candidates = stakeholders.filter(s => {
+          const status = F(s, 'Status') || '';
+          if (PROTECTED.includes(status)) return false;
+          if (recentStkIds.has(s.id)) return false;
+          // Need at least a name and some context
+          if (!F(s, 'Name')) return false;
+          return true;
+        });
+
+        // Rank candidates by "content-ready": has pain points > role > linkedin > email
+        const scored = candidates.map(s => {
+          let score = 0;
+          if (F(s, 'Pain points') || F(s, 'Pain Points (Generated)')) score += 3;
+          if (F(s, 'Role')) score += 2;
+          if (F(s, 'LinkedIn')) score += 1;
+          if (F(s, 'Email')) score += 1;
+          if (F(s, 'Level of Influence') === 'Decision Maker') score += 2;
+          return { s, score };
+        }).sort((a, b) => b.score - a.score).slice(0, 40);
+
+        // Build compact pool for AI
+        const pool = scored.map(({ s }, i) => {
+          const accName = (() => {
+            const ids = linkedIds(s, 'Account');
+            return ids.length > 0 ? (accounts.find(a => a.id === ids[0])) : null;
+          })();
+          const industry = accName ? F(accName, 'Industry') : '';
+          const pain = F(s, 'Pain points') || F(s, 'Pain Points (Generated)') || '';
+          const painText = typeof pain === 'string' ? pain.slice(0, 200) : '';
+          return `${s.id} | ${F(s, 'Name')} ${F(s, 'Last name') || ''} | ${F(s, 'Role') || '?'} | ${accName ? F(accName, 'Account Name') : '?'} | ${industry || '?'} | pain: ${painText || 'n/a'}`;
+        }).join('\n');
+
+        const prompt = `You are helping a B2B founder pick which of their stakeholders would genuinely benefit from seeing a LinkedIn post they wrote.
+
+POST THEY WROTE:
+"""
+${content.slice(0, 2500)}
+"""
+
+STAKEHOLDER POOL (ID | name | role | account | industry | pain):
+${pool}
+
+RULES:
+- Pick UP TO 15 stakeholders with REAL relevance (not forced). It's fine to return fewer if only 5-8 genuinely fit.
+- Rank by match strength: high (direct pain/role match) · medium (industry or contextual match) · low (peripheral, optional)
+- For each, write a personalized intro message (2-3 sentences max) that:
+  · References their specific context (role, pain, industry) — make it clear you thought of them
+  · Frames the post as value FOR THEM, not a pitch
+  · Feels like a friend sharing, not marketing
+  · Ends with subtle invitation (optional question or open loop)
+  · Use [POST_URL] placeholder for the link — will be replaced on send
+- NO generic greetings ("Hope you're well"). NO "just wanted to share". Natural only.
+- Match the voice energy of the post itself.
+
+Return ONLY valid JSON array:
+[
+  {
+    "stakeholder_id": "recXXX",
+    "match_score": "high | medium | low",
+    "match_reason": "One line explaining the match",
+    "intro_message": "Personalized 2-3 sentence intro, uses [POST_URL]"
+  }
+]
+
+No markdown, no commentary. JSON only.`;
+
+        try {
+          const res = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 2500 });
+          const cleaned = res.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          const list = Array.isArray(parsed) ? parsed : [];
+          setRecipientsByPost(prev => ({ ...prev, [post.id]: list }));
+        } catch (e) {
+          console.error('[findRecipients] failed:', e);
+          alert('Failed to find recipients: ' + (e.message || 'unknown'));
+        }
+        setFindingRecipientsFor('');
+      };
+
+      // ── Send post to a specific recipient ──
+      const sendToRecipient = async (post, rec, channel) => {
+        const stk = stakeholders.find(s => s.id === rec.stakeholder_id);
+        if (!stk) { alert('Stakeholder not found'); return; }
+        const key = `${post.id}:${rec.stakeholder_id}:${channel}`;
+        setSendingKey(key);
+
+        const postUrl = F(post, 'LinkedIn URL') || '';
+        const messageWithUrl = (rec.intro_message || '').replace(/\[POST_URL\]/g, postUrl || '(add your LinkedIn post URL to this post first)');
+        const postTitle = F(post, 'Title') || 'LinkedIn post';
+        const sName = F(stk, 'Name') || '';
+        const email = F(stk, 'Email') || '';
+        const linkedin = F(stk, 'LinkedIn') || '';
+        const companyIds = linkedIds(stk, 'Account');
+
+        // Open channel synchronously (user gesture required)
+        if (channel === 'LinkedIn') {
+          if (!linkedin) { alert('This contact has no LinkedIn URL'); setSendingKey(''); return; }
+          try { await navigator.clipboard.writeText(messageWithUrl); } catch {}
+          window.open(linkedin, '_blank');
+        } else if (channel === 'Email') {
+          if (!email) { alert('This contact has no email'); setSendingKey(''); return; }
+          const subject = `Thought of you: ${postTitle.slice(0, 60)}`;
+          window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(messageWithUrl)}`, '_blank');
+        }
+
+        // Log outreach in background
+        try {
+          const a = api || new AirtableAPI();
+          const outreachFields = {
+            'Activity Name': `${channel} · Shared post "${postTitle.slice(0, 50)}" with ${sName}`,
+            'Account': companyIds, 'Stakeholder': [stk.id],
+            'Channel': channel, 'Date': new Date().toISOString(),
+            'Status': 'Sent',
+            'Message': messageWithUrl,
+            'Notes': `Content Lab share — post: ${postTitle}${postUrl ? ' · ' + postUrl : ''}`,
+            'Logged By': CURRENT_USER?.name || '',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
+          };
+          await a.createRecord(TABLE_IDS.outreach, outreachFields);
+          await activateAccountIfNeeded(a, companyIds, accounts);
+          await updateStakeholderStatus(a, stk.id, 'Contacted', stakeholders);
+          if (onLogActivity) onLogActivity();
+          // Mark this recipient as sent in local state (so UI shows ✓)
+          setRecipientsByPost(prev => {
+            const list = (prev[post.id] || []).map(r => r.stakeholder_id === rec.stakeholder_id ? { ...r, sentChannel: channel, sentAt: Date.now() } : r);
+            return { ...prev, [post.id]: list };
+          });
+        } catch (e) {
+          console.error('[sendToRecipient] log failed:', e);
+        }
+        setSendingKey('');
+      };
+
       // ── Delete post from Library ──
       const deletePost = async (post) => {
         const name = F(post, 'Title') || 'this post';
@@ -13252,6 +13409,10 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
                                 🔗 Post on LinkedIn
                               </button>
                             )}
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa', fontWeight: 700 }} title="Find stakeholders who would benefit from this post"
+                              onClick={() => findRecipients(post)} disabled={findingRecipientsFor === post.id}>
+                              {findingRecipientsFor === post.id ? '⏳ Finding...' : '📮 Find recipients'}
+                            </button>
                             <button className="action-btn btn-ghost" style={{ fontSize: 10, color: '#e57373', border: '1px solid rgba(229,115,115,0.3)' }} title="Delete post" onClick={() => deletePost(post)}>🗑️</button>
                           </div>
                         </div>
@@ -13260,6 +13421,83 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
                         </div>
                         {linkedinUrl && (
                           <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--globant-info)', marginTop: 8, display: 'inline-block' }}>🔗 View on LinkedIn</a>
+                        )}
+
+                        {/* Recipients recommender panel */}
+                        {recipientsByPost[post.id] && recipientsByPost[post.id].length > 0 && (
+                          <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(167,139,250,0.06)', borderRadius: 8, borderLeft: '2px solid #a78bfa' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: 1, textTransform: 'uppercase' }}>
+                                📮 {recipientsByPost[post.id].length} recipient{recipientsByPost[post.id].length !== 1 ? 's' : ''} recommended
+                              </div>
+                              <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setRecipientsByPost(prev => { const next = { ...prev }; delete next[post.id]; return next; })}>✕ Close</button>
+                            </div>
+                            {!linkedinUrl && (
+                              <div style={{ padding: '6px 10px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 6, fontSize: 11, color: '#fbbf24', marginBottom: 10 }}>
+                                ⚠️ No LinkedIn URL saved for this post yet. The intro message won't include a link — add the LinkedIn URL to this post first (use Post on LinkedIn action).
+                              </div>
+                            )}
+                            {recipientsByPost[post.id].map((rec, i) => {
+                              const stk = stakeholders.find(s => s.id === rec.stakeholder_id);
+                              if (!stk) return null;
+                              const stkName = `${F(stk, 'Name') || ''} ${F(stk, 'Last name') || ''}`.trim();
+                              const stkRole = F(stk, 'Role') || '';
+                              const accIds = linkedIds(stk, 'Account');
+                              const acc = accIds.length > 0 ? accounts.find(a => a.id === accIds[0]) : null;
+                              const accName = acc ? F(acc, 'Account Name') : '';
+                              const hasEmail = !!F(stk, 'Email');
+                              const hasLinkedIn = !!F(stk, 'LinkedIn');
+                              const scoreColor = rec.match_score === 'high' ? '#4ade80' : rec.match_score === 'medium' ? '#fbbf24' : '#8888a8';
+                              const scoreIcon = rec.match_score === 'high' ? '🟢' : rec.match_score === 'medium' ? '🟡' : '⚪';
+                              const alreadySent = !!rec.sentChannel;
+                              return (
+                                <div key={i} style={{ marginBottom: 10, padding: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 6, opacity: alreadySent ? 0.6 : 1 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 10, marginBottom: 6 }}>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-text)' }}>
+                                        {scoreIcon} {stkName}
+                                        <span style={{ fontSize: 9, marginLeft: 8, padding: '1px 7px', borderRadius: 8, background: `${scoreColor}25`, color: scoreColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{rec.match_score}</span>
+                                      </div>
+                                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>
+                                        {stkRole}{accName ? ` · ${accName}` : ''}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 8, padding: '4px 8px', background: 'rgba(91,191,181,0.05)', borderLeft: '2px solid rgba(91,191,181,0.4)', borderRadius: 4 }}>
+                                    💡 {rec.match_reason}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.5, padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 6, marginBottom: 8, whiteSpace: 'pre-wrap' }}>
+                                    {(rec.intro_message || '').replace(/\[POST_URL\]/g, linkedinUrl || '[add post URL first]')}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {alreadySent ? (
+                                      <span style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderRadius: 6, fontWeight: 700 }}>✓ Sent via {rec.sentChannel}</span>
+                                    ) : (
+                                      <>
+                                        {hasLinkedIn && (
+                                          <button className="action-btn btn-linkedin" style={{ fontSize: 11 }}
+                                            disabled={sendingKey === `${post.id}:${rec.stakeholder_id}:LinkedIn`}
+                                            onClick={() => sendToRecipient(post, rec, 'LinkedIn')}>
+                                            {sendingKey === `${post.id}:${rec.stakeholder_id}:LinkedIn` ? '⏳' : '💬 Send via LinkedIn'}
+                                          </button>
+                                        )}
+                                        {hasEmail && (
+                                          <button className="action-btn btn-email" style={{ fontSize: 11 }}
+                                            disabled={sendingKey === `${post.id}:${rec.stakeholder_id}:Email`}
+                                            onClick={() => sendToRecipient(post, rec, 'Email')}>
+                                            {sendingKey === `${post.id}:${rec.stakeholder_id}:Email` ? '⏳' : '✉️ Send via Email'}
+                                          </button>
+                                        )}
+                                        {!hasLinkedIn && !hasEmail && (
+                                          <span style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>⚠️ No LinkedIn or email on file</span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
 
                         {/* Engagement analyzer (only visible when expanded) */}
