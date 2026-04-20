@@ -850,6 +850,19 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                               ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
                             });
                             await activateAccountIfNeeded(a, accountIds, accounts);
+                            // Manual Quick Log is authoritative — set stakeholder Status directly (bypasses auto-advance rules)
+                            const QUICK_TO_STK_STATUS = {
+                              bounced: 'Bounced',
+                              reply: 'Replied',
+                              meeting: 'Meeting Booked',
+                              notinterested: 'Not Interested',
+                            };
+                            const newStkStatus = QUICK_TO_STK_STATUS[quickAction];
+                            if (newStkStatus) {
+                              await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Status': newStkStatus })
+                                .catch(e => console.warn('[QuickLog] failed to update stakeholder status:', e));
+                            }
+                            if (onRefresh) onRefresh();
                             setQuickAction('');
                             setQuickNote('');
                             setQuickDate('');
