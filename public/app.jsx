@@ -3094,7 +3094,7 @@ Output ONLY the message, nothing else.`;
     }
 
     // ============ CONTACTS SECTION ============
-    function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord, goToAccount }) {
+    function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, goToAccount }) {
       const { accounts, stakeholders, outreach } = data;
       const [searchName, setSearchName] = useState('');
       const [searchAccount, setSearchAccount] = useState('');
@@ -3458,6 +3458,20 @@ Output ONLY the message, nothing else.`;
           .catch(e => console.error(e));
       };
 
+      const deleteContact = async (s) => {
+        const name = `${F(s, 'Name') || ''} ${F(s, 'Last name') || ''}`.trim() || 'this contact';
+        if (!confirm(`Delete ${name}?\n\nThis removes the contact and their link to the account permanently. Outreach history attached to this contact will stay in the Outreach Log but will no longer resolve to a name.`)) return;
+        try {
+          const a = api || new AirtableAPI();
+          await a.deleteRecord(TABLE_IDS.stakeholders, s.id);
+          if (onDeleteRecord) onDeleteRecord('stakeholders', s.id);
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error('[deleteContact] failed:', e);
+          alert('Failed to delete: ' + (e.message || 'unknown'));
+        }
+      };
+
       const saveContactEdit = async (values) => {
         if (!editingContact) return;
         // Only send fields that have a value — Airtable rejects empty strings for Email, Phone, URL, and Single Select fields
@@ -3787,6 +3801,7 @@ Output ONLY the message, nothing else.`;
                             {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} title="LinkedIn" onClick={() => useMessage(s, 'LinkedIn', fallback)}>🔗</button>}
                             {phone && <button className="action-btn btn-call" style={{ fontSize: 11, padding: '4px 8px' }} title="Call" onClick={() => useMessage(s, 'Call', fallback)}>📞</button>}
                             <button title="Edit contact" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--globant-border)', background: 'rgba(255,255,255,0.04)', color: 'var(--globant-muted)', cursor: 'pointer' }} onClick={() => setEditingContact(s)}>✏️</button>
+                            <button title="Delete contact" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(229,115,115,0.3)', background: 'rgba(229,115,115,0.08)', color: '#e57373', cursor: 'pointer' }} onClick={() => deleteContact(s)}>🗑️</button>
                           </div>
                         </td>
                       </tr>
@@ -12226,7 +12241,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
     }
 
     // ============ CONTENT LAB ============
-    function ContentLab({ data, api, onLogActivity, onAddRecord }) {
+    function ContentLab({ data, api, onLogActivity, onAddRecord, onDeleteRecord }) {
       const { accounts = [], stakeholders = [], outreach = [], solutions = [], opportunities = [], campaigns = [], events = [], contentLab = [] } = data;
       const [tab, setTab] = useState('ideas'); // 'ideas' | 'writer' | 'library' | 'voice'
       const [ideas, setIdeas] = useState([]);
@@ -12839,6 +12854,21 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
         }
       };
 
+      // ── Delete post from Library ──
+      const deletePost = async (post) => {
+        const name = F(post, 'Title') || 'this post';
+        if (!confirm(`Delete "${name.slice(0, 60)}"?\n\nThis removes it from the Library permanently.`)) return;
+        try {
+          const a = api || new AirtableAPI();
+          await a.deleteRecord(TABLE_IDS.contentLab, post.id);
+          if (onDeleteRecord) onDeleteRecord('contentLab', post.id);
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error('[Content Lab] Delete failed:', e);
+          alert('Failed to delete: ' + (e.message || 'unknown'));
+        }
+      };
+
       // ── Post from Library: copy + open LinkedIn + mark posted ──
       const postFromLibrary = async (post) => {
         const content = F(post, 'Content') || '';
@@ -13213,8 +13243,8 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
                             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 4 }}>{F(post, 'Title')}</div>
                           </div>
                           <div style={{ display: 'flex', gap: 6 }}>
-                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => { navigator.clipboard.writeText(content); }}>📋</button>
-                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingPost(editingPost === post.id ? null : post.id)}>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} title="Copy content" onClick={() => { navigator.clipboard.writeText(content); }}>📋</button>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} title={editingPost === post.id ? 'Collapse' : 'Expand'} onClick={() => setEditingPost(editingPost === post.id ? null : post.id)}>
                               {editingPost === post.id ? '✕' : '👁️'}
                             </button>
                             {status !== 'Posted' && (
@@ -13222,6 +13252,7 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
                                 🔗 Post on LinkedIn
                               </button>
                             )}
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10, color: '#e57373', border: '1px solid rgba(229,115,115,0.3)' }} title="Delete post" onClick={() => deletePost(post)}>🗑️</button>
                           </div>
                         </div>
                         <div style={{ fontSize: 12.5, color: 'var(--globant-text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
@@ -15032,13 +15063,13 @@ Return ONLY valid JSON:
       const pages = {
         overview: <StrategyOverview data={data} api={api} onUpdateRecord={updateInData} onAddRecord={addToData} onLogActivity={bgSync} />,
         followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} goToAccount={goToAccount} />,
-        contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} goToAccount={goToAccount} />,
+        contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} goToAccount={goToAccount} />,
         activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
         proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
         campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
-        contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
+        contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
         reports:  <ReportBuilder data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
