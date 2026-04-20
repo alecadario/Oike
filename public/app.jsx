@@ -323,6 +323,35 @@
       return confirm(header + body);
     };
 
+    // ── Derive stakeholder status from outreach status ──
+    const deriveStakeholderStatus = (outreachStatus) => {
+      const s = String(outreachStatus || '').toLowerCase();
+      if (s.includes('meeting')) return 'Meeting Booked';
+      if (s === 'replied' || s === 'received') return 'Replied';
+      if (s === 'bounced') return 'Bounced';
+      return 'Contacted'; // default for 'Sent', 'Draft', etc.
+    };
+
+    // ── Update stakeholder status based on an outreach event ──
+    // Only ADVANCES forward in the funnel (never downgrades).
+    // Never touches manual/terminal states: DNC, Left Company, Not Interested, Nurture, Bounced.
+    const STAKEHOLDER_STATUS_PRIORITY = { '': 0, 'Not Contacted': 0, 'Contacted': 1, 'Replied': 2, 'Meeting Booked': 3 };
+    const STAKEHOLDER_STATUS_PROTECTED = ['DNC', 'Left Company', 'Not Interested', 'Nurture', 'Bounced'];
+    const updateStakeholderStatus = async (apiInstance, stakeholderId, newStatus, allStakeholders) => {
+      if (!apiInstance || !stakeholderId || !newStatus || !allStakeholders) return;
+      try {
+        const stk = allStakeholders.find(s => s.id === stakeholderId);
+        if (!stk) return;
+        const currentStatus = String(F(stk, 'Status') || '').trim();
+        if (STAKEHOLDER_STATUS_PROTECTED.includes(currentStatus)) return; // respect manual overrides
+        const currentPriority = STAKEHOLDER_STATUS_PRIORITY[currentStatus] ?? 0;
+        const newPriority = STAKEHOLDER_STATUS_PRIORITY[newStatus] ?? 0;
+        if (newPriority > currentPriority) {
+          await apiInstance.updateRecord(TABLE_IDS.stakeholders, stakeholderId, { 'Status': newStatus });
+        }
+      } catch (e) { console.warn('[updateStakeholderStatus] failed:', e); }
+    };
+
     // Auto-activate account when outreach is logged.
     // Only escalates EARLY stages (empty, Prospect, Dormant) to Active.
     // Never downgrades later stages (Active, Negotiation, Won, Lost) — those are preserved.
@@ -604,6 +633,25 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   </span>
                   {F(stakeholder, 'Phone number') && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>📞 {F(stakeholder, 'Phone number')}</span>}
                   {F(stakeholder, 'Level of Influence') && <span className="badge badge-accent" style={{ fontSize: 10 }}>{F(stakeholder, 'Level of Influence')}</span>}
+                  {(() => {
+                    const status = F(stakeholder, 'Status') || 'Not Contacted';
+                    const colors = {
+                      'Not Contacted': { bg: 'rgba(136,136,168,0.15)', fg: '#8888a8', br: 'rgba(136,136,168,0.35)' },
+                      'Contacted':     { bg: 'rgba(251,191,36,0.15)', fg: '#fbbf24', br: 'rgba(251,191,36,0.35)' },
+                      'Replied':       { bg: 'rgba(74,222,128,0.15)', fg: '#4ade80', br: 'rgba(74,222,128,0.35)' },
+                      'Meeting Booked':{ bg: 'rgba(96,165,250,0.15)', fg: '#60a5fa', br: 'rgba(96,165,250,0.35)' },
+                      'Not Interested':{ bg: 'rgba(249,115,22,0.15)', fg: '#f97316', br: 'rgba(249,115,22,0.35)' },
+                      'DNC':           { bg: 'rgba(239,68,68,0.20)',  fg: '#ef4444', br: 'rgba(239,68,68,0.45)' },
+                      'Bounced':       { bg: 'rgba(234,88,12,0.15)',  fg: '#ea580c', br: 'rgba(234,88,12,0.35)' },
+                      'Left Company':  { bg: 'rgba(156,163,175,0.15)',fg: '#9ca3af', br: 'rgba(156,163,175,0.35)' },
+                      'Nurture':       { bg: 'rgba(167,139,250,0.15)',fg: '#a78bfa', br: 'rgba(167,139,250,0.35)' },
+                    }[status] || { bg: 'rgba(136,136,168,0.15)', fg: '#8888a8', br: 'rgba(136,136,168,0.35)' };
+                    return (
+                      <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 10, background: colors.bg, color: colors.fg, border: `1px solid ${colors.br}`, fontWeight: 700 }}>
+                        {status}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
@@ -1792,6 +1840,18 @@ Keep it natural — write for the ear, not the eye.`,
       const handleGenerate = async () => {
         if (!selectedChannel) { alert('Select a channel first'); return; }
 
+        // Warning for protected statuses — get confirmation before generating
+        const currentStakeholderStatus = F(stakeholder, 'Status') || '';
+        const BLOCK_STATUSES = ['DNC', 'Bounced', 'Left Company'];
+        if (BLOCK_STATUSES.includes(currentStakeholderStatus)) {
+          const msg = {
+            'DNC': `⚠️ This contact is marked as DNC (Do Not Contact).\n\nContacting them may violate their preference or legal requirements. Proceed anyway?`,
+            'Bounced': `⚠️ This contact's email is marked as Bounced.\n\nThe email address likely doesn't work. Verify it's correct before sending. Proceed anyway?`,
+            'Left Company': `⚠️ This contact is marked as having Left Company.\n\nThey may no longer be at ${accountName}. Data might be stale. Proceed anyway?`,
+          }[currentStakeholderStatus];
+          if (!confirm(msg)) return;
+        }
+
         setLoadingAI(true);
         try {
           const chGuide = channelPrompts[selectedChannel];
@@ -2239,6 +2299,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Replied', data.stakeholders);
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Log response failed:', e); }
       };
@@ -2263,6 +2324,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Meeting Booked', data.stakeholders);
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Log meeting failed:', e); }
       };
@@ -2370,6 +2432,7 @@ Output ONLY the message, nothing else.`;
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.outreach, outreachFields)
           .then(() => activateAccountIfNeeded(a, companyIds, data.accounts))
+          .then(() => updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders))
           .then(async () => {
             // If sent as event invite, register stakeholder as invited in the event
             if (eventId) {
@@ -3038,6 +3101,8 @@ Output ONLY the message, nothing else.`;
       const [ctxCreatingAccount, setCtxCreatingAccount] = useState(false);
       const [editingContact, setEditingContact] = useState(null);
       const [filterSource, setFilterSource] = useState('');
+      const [filterStatus, setFilterStatus] = useState('');
+      const STAKEHOLDER_STATUS_OPTIONS = ['Not Contacted', 'Contacted', 'Replied', 'Meeting Booked', 'Not Interested', 'DNC', 'Bounced', 'Left Company', 'Nurture'];
       const [showContactImport, setShowContactImport] = useState(false);
       const [contactCsvRows, setContactCsvRows] = useState([]);
       const [contactImporting, setContactImporting] = useState(false);
@@ -3216,6 +3281,7 @@ Output ONLY the message, nothing else.`;
               }).catch(e => console.error('[useMessage] event invite update failed:', e));
             }
             await activateAccountIfNeeded(a, companyIds, data.accounts);
+            await updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders);
           })
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => console.error(e));
@@ -3260,8 +3326,12 @@ Output ONLY the message, nothing else.`;
         }
         if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return false;
         if (filterSource && F(s, 'Source') !== filterSource) return false;
+        if (filterStatus) {
+          const sStatus = F(s, 'Status') || 'Not Contacted';
+          if (sStatus !== filterStatus) return false;
+        }
         return true;
-      }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || '')), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, accounts]);
+      }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || '')), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, filterStatus, accounts]);
 
       return (
         <div>
@@ -3290,6 +3360,10 @@ Output ONLY the message, nothing else.`;
             <select className="input-field" style={{ maxWidth: 200 }} value={filterSource} onChange={e => setFilterSource(e.target.value)}>
               <option value="">All Sources</option>
               {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select className="input-field" style={{ maxWidth: 200 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+              <option value="">All Statuses</option>
+              {STAKEHOLDER_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
 
@@ -3462,6 +3536,7 @@ Output ONLY the message, nothing else.`;
                   <tr>
                     <th>Contact</th>
                     <th>Account</th>
+                    <th>Status</th>
                     <th>Influence</th>
                     <th>Source</th>
                     <th style={{ textAlign: 'center' }}>Touches</th>
@@ -3485,6 +3560,21 @@ Output ONLY the message, nothing else.`;
                           <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role')}</div>
                         </td>
                         <td style={{ fontSize: 12 }}>{accNames.join(', ')}</td>
+                        <td>{(() => {
+                          const status = F(s, 'Status') || 'Not Contacted';
+                          const colors = {
+                            'Not Contacted': { bg: 'rgba(136,136,168,0.15)', fg: '#8888a8' },
+                            'Contacted':     { bg: 'rgba(251,191,36,0.15)', fg: '#fbbf24' },
+                            'Replied':       { bg: 'rgba(74,222,128,0.15)', fg: '#4ade80' },
+                            'Meeting Booked':{ bg: 'rgba(96,165,250,0.15)', fg: '#60a5fa' },
+                            'Not Interested':{ bg: 'rgba(249,115,22,0.15)', fg: '#f97316' },
+                            'DNC':           { bg: 'rgba(239,68,68,0.20)',  fg: '#ef4444' },
+                            'Bounced':       { bg: 'rgba(234,88,12,0.15)',  fg: '#ea580c' },
+                            'Left Company':  { bg: 'rgba(156,163,175,0.15)',fg: '#9ca3af' },
+                            'Nurture':       { bg: 'rgba(167,139,250,0.15)',fg: '#a78bfa' },
+                          }[status] || { bg: 'rgba(136,136,168,0.15)', fg: '#8888a8' };
+                          return <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: colors.bg, color: colors.fg, fontWeight: 700, whiteSpace: 'nowrap' }}>{status}</span>;
+                        })()}</td>
                         <td><span className="badge badge-accent">{F(s, 'Level of Influence') || '—'}</span></td>
                         <td>
                           {F(s, 'Source') ? (
@@ -4456,6 +4546,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Meeting Booked', data.stakeholders);
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Log meeting failed:', e); }
       };
@@ -4477,6 +4568,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders);
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Log call failed:', e); }
       };
@@ -4524,6 +4616,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
             }).catch(e => console.error('[cpUseMessage] event invite update failed:', e));
           }
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders);
           if (onLogActivity) onLogActivity();
         } catch (e) { console.error('Auto-log failed:', e); }
       };
@@ -6858,6 +6951,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
             });
           }
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders);
           if (onLogActivity) onLogActivity();
         };
         doAsync().catch(e => console.error('Event invite log failed:', e));
@@ -6974,6 +7068,7 @@ Return ONLY the JSON array, nothing else.`;
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders);
           // If this was an event invite from AI Generator, link the stakeholder to the event
           if (eventId) {
             try {
@@ -7393,6 +7488,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         'Stakeholders invited': [...new Set([...currentInvited, s.id])],
                       }).catch(e => console.error('Event invite register failed:', e));
                       await activateAccountIfNeeded(a, companyIds, data.accounts);
+                      await updateStakeholderStatus(a, s.id, 'Contacted', data.stakeholders);
                       if (onLogActivity) onLogActivity();
                     }).catch(e => console.error('sendInviteMsg log failed:', e));
                     setInvitePreview(null);
@@ -9027,6 +9123,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                       }).catch(e => console.error('[SolutionsHub onSend] event invite update failed:', e));
                     }
                     await activateAccountIfNeeded(a, companyIds, data.accounts);
+                    await updateStakeholderStatus(a, s.id, 'Contacted', data.stakeholders);
                   })
                   .then(() => { if (onLogActivity) onLogActivity(); })
                   .catch(console.error);
@@ -11541,6 +11638,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
             'Stakeholders Reached': [...new Set([...currentReached, s.id])],
           }).catch(e => console.error('Campaign reached update failed:', e));
           await activateAccountIfNeeded(a, companyIds, data.accounts);
+          await updateStakeholderStatus(a, s.id, 'Contacted', data.stakeholders);
           if (onLogActivity) onLogActivity();
         }).catch(e => console.error('Campaign send log failed:', e));
 
