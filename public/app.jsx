@@ -12225,6 +12225,476 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       );
     }
 
+    // ============ CONTENT LAB ============
+    function ContentLab({ data, api, onLogActivity, onAddRecord }) {
+      const { accounts = [], stakeholders = [], outreach = [], solutions = [], opportunities = [], campaigns = [], contentLab = [] } = data;
+      const [tab, setTab] = useState('ideas'); // 'ideas' | 'writer' | 'library' | 'voice'
+      const [ideas, setIdeas] = useState([]);
+      const [loadingIdeas, setLoadingIdeas] = useState(false);
+      const [writerTopic, setWriterTopic] = useState('');
+      const [writerType, setWriterType] = useState('Short Post');
+      const [writerTone, setWriterTone] = useState('directo');
+      const [writerLanguage, setWriterLanguage] = useState('es');
+      const [writerTag, setWriterTag] = useState('');
+      const [sourceInsight, setSourceInsight] = useState('');
+      const [draft, setDraft] = useState('');
+      const [loadingDraft, setLoadingDraft] = useState(false);
+      const [savingDraft, setSavingDraft] = useState(false);
+      const [copied, setCopied] = useState(false);
+      const [voiceSamples, setVoiceSamples] = useState(() => localStorage.getItem('oike_voice_samples') || '');
+      const [voiceSaved, setVoiceSaved] = useState(false);
+      const [libraryFilter, setLibraryFilter] = useState('all');
+      const [editingPost, setEditingPost] = useState(null);
+
+      const TAGS = ['Sales', 'Personal', 'Strategy', 'Lead gen', 'Industry insight', 'Lesson learned', 'Contrarian', 'Story', 'Framework'];
+      const TYPES = ['Short Post', 'Long Post', 'Article'];
+      const TONES = ['directo', 'personal', 'técnico', 'inspiracional', 'contrarian'];
+
+      // ── Save voice samples ──
+      const saveVoiceSamples = () => {
+        try { localStorage.setItem('oike_voice_samples', voiceSamples); } catch {}
+        setVoiceSaved(true);
+        setTimeout(() => setVoiceSaved(false), 1800);
+      };
+
+      // ── Build Oike context for AI ──
+      const buildOikeContext = () => {
+        const recentDays = 14;
+        const cutoff = Date.now() - recentDays * 86400000;
+        const recentOutreach = outreach.filter(o => new Date(o.fields?.['Date'] || 0).getTime() > cutoff);
+        const recentReplies = recentOutreach.filter(o => ['Replied', 'Received'].includes(F(o, 'Status')));
+        const activeAccountIds = new Set(recentOutreach.flatMap(o => linkedIds(o, 'Account')));
+        const activeAccounts = accounts.filter(a => activeAccountIds.has(a.id));
+        const industries = [...new Set(activeAccounts.map(a => F(a, 'Industry')).filter(Boolean))];
+        const painPoints = stakeholders.map(s => F(s, 'Pain points') || F(s, 'Pain Points (Generated)'))
+          .filter(p => typeof p === 'string' && p.trim().length > 20)
+          .slice(0, 8);
+        const solutionNames = solutions.map(s => F(s, 'Name')).filter(Boolean);
+        const meetingsWon = recentOutreach.filter(o => ['Meeting Scheduled', 'Meeting Booked'].includes(F(o, 'Status')));
+        const replyExcerpts = recentReplies.slice(0, 5).map(o => {
+          const raw = (F(o, 'Notes') || F(o, 'Message') || '').replace(/^\[gmsg:[^\]]+\]\s*/, '').trim();
+          return raw.slice(0, 200);
+        }).filter(Boolean);
+
+        return {
+          recentDays,
+          touchesCount: recentOutreach.length,
+          repliesCount: recentReplies.length,
+          meetingsCount: meetingsWon.length,
+          industries,
+          painPoints,
+          solutionNames,
+          replyExcerpts,
+        };
+      };
+
+      // ── Generate ideas ──
+      const generateIdeas = async () => {
+        setLoadingIdeas(true);
+        const ctx = buildOikeContext();
+        const prompt = `Sos un content strategist para un founder B2B: ${COMPANY_PROFILE.senderName || 'el founder'}${COMPANY_PROFILE.senderTitle ? ' (' + COMPANY_PROFILE.senderTitle + ')' : ''} en ${COMPANY_PROFILE.companyName || ''}, ofrece ${COMPANY_PROFILE.services || 'sales intelligence'}.
+
+Generá 8-10 ideas de posts de LinkedIn ancladas en esta ACTIVIDAD REAL (no advice genérico):
+
+ACTIVIDAD ÚLTIMOS ${ctx.recentDays} DÍAS:
+- Touches enviados: ${ctx.touchesCount}
+- Replies recibidas: ${ctx.repliesCount}
+- Meetings agendados: ${ctx.meetingsCount}
+- Industrias activas: ${ctx.industries.slice(0,6).join(', ') || 'variadas'}
+- Soluciones en conversación: ${ctx.solutionNames.slice(0,5).join(', ') || 'varias'}
+
+PAIN POINTS OBSERVADOS (reales, nunca nombres de clientes):
+${ctx.painPoints.map((p, i) => `${i+1}. ${p.slice(0, 200)}`).join('\n') || 'No capturados'}
+
+EXTRACTOS DE REPLIES RECIENTES (anonimizados):
+${ctx.replyExcerpts.map((r, i) => `${i+1}. "${r}"`).join('\n') || 'Sin muestras'}
+
+Generá ideas que:
+- Sean ESPECÍFICAS (no "10 tips para vender mejor")
+- Referencien patrones reales (nunca nombres de clientes)
+- Posicionen como operador creíble, no como influencer
+- Mezclen formatos: story, lesson learned, contrarian take, observation, framework
+- Cada una termine con hook de engagement (pregunta, claim fuerte, invitación)
+
+Devolvé SOLO JSON array válido:
+[
+  {
+    "hook": "Primera línea del post (el scroll-stopper, máx 15 palabras)",
+    "angle": "Descripción corta del ángulo (1 frase)",
+    "source": "Qué insight de la data inspira esta idea",
+    "format": "story | lesson | contrarian | observation | framework",
+    "tag": "una de: Sales, Personal, Strategy, Lead gen, Industry insight, Lesson learned, Contrarian, Story, Framework"
+  }
+]`;
+
+        try {
+          const response = await callOpenAI({ prompt, temperature: 0.8, max_tokens: 1800 });
+          const cleaned = response.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          setIdeas(Array.isArray(parsed) ? parsed : []);
+        } catch (e) {
+          console.error('[Content Lab] Generate ideas failed:', e);
+          alert('Failed to generate ideas: ' + (e.message || 'unknown'));
+        }
+        setLoadingIdeas(false);
+      };
+
+      // ── Send idea to writer ──
+      const useIdea = (idea) => {
+        setWriterTopic(idea.hook + ' — ' + idea.angle);
+        setWriterTag(idea.tag || '');
+        setSourceInsight(idea.source || '');
+        setTab('writer');
+      };
+
+      // ── Generate draft ──
+      const generateDraft = async () => {
+        if (!writerTopic.trim()) { alert('Agregá un topic primero'); return; }
+        setLoadingDraft(true);
+        const maxTokens = writerType === 'Article' ? 1800 : writerType === 'Long Post' ? 800 : 450;
+        const wordTarget = writerType === 'Article' ? '800-1500 palabras, con 3-4 secciones (## Header)' : writerType === 'Long Post' ? '300-500 palabras' : '100-200 palabras';
+
+        const prompt = `Estás escribiendo un ${writerType} para LinkedIn en la voz de ${COMPANY_PROFILE.senderName || 'el founder'}.
+${voiceSamples.trim() ? `\nVOICE SAMPLES (igualá vocabulario, ritmo, largo de frase, energía):\n"""\n${voiceSamples.slice(0, 4000)}\n"""\n` : ''}
+TOPIC: ${writerTopic.trim()}
+
+TYPE: ${writerType}
+TONO: ${writerTone}
+IDIOMA: ${writerLanguage === 'es' ? 'Español (voseo si los samples lo usan)' : 'English'}
+
+CONSTRAINTS:
+- Largo: ${wordTarget}
+- Hook en la primera línea (NO openers genéricos tipo "En el mundo de hoy...")
+- UN solo punto claro
+- Cero corporate speak
+- Cero hashtag soup
+- Termina con conversation starter (pregunta O claim fuerte O invitación a comentar)
+${writerType === 'Article' ? '- Usá 3-4 secciones con sub-headers (## Header)' : ''}
+- Nunca nombres clientes específicos
+- No uses emojis de más
+
+Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. Sin meta-commentary.`;
+
+        try {
+          const response = await callOpenAI({ prompt, temperature: 0.85, max_tokens: maxTokens });
+          setDraft(response.trim());
+        } catch (e) {
+          console.error('[Content Lab] Generate draft failed:', e);
+          alert('Failed to generate draft: ' + (e.message || 'unknown'));
+        }
+        setLoadingDraft(false);
+      };
+
+      // ── Copy to clipboard ──
+      const copyDraft = () => {
+        navigator.clipboard.writeText(draft).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        });
+      };
+
+      // ── Save draft to library ──
+      const saveDraft = async () => {
+        if (!draft.trim()) { alert('Nada para guardar'); return; }
+        setSavingDraft(true);
+        try {
+          const a = api || new AirtableAPI();
+          const firstLine = draft.split('\n').find(l => l.trim())?.slice(0, 80) || 'Untitled';
+          const fields = {
+            'Title': firstLine,
+            'Content': draft,
+            'Type': writerType,
+            'Status': 'Draft',
+            'Platform': 'LinkedIn',
+            ...(writerTag ? { 'Topic Tags': [writerTag] } : {}),
+            ...(sourceInsight ? { 'Source Insight': sourceInsight } : {}),
+          };
+          await a.createRecord(TABLE_IDS.contentLab, fields);
+          if (onLogActivity) onLogActivity();
+          alert('✅ Guardado en Library');
+        } catch (e) {
+          console.error('[Content Lab] Save failed:', e);
+          alert('Failed to save: ' + (e.message || 'unknown'));
+        }
+        setSavingDraft(false);
+      };
+
+      // ── Mark as posted ──
+      const markPosted = async (post, linkedinUrl) => {
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.contentLab, post.id, {
+            'Status': 'Posted',
+            'Posted Date': new Date().toISOString().slice(0, 10),
+            ...(linkedinUrl ? { 'LinkedIn URL': linkedinUrl } : {}),
+          });
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error('[Content Lab] Mark posted failed:', e);
+          alert('Failed: ' + (e.message || 'unknown'));
+        }
+      };
+
+      // ── Library filtered ──
+      const filteredLibrary = contentLab.filter(p => {
+        if (libraryFilter === 'all') return true;
+        return (F(p, 'Status') || 'Draft').toLowerCase() === libraryFilter.toLowerCase();
+      }).sort((a, b) => new Date(b.fields?.['Posted Date'] || b.createdTime || 0) - new Date(a.fields?.['Posted Date'] || a.createdTime || 0));
+
+      // Tab buttons style
+      const tabBtnStyle = (active) => ({
+        padding: '10px 18px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+        background: active ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${active ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+        color: active ? 'var(--globant-green)' : 'var(--globant-text)',
+      });
+
+      return (
+        <div>
+          <div className="page-header">
+            <h1>✍️ Content Lab</h1>
+            <p>Posts y artículos para LinkedIn, anclados a tu data de ventas real. Tu contenido y tu pipeline se alimentan mutuamente.</p>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            <button style={tabBtnStyle(tab === 'ideas')} onClick={() => setTab('ideas')}>💡 Ideas</button>
+            <button style={tabBtnStyle(tab === 'writer')} onClick={() => setTab('writer')}>✏️ Writer</button>
+            <button style={tabBtnStyle(tab === 'library')} onClick={() => setTab('library')}>📚 Library ({contentLab.length})</button>
+            <button style={tabBtnStyle(tab === 'voice')} onClick={() => setTab('voice')}>🎙️ Voice Training</button>
+          </div>
+
+          {/* ── IDEAS TAB ── */}
+          {tab === 'ideas' && (
+            <div>
+              <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid var(--globant-green)' }}>
+                <p style={{ fontSize: 13, color: 'var(--globant-muted)', margin: '0 0 10px' }}>
+                  La IA lee tu actividad de Oike de los últimos 14 días (touches, replies, pain points, meetings agendados) y genera ideas de posts ancladas en esa data.
+                </p>
+                <button className="action-btn btn-primary" style={{ fontSize: 13 }} onClick={generateIdeas} disabled={loadingIdeas}>
+                  {loadingIdeas ? '⏳ Generating...' : ideas.length > 0 ? '🔄 Regenerate Ideas' : '✨ Generate Ideas from my data'}
+                </button>
+              </div>
+
+              {ideas.length === 0 && !loadingIdeas && (
+                <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--globant-muted)' }}>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>💡</div>
+                  <p style={{ fontSize: 14 }}>Click "Generate Ideas" para empezar.</p>
+                  <p style={{ fontSize: 12, marginTop: 6 }}>Cuantas más conversaciones y pain points tengas cargados, más rica la data.</p>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
+                {ideas.map((idea, i) => (
+                  <div key={i} className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-accent)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+                      {idea.format || 'post'} · {idea.tag || 'Sales'}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 8, lineHeight: 1.4 }}>
+                      {idea.hook}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                      {idea.angle}
+                    </div>
+                    {idea.source && (
+                      <div style={{ fontSize: 10, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 12, padding: '6px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, borderLeft: '2px solid var(--globant-green)' }}>
+                        💡 {idea.source}
+                      </div>
+                    )}
+                    <button className="action-btn btn-primary" style={{ fontSize: 11, width: '100%' }} onClick={() => useIdea(idea)}>
+                      ✏️ Write this post →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── WRITER TAB ── */}
+          {tab === 'writer' && (
+            <div>
+              <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid var(--globant-green)' }}>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>✏️ Post configuration</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Type</label>
+                    <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerType} onChange={e => setWriterType(e.target.value)}>
+                      {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Tono</label>
+                    <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerTone} onChange={e => setWriterTone(e.target.value)}>
+                      {TONES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Idioma</label>
+                    <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerLanguage} onChange={e => setWriterLanguage(e.target.value)}>
+                      <option value="es">Español</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Topic tag</label>
+                    <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerTag} onChange={e => setWriterTag(e.target.value)}>
+                      <option value="">— Sin tag —</option>
+                      {TAGS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Topic / Brief</label>
+                <textarea
+                  className="input-field"
+                  style={{ width: '100%', minHeight: 80, resize: 'vertical', fontSize: 13, fontFamily: 'inherit', lineHeight: 1.5 }}
+                  placeholder="Ej: Cómo detecté que el 80% de los SDRs hacen follow-up mal — y qué cambié en mis mensajes después de 100 meetings"
+                  value={writerTopic}
+                  onChange={e => setWriterTopic(e.target.value)}
+                />
+                {sourceInsight && (
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic', marginTop: 6, padding: '6px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6 }}>
+                    💡 Source insight: {sourceInsight}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button className="action-btn btn-primary" style={{ fontSize: 13 }} onClick={generateDraft} disabled={loadingDraft || !writerTopic.trim()}>
+                    {loadingDraft ? '⏳ Generating...' : draft ? '🔄 Regenerate' : '✨ Generate Draft'}
+                  </button>
+                  {!voiceSamples.trim() && (
+                    <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setTab('voice')}>
+                      💡 Add voice samples for better results →
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Draft preview */}
+              {draft && (
+                <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 15, margin: 0 }}>📝 Your draft</h3>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={copyDraft}>
+                        {copied ? '✅ Copied!' : '📋 Copy'}
+                      </button>
+                      <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={saveDraft} disabled={savingDraft}>
+                        {savingDraft ? '⏳' : '💾 Save to Library'}
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    className="input-field"
+                    style={{ width: '100%', minHeight: 340, fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.7, resize: 'vertical' }}
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 8 }}>
+                    💡 Editá libremente antes de copiar. El draft es tuyo ahora.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── LIBRARY TAB ── */}
+          {tab === 'library' && (
+            <div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                {['all', 'draft', 'scheduled', 'posted'].map(f => (
+                  <button key={f} style={tabBtnStyle(libraryFilter === f)} onClick={() => setLibraryFilter(f)}>
+                    {f === 'all' ? `All (${contentLab.length})` : f.charAt(0).toUpperCase() + f.slice(1) + ` (${contentLab.filter(p => (F(p, 'Status') || 'Draft').toLowerCase() === f).length})`}
+                  </button>
+                ))}
+              </div>
+
+              {filteredLibrary.length === 0 ? (
+                <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--globant-muted)' }}>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>📚</div>
+                  <p style={{ fontSize: 14 }}>No hay posts guardados todavía.</p>
+                  <p style={{ fontSize: 12 }}>Generá uno en <strong>Writer</strong> y clickeá "Save to Library".</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {filteredLibrary.map(post => {
+                    const status = F(post, 'Status') || 'Draft';
+                    const statusColor = status === 'Posted' ? '#4ade80' : status === 'Scheduled' ? '#fbbf24' : '#8888A8';
+                    const content = F(post, 'Content') || '';
+                    const preview = content.slice(0, 220);
+                    const postedDate = F(post, 'Posted Date');
+                    const linkedinUrl = F(post, 'LinkedIn URL');
+                    const tags = F(post, 'Topic Tags');
+                    return (
+                      <div key={post.id} className="card" style={{ borderLeft: `3px solid ${statusColor}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 8, gap: 10 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: `${statusColor}25`, color: statusColor, fontWeight: 700 }}>{status}</span>
+                              <span style={{ fontSize: 10, color: 'var(--globant-muted)' }}>{F(post, 'Type')}</span>
+                              {Array.isArray(tags) && tags.map(t => <span key={t} style={{ fontSize: 9, padding: '1px 7px', borderRadius: 8, background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', fontWeight: 600 }}>{t}</span>)}
+                              {postedDate && <span style={{ fontSize: 10, color: 'var(--globant-muted)' }}>· Posted {postedDate}</span>}
+                            </div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 4 }}>{F(post, 'Title')}</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => { navigator.clipboard.writeText(content); }}>📋</button>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingPost(editingPost === post.id ? null : post.id)}>
+                              {editingPost === post.id ? '✕' : '👁️'}
+                            </button>
+                            {status !== 'Posted' && (
+                              <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={() => {
+                                const url = prompt('LinkedIn URL del post publicado (opcional):') || '';
+                                markPosted(post, url);
+                              }}>✓ Posted</button>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: 'var(--globant-text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                          {editingPost === post.id ? content : (preview + (content.length > 220 ? '...' : ''))}
+                        </div>
+                        {linkedinUrl && (
+                          <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--globant-info)', marginTop: 8, display: 'inline-block' }}>🔗 View on LinkedIn</a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── VOICE TRAINING TAB ── */}
+          {tab === 'voice' && (
+            <div>
+              <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
+                <h3 style={{ fontSize: 15, marginBottom: 10 }}>🎙️ Tu voz</h3>
+                <p style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 12, lineHeight: 1.55 }}>
+                  Pegá abajo 10-15 posts tuyos de LinkedIn (los que más te suenen a "vos"). La IA los va a leer para igualar tu vocabulario, ritmo, estructura de frase, tu energía. <strong style={{ color: 'var(--globant-text)' }}>Sin esto, los drafts salen genéricos.</strong>
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 8 }}>
+                  💡 Tip: separá cada post con una línea de guiones <code>---</code> para que la IA los distinga.
+                </p>
+                <textarea
+                  className="input-field"
+                  style={{ width: '100%', minHeight: 360, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.6, resize: 'vertical' }}
+                  placeholder={`Pegá acá tus posts pasados. Ejemplo:\n\nAyer tuve una reunión con un CFO...\n[tu post 1]\n\n---\n\nEn 20 años vendiendo B2B...\n[tu post 2]\n\n---\n\n[etc]`}
+                  value={voiceSamples}
+                  onChange={e => setVoiceSamples(e.target.value)}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                  <button className="action-btn btn-primary" style={{ fontSize: 13 }} onClick={saveVoiceSamples}>
+                    {voiceSaved ? '✅ Saved' : '💾 Save voice samples'}
+                  </button>
+                  <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>
+                    {voiceSamples.trim() ? `✓ ${voiceSamples.length} chars cargados · se usan automáticamente en Writer` : '⚠️ Sin samples, la voz sale genérica'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data }) {
       const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [] } = data;
@@ -13750,8 +14220,8 @@ Return ONLY valid JSON:
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals','campaigns'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals, TABLE_IDS.campaigns];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals','campaigns','contentLab'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals, TABLE_IDS.campaigns, TABLE_IDS.contentLab];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
@@ -13921,6 +14391,7 @@ Return ONLY valid JSON:
         proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
         campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
+        contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
         reports:  <ReportBuilder data={data} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
@@ -13936,6 +14407,7 @@ Return ONLY valid JSON:
         { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
         { icon: '🎪', label: 'Events', key: 'events' },
         { icon: '📣', label: 'Campaigns', key: 'campaigns' },
+        { icon: '✍️', label: 'Content Lab', key: 'contentlab' },
         { icon: '📄', label: 'Proposals', key: 'proposals' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
