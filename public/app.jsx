@@ -11872,7 +11872,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data }) {
-      const { accounts, stakeholders, outreach, solutions, opportunities } = data;
+      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [] } = data;
       const now = new Date();
       const fmt = (d) => d.toISOString().split('T')[0];
       const defaultFrom = fmt(new Date(now - 14 * 86400000));
@@ -11880,23 +11880,90 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
       const [dateFrom, setDateFrom]   = useState(defaultFrom);
       const [dateTo, setDateTo]       = useState(defaultTo);
-      const [selSolIds, setSelSolIds] = useState([]);
-      const [selAccIds, setSelAccIds] = useState([]);
+      // Grouping dimension: 'accounts' | 'solutions' | 'campaigns' | 'events'
+      const [groupBy, setGroupBy]     = useState('accounts');
+      const [selectedIds, setSelectedIds] = useState([]);
+      const [searchQuery, setSearchQuery] = useState('');
       const [reportHtml, setReportHtml] = useState('');
       const [copied, setCopied]       = useState(false);
       const [gmailOpened, setGmailOpened] = useState(false);
       const [generating, setGenerating] = useState(false);
       const [reportNotes, setReportNotes] = useState('');
 
+      // Reset selection when switching group-by type
+      const changeGroupBy = (g) => { setGroupBy(g); setSelectedIds([]); setSearchQuery(''); };
+
       const fromTs = new Date(dateFrom).getTime();
       const toTs   = new Date(dateTo + 'T23:59:59').getTime();
 
-      // Solutions to show (all if none selected)
-      const activeSols = selSolIds.length > 0
-        ? solutions.filter(s => selSolIds.includes(s.id))
-        : solutions;
+      // ── Generic: all options available for the chosen group-by type ──
+      const allOptions = useMemo(() => {
+        const sortByName = (arr, nameField) => [...arr].sort((a,b) => (F(a,nameField)||'').localeCompare(F(b,nameField)||''));
+        switch (groupBy) {
+          case 'solutions': return { items: sortByName(solutions, 'Name'), nameField: 'Name', icon: '🛠️', label: 'Solutions' };
+          case 'campaigns': return { items: sortByName(campaigns, 'Name'), nameField: 'Name', icon: '📣', label: 'Campaigns' };
+          case 'events':    return { items: sortByName(events, 'Event Name'), nameField: 'Event Name', icon: '🎤', label: 'Events' };
+          case 'accounts':
+          default:          return { items: sortByName(accounts, 'Account Name'), nameField: 'Account Name', icon: '🏢', label: 'Accounts' };
+        }
+      }, [groupBy, accounts, solutions, campaigns, events]);
 
-      // Accounts for those solutions (derived from opps + explicit links)
+      // Filtered dropdown options (by search query)
+      const filteredOptions = useMemo(() => {
+        if (!searchQuery.trim()) return allOptions.items;
+        const q = searchQuery.toLowerCase();
+        return allOptions.items.filter(it => (F(it, allOptions.nameField) || '').toLowerCase().includes(q));
+      }, [searchQuery, allOptions]);
+
+      // Active items: the ones to include in report. Empty selection = all options.
+      const activeItems = selectedIds.length > 0
+        ? allOptions.items.filter(it => selectedIds.includes(it.id))
+        : allOptions.items;
+
+      // ── Resolve which accounts to include based on group-by type ──
+      // For each groupBy, compute which accountIds are relevant
+      const displayAccIds = useMemo(() => {
+        if (groupBy === 'accounts') {
+          return activeItems.map(a => a.id);
+        }
+        if (groupBy === 'solutions') {
+          const accIds = new Set();
+          activeItems.forEach(sol => {
+            linkedIds(sol, 'Accounts - New markets').forEach(id => accIds.add(id));
+            opportunities.filter(o => linkedIds(o, 'Solutions').includes(sol.id)).forEach(o => {
+              linkedIds(o, 'Account').forEach(id => accIds.add(id));
+            });
+          });
+          return [...accIds];
+        }
+        if (groupBy === 'campaigns') {
+          // Accounts reached by outreach linked to these campaigns
+          const campaignIds = new Set(activeItems.map(c => c.id));
+          const accIds = new Set();
+          outreach.forEach(o => {
+            if (linkedIds(o, 'Campaign').some(id => campaignIds.has(id))) {
+              linkedIds(o, 'Account').forEach(id => accIds.add(id));
+            }
+          });
+          return [...accIds];
+        }
+        if (groupBy === 'events') {
+          // Accounts of stakeholders invited to these events
+          const invitedStkIds = new Set(activeItems.flatMap(e => linkedIds(e, 'Stakeholders invited')));
+          const accIds = new Set();
+          stakeholders.forEach(s => {
+            if (invitedStkIds.has(s.id)) linkedIds(s, 'Account').forEach(id => accIds.add(id));
+          });
+          return [...accIds];
+        }
+        return accounts.map(a => a.id);
+      }, [groupBy, activeItems, opportunities, outreach, stakeholders, accounts]);
+
+      const displayAccounts = accounts.filter(a => displayAccIds.includes(a.id))
+        .sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||''));
+
+      // Legacy aliases (kept to avoid breaking existing derived code below)
+      const activeSols = groupBy === 'solutions' ? activeItems : solutions;
       const solAccMap = useMemo(() => {
         const m = {};
         for (const sol of activeSols) {
@@ -11907,18 +11974,6 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
         return m;
       }, [activeSols, opportunities]);
 
-      // If solutions selected → show their accounts. If no solutions → show ALL accounts
-      const allSolAccIds = selSolIds.length > 0
-        ? [...new Set(Object.values(solAccMap).flat())]
-        : accounts.map(a => a.id);
-      const activeAccounts = accounts
-        .filter(a => allSolAccIds.includes(a.id))
-        .sort((a, b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||''));
-      const displayAccounts = selAccIds.length > 0
-        ? activeAccounts.filter(a => selAccIds.includes(a.id))
-        : activeAccounts;
-      const displayAccIds = displayAccounts.map(a => a.id);
-
       // Stakeholder IDs for the selected accounts (for broader outreach matching)
       const displayStkIds = useMemo(() => {
         const ids = new Set();
@@ -11928,13 +11983,24 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
         return ids;
       }, [stakeholders, displayAccIds]);
 
-      // Outreach in period — matched by Account OR by Stakeholder belonging to those accounts
+      // Outreach in period — base filter: by Account OR by Stakeholder belonging to those accounts
+      // For campaigns/events groupBy, also tightens by Campaign link or Event invitee
       const periodOutreach = outreach.filter(o => {
         const ts = new Date(o.fields?.['Date'] || 0).getTime();
-        return ts >= fromTs && ts <= toTs && (
-          linkedIds(o, 'Account').some(id => displayAccIds.includes(id)) ||
-          linkedIds(o, 'Stakeholder').some(id => displayStkIds.has(id))
-        );
+        if (ts < fromTs || ts > toTs) return false;
+        const accountMatch = linkedIds(o, 'Account').some(id => displayAccIds.includes(id));
+        const stakeholderMatch = linkedIds(o, 'Stakeholder').some(id => displayStkIds.has(id));
+        if (!accountMatch && !stakeholderMatch) return false;
+        // Tighter filter when specific campaigns selected → only outreach linked to those campaigns
+        if (groupBy === 'campaigns' && selectedIds.length > 0) {
+          return linkedIds(o, 'Campaign').some(id => selectedIds.includes(id));
+        }
+        // Tighter filter when specific events selected → only outreach to invited stakeholders
+        if (groupBy === 'events' && selectedIds.length > 0) {
+          const invitedStkIds = new Set(activeItems.flatMap(e => linkedIds(e, 'Stakeholders invited')));
+          return linkedIds(o, 'Stakeholder').some(id => invitedStkIds.has(id));
+        }
+        return true;
       });
 
       const totalSent     = periodOutreach.length;
@@ -11971,18 +12037,41 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
         const dateLabel = `${new Date(dateFrom).toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(dateTo).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
 
-        // Per-solution breakdown
-        const solRows = activeSols.map(sol => {
-          const accIds = (solAccMap[sol.id] || []).filter(id => displayAccIds.includes(id));
-          const accs = accounts.filter(a => accIds.includes(a.id));
-          const solOut = periodOutreach.filter(o => linkedIds(o,'Account').some(id => accIds.includes(id)));
-          const solAllReplies = solOut.filter(o => F(o,'Status') === 'Replied');
-          // Unique repliers per solution
-          const solUniqueStkIds = new Set(solAllReplies.flatMap(o => linkedIds(o,'Stakeholder')).filter(Boolean));
-          const solUniqueReplies = solUniqueStkIds.size || solAllReplies.length;
-          const solMeetings = solOut.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
-          const rr = solOut.length > 0 ? Math.round(solUniqueReplies/solOut.length*100) : 0;
-          return { sol, accs, sent: solOut.length, replies: solUniqueReplies, meetings: solMeetings.length, rr };
+        // Generic per-group breakdown (adapts to groupBy type)
+        const groupRows = activeItems.map(item => {
+          let itemAccIds = [];
+          let itemOut = [];
+
+          if (groupBy === 'accounts') {
+            itemAccIds = [item.id];
+            itemOut = periodOutreach.filter(o => linkedIds(o,'Account').includes(item.id));
+          } else if (groupBy === 'solutions') {
+            itemAccIds = (solAccMap[item.id] || []).filter(id => displayAccIds.includes(id));
+            itemOut = periodOutreach.filter(o => linkedIds(o,'Account').some(id => itemAccIds.includes(id)));
+          } else if (groupBy === 'campaigns') {
+            itemOut = periodOutreach.filter(o => linkedIds(o,'Campaign').includes(item.id));
+            itemAccIds = [...new Set(itemOut.flatMap(o => linkedIds(o,'Account')))];
+          } else if (groupBy === 'events') {
+            const invitedStkIds = new Set(linkedIds(item, 'Stakeholders invited'));
+            itemOut = periodOutreach.filter(o => linkedIds(o,'Stakeholder').some(id => invitedStkIds.has(id)));
+            itemAccIds = [...new Set(itemOut.flatMap(o => linkedIds(o,'Account')))];
+          }
+
+          const itemAccs = accounts.filter(a => itemAccIds.includes(a.id));
+          const itemAllReplies = itemOut.filter(o => F(o,'Status') === 'Replied');
+          const itemUniqueStkIds = new Set(itemAllReplies.flatMap(o => linkedIds(o,'Stakeholder')).filter(Boolean));
+          const itemUniqueReplies = itemUniqueStkIds.size || itemAllReplies.length;
+          const itemMeetings = itemOut.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
+          const rr = itemOut.length > 0 ? Math.round(itemUniqueReplies/itemOut.length*100) : 0;
+          return {
+            item,
+            name: F(item, allOptions.nameField) || '—',
+            accs: itemAccs,
+            sent: itemOut.length,
+            replies: itemUniqueReplies,
+            meetings: itemMeetings.length,
+            rr,
+          };
         }).filter(r => r.sent > 0 || r.accs.length > 0);
 
         // Reply details — AI-generated one-liner status per contact
@@ -12003,14 +12092,14 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
         // Ask AI for one-liner status per contact + strategic thoughts
         let aiStatuses = {};
         let aiThoughts = '';
-        const solSummary = solRows.map(r => `${F(r.sol,'Name')}: ${r.sent} sent, ${r.replies} replies (${r.rr}%), ${r.meetings} meetings, accounts: ${r.accs.map(a=>F(a,'Account Name')).join(', ')}`).join('\n');
+        const groupSummary = groupRows.map(r => `${r.name}: ${r.sent} sent, ${r.replies} replies (${r.rr}%), ${r.meetings} meetings${r.accs.length ? `, accounts: ${r.accs.map(a=>F(a,'Account Name')).join(', ')}` : ''}`).join('\n');
         const replyLines = replyRaw.map((r, i) => {
           const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
           const company = r.acc ? F(r.acc,'Account Name') : '';
           return `${i+1}. ${name} (${company}) [${r.d}]: "${r.rawMsg}"`;
         }).join('\n');
 
-        if (replyRaw.length > 0 || solRows.length > 0) {
+        if (replyRaw.length > 0 || groupRows.length > 0) {
           try {
             const prompt = `You are a senior sales intelligence analyst reviewing a bi-weekly sales report. Based on the data below, do TWO things:
 
@@ -12019,8 +12108,8 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 2. Write 3-4 bullet points of STRATEGIC THOUGHTS — what's working, what's at risk, what needs immediate attention, suggested priorities. Be direct, specific, useful. Reference actual accounts/contacts when relevant.
 ${reportNotes.trim() ? `\nSender's own notes for context:\n"${reportNotes.trim()}"\n` : ''}
 PERIOD: ${dateLabel}
-SOLUTIONS & METRICS:
-${solSummary || 'No solutions selected'}
+BREAKDOWN BY ${allOptions.label.toUpperCase()}:
+${groupSummary || 'No items in scope'}
 
 TOTAL: ${totalSent} messages sent, ${uniqueRepliers} unique replies (${replyRate}%), ${meetings.length} meetings
 
@@ -12062,22 +12151,35 @@ Return ONLY valid JSON:
             <div style="font-size:11px;color:#6b7280;margin-top:6px;text-transform:uppercase;letter-spacing:0.5px;">${label}</div>
           </td>`;
 
-        const solSection = solRows.length === 0 ? '' : `
+        // Column labels adapt to groupBy type
+        const firstColLabel = allOptions.label.replace(/s$/, ''); // Solutions → Solution, Accounts → Account, etc.
+        const secondColLabel = groupBy === 'accounts' ? 'Stakeholders reached' : 'Accounts';
+        const groupSection = groupRows.length === 0 ? '' : `
           <tr><td style="padding:0 0 8px;">
-            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">By Solution</h2>
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">By ${allOptions.label}</h2>
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr style="background:${T};">
-                ${['Solution','Accounts','Sent','Replies','Reply %','Meetings'].map(h=>`<th style="padding:8px 10px;text-align:left;font-size:11px;color:#fff;font-weight:600;">${h}</th>`).join('')}
+                ${[firstColLabel, secondColLabel,'Sent','Replies','Reply %','Meetings'].map(h=>`<th style="padding:8px 10px;text-align:left;font-size:11px;color:#fff;font-weight:600;">${h}</th>`).join('')}
               </tr>
-              ${solRows.map((r,i)=>`
+              ${groupRows.map((r,i) => {
+                // For accounts groupBy, second column shows stakeholder count instead of the same account name
+                let secondCol = '';
+                if (groupBy === 'accounts') {
+                  const stkCount = stakeholders.filter(s => linkedIds(s,'Account').includes(r.item.id)).length;
+                  secondCol = `${stkCount} stakeholder${stkCount!==1?'s':''}`;
+                } else {
+                  secondCol = r.accs.map(a=>F(a,'Account Name')).join(', ') || '—';
+                }
+                return `
               <tr style="background:${i%2===0?'#fff':LG};">
-                <td style="padding:8px 10px;font-size:13px;font-weight:600;color:${T};">${F(r.sol,'Name')}</td>
-                <td style="padding:8px 10px;font-size:12px;color:${GR};">${r.accs.map(a=>F(a,'Account Name')).join(', ') || '—'}</td>
+                <td style="padding:8px 10px;font-size:13px;font-weight:600;color:${T};">${r.name}</td>
+                <td style="padding:8px 10px;font-size:12px;color:${GR};">${secondCol}</td>
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${GR};">${r.sent}</td>
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.replies>0?'#059669':'#9ca3af'};">${r.replies}</td>
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.rr>=20?'#059669':r.rr>=10?'#d97706':'#9ca3af'};">${r.rr}%</td>
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.meetings>0?'#2563eb':'#9ca3af'};">${r.meetings}</td>
-              </tr>`).join('')}
+              </tr>`;
+              }).join('')}
             </table>
           </td></tr>`;
 
@@ -12156,7 +12258,7 @@ Return ONLY valid JSON:
         </table>
       </td></tr>
 
-      ${solSection}
+      ${groupSection}
       ${replySection}
 
       <!-- Pipeline -->
@@ -12250,8 +12352,7 @@ Return ONLY valid JSON:
         w.document.close();
       };
 
-      const toggleSol = (id) => setSelSolIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
-      const toggleAcc = (id) => setSelAccIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
+      const toggleItem = (id) => setSelectedIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
 
       return (
         <div>
@@ -12286,48 +12387,90 @@ Return ONLY valid JSON:
                 </div>
               </div>
 
-              {/* Solutions */}
+              {/* Group by selector + search */}
               <div className="card">
-                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
-                  🛠️ Solutions
-                  {selSolIds.length > 0 && <span style={{ marginLeft:6, color:'var(--globant-green)', fontWeight:400 }}>({selSolIds.length} selected)</span>}
-                </div>
-                {solutions.map(s => (
-                  <div key={s.id} onClick={() => toggleSol(s.id)}
-                    style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 8px', marginBottom:3, borderRadius:6, cursor:'pointer', background:selSolIds.includes(s.id)?'rgba(91,191,181,0.12)':'transparent' }}>
-                    <div style={{ width:14, height:14, borderRadius:3, border:`2px solid ${selSolIds.includes(s.id)?'var(--globant-green)':'var(--globant-border)'}`, background:selSolIds.includes(s.id)?'var(--globant-green)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      {selSolIds.includes(s.id) && <span style={{ color:'#1A1A2E', fontSize:9, fontWeight:900 }}>✓</span>}
-                    </div>
-                    <span style={{ fontSize:12, color: selSolIds.includes(s.id)?'var(--globant-green)':'var(--globant-text)' }}>{F(s,'Name')}</span>
-                  </div>
-                ))}
-                {selSolIds.length > 0 && <button className="action-btn btn-ghost" style={{ fontSize:10, marginTop:6 }} onClick={() => setSelSolIds([])}>Clear</button>}
-              </div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>🎯 Report Scope</div>
 
-              {/* Accounts */}
-              {activeAccounts.length > 0 && (
-                <div className="card">
-                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>
-                    🏢 Accounts
-                    {selAccIds.length > 0 && <span style={{ marginLeft:6, color:'var(--globant-info)', fontWeight:400 }}>({selAccIds.length} selected)</span>}
-                  </div>
-                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:8 }}>
-                    {selSolIds.length > 0 ? `Accounts linked to selected solutions` : `All accounts — pick specific ones or leave all`}
-                  </div>
-                  <div style={{ maxHeight:200, overflowY:'auto' }}>
-                    {activeAccounts.map(a => (
-                      <div key={a.id} onClick={() => toggleAcc(a.id)}
-                        style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', marginBottom:2, borderRadius:5, cursor:'pointer', background:selAccIds.includes(a.id)?'rgba(96,165,250,0.12)':'transparent' }}>
-                        <div style={{ width:12, height:12, borderRadius:2, border:`2px solid ${selAccIds.includes(a.id)?'var(--globant-info)':'var(--globant-border)'}`, background:selAccIds.includes(a.id)?'var(--globant-info)':'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          {selAccIds.includes(a.id) && <span style={{ color:'#fff', fontSize:8, fontWeight:900 }}>✓</span>}
-                        </div>
-                        <span style={{ fontSize:11, color: selAccIds.includes(a.id)?'var(--globant-info)':'var(--globant-text)' }}>{F(a,'Account Name')}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {selAccIds.length > 0 && <button className="action-btn btn-ghost" style={{ fontSize:10, marginTop:6 }} onClick={() => setSelAccIds([])}>Clear</button>}
+                {/* Group by tabs */}
+                <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:6, fontWeight:600 }}>GROUP BY</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
+                  {[
+                    { key: 'accounts', label: 'Accounts', icon: '🏢' },
+                    { key: 'solutions', label: 'Solutions', icon: '🛠️' },
+                    { key: 'campaigns', label: 'Campaigns', icon: '📣' },
+                    { key: 'events', label: 'Events', icon: '🎤' },
+                  ].map(opt => (
+                    <button key={opt.key} onClick={() => changeGroupBy(opt.key)}
+                      style={{
+                        padding: '7px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                        background: groupBy === opt.key ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${groupBy === opt.key ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                        color: groupBy === opt.key ? 'var(--globant-green)' : 'var(--globant-text)',
+                      }}>
+                      {opt.icon} {opt.label}
+                    </button>
+                  ))}
                 </div>
-              )}
+
+                {/* Search + results */}
+                <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:6, fontWeight:600 }}>
+                  FILTER {allOptions.label.toUpperCase()}
+                  {selectedIds.length > 0 && <span style={{ marginLeft:6, color:'var(--globant-green)', fontWeight:400 }}>({selectedIds.length} selected)</span>}
+                  {selectedIds.length === 0 && <span style={{ marginLeft:6, color:'var(--globant-muted)', fontWeight:400, fontStyle:'italic' }}>(empty = all)</span>}
+                </div>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder={`🔍 Search ${allOptions.label.toLowerCase()}...`}
+                  style={{ width:'100%', fontSize:12, marginBottom:6 }}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+
+                {/* Selected chips */}
+                {selectedIds.length > 0 && (
+                  <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:8, padding:'6px', background:'rgba(91,191,181,0.06)', borderRadius:6 }}>
+                    {selectedIds.map(id => {
+                      const it = allOptions.items.find(x => x.id === id);
+                      if (!it) return null;
+                      return (
+                        <span key={id} style={{
+                          display:'inline-flex', alignItems:'center', gap:4,
+                          padding:'3px 8px', background:'rgba(91,191,181,0.18)',
+                          border:'1px solid rgba(91,191,181,0.4)', borderRadius:10,
+                          fontSize:10, color:'var(--globant-green)', fontWeight:600,
+                        }}>
+                          {F(it, allOptions.nameField)}
+                          <span onClick={() => toggleItem(id)} style={{ cursor:'pointer', marginLeft:2, opacity:0.7, fontSize:12 }}>×</span>
+                        </span>
+                      );
+                    })}
+                    <button className="action-btn btn-ghost" style={{ fontSize:9, padding:'2px 8px' }} onClick={() => setSelectedIds([])}>Clear all</button>
+                  </div>
+                )}
+
+                {/* Options list (filtered by search) */}
+                <div style={{ maxHeight:220, overflowY:'auto', border:'1px solid rgba(255,255,255,0.05)', borderRadius:6 }}>
+                  {filteredOptions.length === 0 ? (
+                    <div style={{ padding:12, fontSize:11, color:'var(--globant-muted)', textAlign:'center', fontStyle:'italic' }}>
+                      {searchQuery.trim() ? `No ${allOptions.label.toLowerCase()} match "${searchQuery}"` : `No ${allOptions.label.toLowerCase()} available`}
+                    </div>
+                  ) : (
+                    filteredOptions.map(it => {
+                      const isSel = selectedIds.includes(it.id);
+                      return (
+                        <div key={it.id} onClick={() => toggleItem(it.id)}
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', cursor:'pointer', background:isSel?'rgba(91,191,181,0.12)':'transparent', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                          <div style={{ width:14, height:14, borderRadius:3, border:`2px solid ${isSel?'var(--globant-green)':'var(--globant-border)'}`, background:isSel?'var(--globant-green)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                            {isSel && <span style={{ color:'#1A1A2E', fontSize:9, fontWeight:900 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize:12, color: isSel?'var(--globant-green)':'var(--globant-text)' }}>{F(it, allOptions.nameField)}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
 
               {/* Stats preview */}
               <div className="card" style={{ background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.2)' }}>
