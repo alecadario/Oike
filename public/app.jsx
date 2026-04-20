@@ -12227,28 +12227,41 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
     // ============ CONTENT LAB ============
     function ContentLab({ data, api, onLogActivity, onAddRecord }) {
-      const { accounts = [], stakeholders = [], outreach = [], solutions = [], opportunities = [], campaigns = [], contentLab = [] } = data;
+      const { accounts = [], stakeholders = [], outreach = [], solutions = [], opportunities = [], campaigns = [], events = [], contentLab = [] } = data;
       const [tab, setTab] = useState('ideas'); // 'ideas' | 'writer' | 'library' | 'voice'
       const [ideas, setIdeas] = useState([]);
       const [loadingIdeas, setLoadingIdeas] = useState(false);
       const [writerTopic, setWriterTopic] = useState('');
       const [writerType, setWriterType] = useState('Short Post');
-      const [writerTone, setWriterTone] = useState('directo');
-      const [writerLanguage, setWriterLanguage] = useState('es');
+      const [writerTone, setWriterTone] = useState('direct');
+      const [writerLanguage, setWriterLanguage] = useState('en');
       const [writerTag, setWriterTag] = useState('');
       const [sourceInsight, setSourceInsight] = useState('');
       const [draft, setDraft] = useState('');
       const [loadingDraft, setLoadingDraft] = useState(false);
       const [savingDraft, setSavingDraft] = useState(false);
       const [copied, setCopied] = useState(false);
+      const [improving, setImproving] = useState(''); // '' | 'shorter' | 'hook' | 'cta' | 'polish'
       const [voiceSamples, setVoiceSamples] = useState(() => localStorage.getItem('oike_voice_samples') || '');
       const [voiceSaved, setVoiceSaved] = useState(false);
       const [libraryFilter, setLibraryFilter] = useState('all');
       const [editingPost, setEditingPost] = useState(null);
 
+      // Source selector + coach questions state (for Ideas tab)
+      const [ideaSource, setIdeaSource] = useState('outreach'); // 'outreach' | 'upcoming-event' | 'past-event' | 'campaign' | 'solution' | 'free'
+      const [sourceItemId, setSourceItemId] = useState(''); // selected event/campaign/solution ID
+      const [coachStage, setCoachStage] = useState('idle'); // 'idle' | 'asking' | 'answering' | 'done'
+      const [coachQuestions, setCoachQuestions] = useState([]);
+      const [coachAnswers, setCoachAnswers] = useState([]);
+      const [loadingCoach, setLoadingCoach] = useState(false);
+
+      // Engagement analyzer state (Library tab)
+      const [analyzingPostId, setAnalyzingPostId] = useState('');
+      const [engagementAnalysis, setEngagementAnalysis] = useState({}); // {postId: analysisResult}
+
       const TAGS = ['Sales', 'Personal', 'Strategy', 'Lead gen', 'Industry insight', 'Lesson learned', 'Contrarian', 'Story', 'Framework'];
       const TYPES = ['Short Post', 'Long Post', 'Article'];
-      const TONES = ['directo', 'personal', 'técnico', 'inspiracional', 'contrarian'];
+      const TONES = ['direct', 'personal', 'technical', 'inspirational', 'contrarian'];
 
       // ── Save voice samples ──
       const saveVoiceSamples = () => {
@@ -12288,42 +12301,109 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
         };
       };
 
-      // ── Generate ideas ──
+      // ── Generate ideas (source-aware) ──
       const generateIdeas = async () => {
         setLoadingIdeas(true);
-        const ctx = buildOikeContext();
-        const prompt = `Sos un content strategist para un founder B2B: ${COMPANY_PROFILE.senderName || 'el founder'}${COMPANY_PROFILE.senderTitle ? ' (' + COMPANY_PROFILE.senderTitle + ')' : ''} en ${COMPANY_PROFILE.companyName || ''}, ofrece ${COMPANY_PROFILE.services || 'sales intelligence'}.
+        // Build source-specific context block
+        const srcCtx = buildSourceContext();
+        let sourceBlock = '';
+        if (srcCtx) {
+          if (srcCtx.kind === 'upcoming-event') {
+            sourceBlock = `SOURCE — UPCOMING EVENT:
+Name: ${srcCtx.name}
+Date: ${srcCtx.date}${srcCtx.endDate ? ' → ' + srcCtx.endDate : ''}
+Context: ${srcCtx.context || 'not provided'}
+${srcCtx.summary ? `Summary: ${String(srcCtx.summary).slice(0, 400)}` : ''}
+${srcCtx.url ? `URL: ${srcCtx.url}` : ''}
+Invited count: ${srcCtx.invitedCount}
+Invited roles: ${srcCtx.invitedRoles.join(', ') || 'varied'}
+Industries: ${srcCtx.invitedIndustries.join(', ') || 'varied'}
 
-Generá 8-10 ideas de posts de LinkedIn ancladas en esta ACTIVIDAD REAL (no advice genérico):
+FRAME: Posts should PRE-BUILD interest in this upcoming event — what you'll share, why it matters, what invitees should expect, or a provocative take tied to the event theme.`;
+          } else if (srcCtx.kind === 'past-event') {
+            sourceBlock = `SOURCE — PAST EVENT:
+Name: ${srcCtx.name}
+Date: ${srcCtx.date}${srcCtx.endDate ? ' → ' + srcCtx.endDate : ''}
+Context: ${srcCtx.context || 'not provided'}
+${srcCtx.summary ? `Summary: ${String(srcCtx.summary).slice(0, 400)}` : ''}
+Attended count: ${srcCtx.attendedCount}
+Attended roles: ${srcCtx.attendedRoles.join(', ') || 'varied'}
 
-ACTIVIDAD ÚLTIMOS ${ctx.recentDays} DÍAS:
-- Touches enviados: ${ctx.touchesCount}
-- Replies recibidas: ${ctx.repliesCount}
-- Meetings agendados: ${ctx.meetingsCount}
-- Industrias activas: ${ctx.industries.slice(0,6).join(', ') || 'variadas'}
-- Soluciones en conversación: ${ctx.solutionNames.slice(0,5).join(', ') || 'varias'}
+FRAME: Posts should REFLECT on the event — insights taken away, patterns observed, contrarian takes, lessons for the industry, specific moments worth sharing.`;
+          } else if (srcCtx.kind === 'campaign') {
+            sourceBlock = `SOURCE — CAMPAIGN:
+Name: ${srcCtx.name}
+Type: ${srcCtx.type}
+Status: ${srcCtx.status}
+Context (user-written): ${srcCtx.context || 'not provided'}
+${srcCtx.aiSummary ? `Strategic brief:\n${String(srcCtx.aiSummary).slice(0, 600)}` : ''}
+Stakeholders reached: ${srcCtx.reached}
 
-PAIN POINTS OBSERVADOS (reales, nunca nombres de clientes):
-${ctx.painPoints.map((p, i) => `${i+1}. ${p.slice(0, 200)}`).join('\n') || 'No capturados'}
+FRAME: Posts should RESONATE with the campaign's ICP and pain — warm up the audience before/during the campaign outreach.`;
+          } else if (srcCtx.kind === 'solution') {
+            sourceBlock = `SOURCE — SOLUTION:
+Name: ${srcCtx.name}
+Type: ${srcCtx.type}
+Detail: ${String(srcCtx.detail).slice(0, 400)}
+Key message: ${srcCtx.keyMessage}
+Accounts mapped: ${srcCtx.accountsCount}
+Sample accounts: ${srcCtx.accountsSample.join(', ') || 'none'}
+${srcCtx.execSummary ? `Exec summary:\n${String(srcCtx.execSummary).slice(0, 500)}` : ''}
 
-EXTRACTOS DE REPLIES RECIENTES (anonimizados):
-${ctx.replyExcerpts.map((r, i) => `${i+1}. "${r}"`).join('\n') || 'Sin muestras'}
+Pain points across stakeholders:
+${srcCtx.painPoints.map((p, i) => `${i+1}. ${String(p).slice(0, 200)}`).join('\n') || 'Not captured'}
 
-Generá ideas que:
-- Sean ESPECÍFICAS (no "10 tips para vender mejor")
-- Referencien patrones reales (nunca nombres de clientes)
-- Posicionen como operador creíble, no como influencer
-- Mezclen formatos: story, lesson learned, contrarian take, observation, framework
-- Cada una termine con hook de engagement (pregunta, claim fuerte, invitación)
+FRAME: Posts should hit the pain points this solution addresses, without naming the solution as a product. Teach, provoke, or tell stories.`;
+          }
+        } else if (ideaSource === 'outreach') {
+          const ctx = buildOikeContext();
+          sourceBlock = `SOURCE — RECENT OUTREACH (last ${ctx.recentDays} days):
+- Touches sent: ${ctx.touchesCount}
+- Replies received: ${ctx.repliesCount}
+- Meetings booked: ${ctx.meetingsCount}
+- Active industries: ${ctx.industries.slice(0,6).join(', ') || 'varied'}
+- Solutions in conversation: ${ctx.solutionNames.slice(0,5).join(', ') || 'multiple'}
 
-Devolvé SOLO JSON array válido:
+OBSERVED PAIN POINTS:
+${ctx.painPoints.map((p, i) => `${i+1}. ${p.slice(0, 200)}`).join('\n') || 'Not captured'}
+
+RECENT REPLY EXCERPTS (anonymized):
+${ctx.replyExcerpts.map((r, i) => `${i+1}. "${r}"`).join('\n') || 'No samples'}
+
+FRAME: Posts should reflect real patterns from the week's conversations — what's hitting, what's not, what you learned.`;
+        } else {
+          // free
+          sourceBlock = `SOURCE — FREE TOPIC (no specific data — use founder's general positioning and recent context).`;
+        }
+
+        // Coach answers (if any)
+        const coachBlock = coachQuestions.length > 0 && coachAnswers.some(a => a.trim())
+          ? `\n\nFOUNDER'S DIRECTION (answered guided questions):
+${coachQuestions.map((q, i) => `Q: ${q}\nA: ${coachAnswers[i] || '(skipped)'}`).join('\n\n')}\n\nWeave these answers into the ideas — they define the angle the founder wants.`
+          : '';
+
+        const prompt = `You are a content strategist for a B2B founder: ${COMPANY_PROFILE.senderName || 'the founder'}${COMPANY_PROFILE.senderTitle ? ' (' + COMPANY_PROFILE.senderTitle + ')' : ''} at ${COMPANY_PROFILE.companyName || ''}, offering ${COMPANY_PROFILE.services || 'sales intelligence'}.
+
+Generate 8-10 LinkedIn post ideas anchored in this REAL SOURCE (no generic advice):
+
+${sourceBlock}${coachBlock}
+
+Rules:
+- Be SPECIFIC (not "10 tips to sell better")
+- Reference real patterns (never name clients unless source is public)
+- Position as a credible operator, not an influencer
+- Mix formats: story, lesson learned, contrarian take, observation, framework
+- Each ends with an engagement hook (question, bold claim, invitation)
+- Language: match the founder's typical content language (default English unless samples suggest otherwise)
+
+Return ONLY a valid JSON array:
 [
   {
-    "hook": "Primera línea del post (el scroll-stopper, máx 15 palabras)",
-    "angle": "Descripción corta del ángulo (1 frase)",
-    "source": "Qué insight de la data inspira esta idea",
+    "hook": "First line of the post (the scroll-stopper, max 15 words)",
+    "angle": "Short description of the angle (1 sentence)",
+    "source": "Which insight from the source inspires this idea",
     "format": "story | lesson | contrarian | observation | framework",
-    "tag": "una de: Sales, Personal, Strategy, Lead gen, Industry insight, Lesson learned, Contrarian, Story, Framework"
+    "tag": "one of: Sales, Personal, Strategy, Lead gen, Industry insight, Lesson learned, Contrarian, Story, Framework"
   }
 ]`;
 
@@ -12332,6 +12412,7 @@ Devolvé SOLO JSON array válido:
           const cleaned = response.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
           const parsed = JSON.parse(cleaned);
           setIdeas(Array.isArray(parsed) ? parsed : []);
+          setCoachStage('idle'); // reset coach for next run
         } catch (e) {
           console.error('[Content Lab] Generate ideas failed:', e);
           alert('Failed to generate ideas: ' + (e.message || 'unknown'));
@@ -12347,33 +12428,227 @@ Devolvé SOLO JSON array válido:
         setTab('writer');
       };
 
+      // ── Build source-specific context (events, campaigns, solutions, etc.) ──
+      const buildSourceContext = () => {
+        const now = Date.now();
+        if (ideaSource === 'upcoming-event') {
+          const event = events.find(e => e.id === sourceItemId);
+          if (!event) return null;
+          const invitedIds = linkedIds(event, 'Stakeholders invited');
+          const invited = stakeholders.filter(s => invitedIds.includes(s.id));
+          return {
+            kind: 'upcoming-event',
+            name: F(event, 'Event Name') || '',
+            date: F(event, 'Starting') || '',
+            endDate: F(event, 'End date') || '',
+            context: F(event, 'Aditional context') || '',
+            summary: typeof F(event, 'Attachment Summary') === 'object' ? F(event, 'Attachment Summary')?.value : F(event, 'Attachment Summary'),
+            url: F(event, 'URL') || '',
+            invitedCount: invited.length,
+            invitedRoles: [...new Set(invited.map(s => F(s, 'Role')).filter(Boolean))].slice(0, 8),
+            invitedIndustries: [...new Set(invited.flatMap(s => linkedIds(s, 'Account')).map(id => accounts.find(a => a.id === id)).filter(Boolean).map(a => F(a, 'Industry')).filter(Boolean))].slice(0, 6),
+          };
+        }
+        if (ideaSource === 'past-event') {
+          const event = events.find(e => e.id === sourceItemId);
+          if (!event) return null;
+          const invitedIds = linkedIds(event, 'Stakeholders invited');
+          const invited = stakeholders.filter(s => invitedIds.includes(s.id));
+          return {
+            kind: 'past-event',
+            name: F(event, 'Event Name') || '',
+            date: F(event, 'Starting') || '',
+            endDate: F(event, 'End date') || '',
+            context: F(event, 'Aditional context') || '',
+            summary: typeof F(event, 'Attachment Summary') === 'object' ? F(event, 'Attachment Summary')?.value : F(event, 'Attachment Summary'),
+            attendedCount: invited.length,
+            attendedRoles: [...new Set(invited.map(s => F(s, 'Role')).filter(Boolean))].slice(0, 8),
+          };
+        }
+        if (ideaSource === 'campaign') {
+          const camp = campaigns.find(c => c.id === sourceItemId);
+          if (!camp) return null;
+          return {
+            kind: 'campaign',
+            name: F(camp, 'Name') || '',
+            type: F(camp, 'Type') || '',
+            status: F(camp, 'Status') || '',
+            context: F(camp, 'Context') || '',
+            aiSummary: F(camp, 'AI Summary') || '',
+            template: F(camp, 'Message Template') || '',
+            assetUrl: F(camp, 'Asset URL') || '',
+            reached: linkedIds(camp, 'Stakeholders Reached').length,
+          };
+        }
+        if (ideaSource === 'solution') {
+          const sol = solutions.find(s => s.id === sourceItemId);
+          if (!sol) return null;
+          const solAccs = accounts.filter(a => linkedIds(a, 'Solutions').includes(sol.id));
+          const solStks = stakeholders.filter(s => {
+            const accIds = linkedIds(s, 'Account');
+            return accIds.some(id => solAccs.some(a => a.id === id));
+          });
+          return {
+            kind: 'solution',
+            name: F(sol, 'Name') || '',
+            type: F(sol, 'Type') || '',
+            detail: F(sol, 'Service | Solution Detail') || '',
+            keyMessage: F(sol, 'Stakeholder Key Message') || '',
+            execSummary: F(sol, 'AI Exec Summary') || '',
+            recommendations: F(sol, 'AI Strategic Recommendations') || '',
+            accountsCount: solAccs.length,
+            accountsSample: solAccs.slice(0, 5).map(a => F(a, 'Account Name')).filter(Boolean),
+            painPoints: solStks.map(s => F(s, 'Pain points')).filter(p => typeof p === 'string' && p.trim()).slice(0, 5),
+          };
+        }
+        // Default: 'outreach' (last 14 days activity — same as before)
+        return null; // signals use existing buildOikeContext()
+      };
+
+      // ── Generate coach questions based on source ──
+      const generateCoachQuestions = async () => {
+        if (ideaSource === 'free') {
+          // No coach questions needed — user defines freely
+          setCoachStage('done');
+          return;
+        }
+        setLoadingCoach(true);
+        const srcCtx = buildSourceContext();
+        const ctxPayload = srcCtx ? JSON.stringify(srcCtx).slice(0, 1500) : 'Last 14 days of outreach activity';
+
+        const prompt = `You are a content coach for a B2B founder. Before generating LinkedIn post ideas, ask 2-3 focused questions to sharpen the angle.
+
+SOURCE TYPE: ${ideaSource}
+SOURCE DATA:
+${ctxPayload}
+
+Ask questions that:
+- Are specific to this source (not generic "what do you want to share")
+- Help identify the ONE angle the user cares about most
+- Probe for emotion / opinion / insight beyond the raw facts
+- Are answerable in 1-2 sentences each
+
+Return ONLY valid JSON:
+{
+  "questions": [
+    "Specific question 1?",
+    "Specific question 2?",
+    "Specific question 3?"
+  ]
+}`;
+        try {
+          const res = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 500 });
+          const cleaned = res.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
+          setCoachQuestions(qs);
+          setCoachAnswers(qs.map(() => ''));
+          setCoachStage('answering');
+        } catch (e) {
+          console.error('[coach] failed:', e);
+          // Fallback: skip coach, go straight to generation
+          setCoachStage('done');
+        }
+        setLoadingCoach(false);
+      };
+
+      // ── Improve draft (4 modes) ──
+      const improveDraft = async (mode) => {
+        if (!draft.trim()) { alert('Nothing to improve'); return; }
+        setImproving(mode);
+        const instructions = {
+          'shorter': 'Cut the draft by 30-50% while preserving the core point, hook and closing. Aim for punch. Keep the same voice.',
+          'hook': 'Rewrite ONLY the first line (the hook). Make it scroll-stopping, specific, bold, curiosity-triggering. Keep the rest of the post EXACTLY as is.',
+          'cta': 'Rewrite ONLY the final line/closing (the CTA / conversation starter). Make it a sharper invitation to engage. Keep the rest of the post EXACTLY as is.',
+          'polish': 'Polish the draft: tighten phrasing, kill filler words and corporate-speak, strengthen verbs, fix rhythm. Maintain voice and meaning. Do not restructure.',
+        };
+        const prompt = `You are a senior LinkedIn copywriter helping refine a post.
+
+${voiceSamples.trim() ? `VOICE SAMPLES (match this voice):\n"""\n${voiceSamples.slice(0, 3000)}\n"""\n\n` : ''}CURRENT DRAFT:
+"""
+${draft}
+"""
+
+INSTRUCTION: ${instructions[mode] || instructions.polish}
+
+Output ONLY the revised post. No meta-commentary. No "Here's the improved version". Just the text.`;
+        try {
+          const response = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 900 });
+          setDraft(response.trim());
+        } catch (e) {
+          console.error('[improveDraft] failed:', e);
+          alert('Failed to improve: ' + (e.message || 'unknown'));
+        }
+        setImproving('');
+      };
+
+      // ── Analyze engagement notes for a post ──
+      const analyzeEngagement = async (post) => {
+        const notes = F(post, 'Engagement Notes') || '';
+        if (!notes.trim()) { alert('No engagement notes to analyze. Paste comments/likes in the Engagement Notes field first.'); return; }
+        setAnalyzingPostId(post.id);
+        const content = F(post, 'Content') || '';
+        const prompt = `Analyze the engagement data for this LinkedIn post.
+
+POST:
+"""
+${content.slice(0, 1000)}
+"""
+
+ENGAGEMENT DATA (raw text the user pasted — comments, likes count, DM excerpts):
+"""
+${notes.slice(0, 2500)}
+"""
+
+Return analysis as valid JSON:
+{
+  "overall_sentiment": "positive | mixed | negative",
+  "key_themes": ["theme 1", "theme 2"],
+  "notable_commenters": ["name 1 if mentioned", "name 2"],
+  "suggested_followups": ["follow-up post idea 1", "follow-up post idea 2"],
+  "suggested_replies": [{"for_comment": "short quote", "reply": "suggested reply"}]
+}
+
+Keep each field short. Return ONLY the JSON, no markdown.`;
+        try {
+          const res = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 900 });
+          const cleaned = res.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          setEngagementAnalysis(prev => ({ ...prev, [post.id]: parsed }));
+        } catch (e) {
+          console.error('[analyzeEngagement] failed:', e);
+          alert('Failed to analyze: ' + (e.message || 'unknown'));
+        }
+        setAnalyzingPostId('');
+      };
+
       // ── Generate draft ──
       const generateDraft = async () => {
-        if (!writerTopic.trim()) { alert('Agregá un topic primero'); return; }
+        if (!writerTopic.trim()) { alert('Add a topic first'); return; }
         setLoadingDraft(true);
         const maxTokens = writerType === 'Article' ? 1800 : writerType === 'Long Post' ? 800 : 450;
-        const wordTarget = writerType === 'Article' ? '800-1500 palabras, con 3-4 secciones (## Header)' : writerType === 'Long Post' ? '300-500 palabras' : '100-200 palabras';
+        const wordTarget = writerType === 'Article' ? '800-1500 words, with 3-4 sections (## Header)' : writerType === 'Long Post' ? '300-500 words' : '100-200 words';
 
-        const prompt = `Estás escribiendo un ${writerType} para LinkedIn en la voz de ${COMPANY_PROFILE.senderName || 'el founder'}.
-${voiceSamples.trim() ? `\nVOICE SAMPLES (igualá vocabulario, ritmo, largo de frase, energía):\n"""\n${voiceSamples.slice(0, 4000)}\n"""\n` : ''}
+        const prompt = `You are writing a ${writerType} for LinkedIn in the voice of ${COMPANY_PROFILE.senderName || 'the founder'}.
+${voiceSamples.trim() ? `\nVOICE SAMPLES (match vocabulary, rhythm, sentence length, energy):\n"""\n${voiceSamples.slice(0, 4000)}\n"""\n` : ''}
 TOPIC: ${writerTopic.trim()}
 
 TYPE: ${writerType}
-TONO: ${writerTone}
-IDIOMA: ${writerLanguage === 'es' ? 'Español (voseo si los samples lo usan)' : 'English'}
+TONE: ${writerTone}
+LANGUAGE: ${writerLanguage === 'es' ? 'Spanish (use voseo if the samples use it)' : 'English'}
 
 CONSTRAINTS:
-- Largo: ${wordTarget}
-- Hook en la primera línea (NO openers genéricos tipo "En el mundo de hoy...")
-- UN solo punto claro
-- Cero corporate speak
-- Cero hashtag soup
-- Termina con conversation starter (pregunta O claim fuerte O invitación a comentar)
-${writerType === 'Article' ? '- Usá 3-4 secciones con sub-headers (## Header)' : ''}
-- Nunca nombres clientes específicos
-- No uses emojis de más
+- Length: ${wordTarget}
+- Hook in the first line (NO generic openers like "In today's world...")
+- ONE clear point
+- Zero corporate speak
+- Zero hashtag soup
+- End with a conversation starter (question OR bold claim OR invitation to comment)
+${writerType === 'Article' ? '- Use 3-4 sections with sub-headers (## Header)' : ''}
+- Never name specific clients
+- Don't overuse emojis
 
-Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. Sin meta-commentary.`;
+Output: ONLY the post content, ready to copy-paste. No title above. No meta-commentary.`;
 
         try {
           const response = await callOpenAI({ prompt, temperature: 0.85, max_tokens: maxTokens });
@@ -12395,7 +12670,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
 
       // ── Save draft to library ──
       const saveDraft = async () => {
-        if (!draft.trim()) { alert('Nada para guardar'); return; }
+        if (!draft.trim()) { alert('Nothing to save'); return; }
         setSavingDraft(true);
         try {
           const a = api || new AirtableAPI();
@@ -12411,7 +12686,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
           };
           await a.createRecord(TABLE_IDS.contentLab, fields);
           if (onLogActivity) onLogActivity();
-          alert('✅ Guardado en Library');
+          alert('✅ Saved to Library');
         } catch (e) {
           console.error('[Content Lab] Save failed:', e);
           alert('Failed to save: ' + (e.message || 'unknown'));
@@ -12453,7 +12728,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
         <div>
           <div className="page-header">
             <h1>✍️ Content Lab</h1>
-            <p>Posts y artículos para LinkedIn, anclados a tu data de ventas real. Tu contenido y tu pipeline se alimentan mutuamente.</p>
+            <p>LinkedIn posts and articles, anchored to your real sales data. Your content and pipeline feed each other.</p>
           </div>
 
           {/* Tabs */}
@@ -12467,23 +12742,139 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
           {/* ── IDEAS TAB ── */}
           {tab === 'ideas' && (
             <div>
+              {/* Source selector */}
               <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid var(--globant-green)' }}>
-                <p style={{ fontSize: 13, color: 'var(--globant-muted)', margin: '0 0 10px' }}>
-                  La IA lee tu actividad de Oike de los últimos 14 días (touches, replies, pain points, meetings agendados) y genera ideas de posts ancladas en esa data.
-                </p>
-                <button className="action-btn btn-primary" style={{ fontSize: 13 }} onClick={generateIdeas} disabled={loadingIdeas}>
-                  {loadingIdeas ? '⏳ Generating...' : ideas.length > 0 ? '🔄 Regenerate Ideas' : '✨ Generate Ideas from my data'}
-                </button>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                  SOURCE — what should inspire the ideas?
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                  {[
+                    { key: 'outreach', label: '📧 Recent outreach', needsId: false },
+                    { key: 'upcoming-event', label: '📆 Upcoming event', needsId: true },
+                    { key: 'past-event', label: '🎤 Past event', needsId: true },
+                    { key: 'campaign', label: '📣 Campaign', needsId: true },
+                    { key: 'solution', label: '🛠️ Solution', needsId: true },
+                    { key: 'free', label: '✍️ Free topic', needsId: false },
+                  ].map(src => (
+                    <button key={src.key}
+                      onClick={() => { setIdeaSource(src.key); setSourceItemId(''); setCoachStage('idle'); setCoachQuestions([]); setCoachAnswers([]); }}
+                      style={{
+                        padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        background: ideaSource === src.key ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${ideaSource === src.key ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                        color: ideaSource === src.key ? 'var(--globant-green)' : 'var(--globant-text)',
+                      }}>
+                      {src.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Specific item selector */}
+                {ideaSource === 'upcoming-event' && (
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} value={sourceItemId} onChange={e => setSourceItemId(e.target.value)}>
+                    <option value="">— Pick an upcoming event —</option>
+                    {events.filter(e => {
+                      const st = e.fields?.['Starting'];
+                      return st && new Date(st).getTime() > Date.now() - 86400000;
+                    }).sort((a, b) => new Date(a.fields?.['Starting'] || 0) - new Date(b.fields?.['Starting'] || 0)).map(e => (
+                      <option key={e.id} value={e.id}>
+                        {F(e, 'Event Name')} {e.fields?.['Starting'] ? `· ${formatDate(e.fields['Starting'])}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {ideaSource === 'past-event' && (
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} value={sourceItemId} onChange={e => setSourceItemId(e.target.value)}>
+                    <option value="">— Pick a past event —</option>
+                    {events.filter(e => {
+                      const st = e.fields?.['Starting'];
+                      return st && new Date(st).getTime() <= Date.now();
+                    }).sort((a, b) => new Date(b.fields?.['Starting'] || 0) - new Date(a.fields?.['Starting'] || 0)).map(e => (
+                      <option key={e.id} value={e.id}>
+                        {F(e, 'Event Name')} {e.fields?.['Starting'] ? `· ${formatDate(e.fields['Starting'])}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {ideaSource === 'campaign' && (
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} value={sourceItemId} onChange={e => setSourceItemId(e.target.value)}>
+                    <option value="">— Pick a campaign —</option>
+                    {campaigns.map(c => (
+                      <option key={c.id} value={c.id}>{F(c, 'Name')} {F(c, 'Status') ? `· ${F(c, 'Status')}` : ''}</option>
+                    ))}
+                  </select>
+                )}
+                {ideaSource === 'solution' && (
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} value={sourceItemId} onChange={e => setSourceItemId(e.target.value)}>
+                    <option value="">— Pick a solution —</option>
+                    {solutions.map(s => <option key={s.id} value={s.id}>{F(s, 'Name')}</option>)}
+                  </select>
+                )}
+
+                {/* Coach + Generate buttons */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {coachStage === 'idle' && (
+                    <>
+                      <button className="action-btn btn-primary" style={{ fontSize: 13 }}
+                        onClick={generateIdeas}
+                        disabled={loadingIdeas || (['upcoming-event','past-event','campaign','solution'].includes(ideaSource) && !sourceItemId)}>
+                        {loadingIdeas ? '⏳ Generating...' : '✨ Generate Ideas'}
+                      </button>
+                      {ideaSource !== 'free' && (
+                        <button className="action-btn btn-ghost" style={{ fontSize: 13 }}
+                          onClick={generateCoachQuestions}
+                          disabled={loadingCoach || (['upcoming-event','past-event','campaign','solution'].includes(ideaSource) && !sourceItemId)}>
+                          {loadingCoach ? '⏳ Asking...' : '🎯 Guided (AI asks first)'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Coach questions panel */}
+                {coachStage === 'answering' && coachQuestions.length > 0 && (
+                  <div style={{ marginTop: 14, padding: '14px 16px', background: 'rgba(167,139,250,0.08)', borderRadius: 10, border: '1px solid rgba(167,139,250,0.25)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>
+                      🎯 Answer these to sharpen the angle
+                    </div>
+                    {coachQuestions.map((q, i) => (
+                      <div key={i} style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--globant-text)', marginBottom: 4 }}>{i+1}. {q}</div>
+                        <textarea
+                          className="input-field"
+                          style={{ width: '100%', minHeight: 55, fontSize: 12, fontFamily: 'inherit', lineHeight: 1.5, resize: 'vertical' }}
+                          value={coachAnswers[i] || ''}
+                          onChange={e => {
+                            const next = [...coachAnswers];
+                            next[i] = e.target.value;
+                            setCoachAnswers(next);
+                          }}
+                          placeholder="1-2 sentences, your honest take..."
+                        />
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={generateIdeas} disabled={loadingIdeas}>
+                        {loadingIdeas ? '⏳ Generating...' : '✨ Generate ideas with these answers'}
+                      </button>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setCoachStage('idle'); setCoachQuestions([]); setCoachAnswers([]); }}>
+                        ← Back
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {ideas.length === 0 && !loadingIdeas && (
+              {/* Empty state */}
+              {ideas.length === 0 && !loadingIdeas && coachStage !== 'answering' && (
                 <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--globant-muted)' }}>
                   <div style={{ fontSize: 36, marginBottom: 10 }}>💡</div>
-                  <p style={{ fontSize: 14 }}>Click "Generate Ideas" para empezar.</p>
-                  <p style={{ fontSize: 12, marginTop: 6 }}>Cuantas más conversaciones y pain points tengas cargados, más rica la data.</p>
+                  <p style={{ fontSize: 14 }}>Pick a source above and click "Generate Ideas".</p>
+                  <p style={{ fontSize: 12, marginTop: 6 }}>Want tighter results? Use <strong>🎯 Guided</strong> — the AI will ask you 2-3 questions first.</p>
                 </div>
               )}
 
+              {/* Ideas grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
                 {ideas.map((idea, i) => (
                   <div key={i} className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
@@ -12523,22 +12914,22 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Tono</label>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Tone</label>
                     <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerTone} onChange={e => setWriterTone(e.target.value)}>
                       {TONES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Idioma</label>
+                    <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Language</label>
                     <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerLanguage} onChange={e => setWriterLanguage(e.target.value)}>
-                      <option value="es">Español</option>
                       <option value="en">English</option>
+                      <option value="es">Español</option>
                     </select>
                   </div>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Topic tag</label>
                     <select className="input-field" style={{ width: '100%', fontSize: 12 }} value={writerTag} onChange={e => setWriterTag(e.target.value)}>
-                      <option value="">— Sin tag —</option>
+                      <option value="">— No tag —</option>
                       {TAGS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
@@ -12547,7 +12938,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                 <textarea
                   className="input-field"
                   style={{ width: '100%', minHeight: 80, resize: 'vertical', fontSize: 13, fontFamily: 'inherit', lineHeight: 1.5 }}
-                  placeholder="Ej: Cómo detecté que el 80% de los SDRs hacen follow-up mal — y qué cambié en mis mensajes después de 100 meetings"
+                  placeholder="E.g.: How I noticed 80% of SDRs do follow-up wrong — and what I changed in my messages after 100 meetings"
                   value={writerTopic}
                   onChange={e => setWriterTopic(e.target.value)}
                 />
@@ -12571,9 +12962,9 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
               {/* Draft preview */}
               {draft && (
                 <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                     <h3 style={{ fontSize: 15, margin: 0 }}>📝 Your draft</h3>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={copyDraft}>
                         {copied ? '✅ Copied!' : '📋 Copy'}
                       </button>
@@ -12582,6 +12973,30 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                       </button>
                     </div>
                   </div>
+
+                  {/* Improve with AI — 4 modes */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10, padding: '8px 10px', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#a78bfa', letterSpacing: 1, textTransform: 'uppercase', alignSelf: 'center', marginRight: 4 }}>✨ Improve:</span>
+                    {[
+                      { key: 'shorter', label: '✂️ Shorter', title: 'Cut 30-50% keeping the core' },
+                      { key: 'hook', label: '🔥 Punchier hook', title: 'Rewrite only first line' },
+                      { key: 'cta', label: '🎯 Sharpen CTA', title: 'Rewrite only closing/CTA' },
+                      { key: 'polish', label: '✨ Polish', title: 'Tighten phrasing, kill filler' },
+                    ].map(m => (
+                      <button key={m.key}
+                        onClick={() => improveDraft(m.key)}
+                        disabled={!!improving}
+                        title={m.title}
+                        style={{
+                          fontSize: 10, padding: '4px 10px', borderRadius: 6, cursor: improving ? 'wait' : 'pointer',
+                          background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)',
+                          color: '#a78bfa', fontWeight: 600,
+                        }}>
+                        {improving === m.key ? '⏳ Working...' : m.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <textarea
                     className="input-field"
                     style={{ width: '100%', minHeight: 340, fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.7, resize: 'vertical' }}
@@ -12589,7 +13004,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                     onChange={e => setDraft(e.target.value)}
                   />
                   <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 8 }}>
-                    💡 Editá libremente antes de copiar. El draft es tuyo ahora.
+                    💡 Edit freely, or use ✨ Improve buttons to polish with AI. The draft is yours now.
                   </div>
                 </div>
               )}
@@ -12610,8 +13025,8 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
               {filteredLibrary.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--globant-muted)' }}>
                   <div style={{ fontSize: 36, marginBottom: 10 }}>📚</div>
-                  <p style={{ fontSize: 14 }}>No hay posts guardados todavía.</p>
-                  <p style={{ fontSize: 12 }}>Generá uno en <strong>Writer</strong> y clickeá "Save to Library".</p>
+                  <p style={{ fontSize: 14 }}>No saved posts yet.</p>
+                  <p style={{ fontSize: 12 }}>Generate one in <strong>Writer</strong> and click "Save to Library".</p>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: 12 }}>
@@ -12642,7 +13057,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                             </button>
                             {status !== 'Posted' && (
                               <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={() => {
-                                const url = prompt('LinkedIn URL del post publicado (opcional):') || '';
+                                const url = prompt('LinkedIn URL of the published post (optional):') || '';
                                 markPosted(post, url);
                               }}>✓ Posted</button>
                             )}
@@ -12653,6 +13068,77 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                         </div>
                         {linkedinUrl && (
                           <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--globant-info)', marginTop: 8, display: 'inline-block' }}>🔗 View on LinkedIn</a>
+                        )}
+
+                        {/* Engagement analyzer (only visible when expanded) */}
+                        {editingPost === post.id && status === 'Posted' && (
+                          <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(96,165,250,0.06)', borderRadius: 8, borderLeft: '2px solid var(--globant-info)' }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-info)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+                              🧠 Engagement analysis
+                            </div>
+                            <p style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                              Paste comments, DMs, and likes count in the post's <strong style={{ color: 'var(--globant-text)' }}>Engagement Notes</strong> field in Airtable, then click Analyze. LinkedIn doesn't allow auto-reading these — manual paste for now.
+                            </p>
+                            {!F(post, 'Engagement Notes') ? (
+                              <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
+                                ⚠️ No engagement notes yet. Add them in Airtable first.
+                              </div>
+                            ) : (
+                              <>
+                                <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                                  onClick={() => analyzeEngagement(post)}
+                                  disabled={analyzingPostId === post.id}>
+                                  {analyzingPostId === post.id ? '⏳ Analyzing...' : engagementAnalysis[post.id] ? '🔄 Re-analyze' : '🧠 Analyze engagement'}
+                                </button>
+
+                                {engagementAnalysis[post.id] && (() => {
+                                  const a = engagementAnalysis[post.id];
+                                  const sentimentColor = a.overall_sentiment === 'positive' ? '#4ade80' : a.overall_sentiment === 'negative' ? '#e57373' : '#fbbf24';
+                                  return (
+                                    <div style={{ marginTop: 12, fontSize: 12, color: 'var(--globant-text)' }}>
+                                      <div style={{ marginBottom: 10 }}>
+                                        <strong style={{ color: 'var(--globant-muted)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Sentiment:</strong>
+                                        <span style={{ marginLeft: 8, padding: '2px 10px', borderRadius: 10, background: `${sentimentColor}25`, color: sentimentColor, fontWeight: 700, fontSize: 11 }}>{a.overall_sentiment}</span>
+                                      </div>
+                                      {Array.isArray(a.key_themes) && a.key_themes.length > 0 && (
+                                        <div style={{ marginBottom: 10 }}>
+                                          <strong style={{ color: 'var(--globant-muted)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Key themes:</strong>
+                                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                            {a.key_themes.map((t, i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 8, background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', fontWeight: 600 }}>{t}</span>)}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {Array.isArray(a.notable_commenters) && a.notable_commenters.length > 0 && (
+                                        <div style={{ marginBottom: 10 }}>
+                                          <strong style={{ color: 'var(--globant-muted)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Notable commenters:</strong>
+                                          <div style={{ fontSize: 12 }}>{a.notable_commenters.join(' · ')}</div>
+                                        </div>
+                                      )}
+                                      {Array.isArray(a.suggested_followups) && a.suggested_followups.length > 0 && (
+                                        <div style={{ marginBottom: 10 }}>
+                                          <strong style={{ color: 'var(--globant-muted)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Follow-up ideas:</strong>
+                                          <ul style={{ paddingLeft: 20, margin: 0, fontSize: 12, lineHeight: 1.6 }}>
+                                            {a.suggested_followups.map((f, i) => <li key={i}>{f}</li>)}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {Array.isArray(a.suggested_replies) && a.suggested_replies.length > 0 && (
+                                        <div>
+                                          <strong style={{ color: 'var(--globant-muted)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Suggested replies:</strong>
+                                          {a.suggested_replies.map((r, i) => (
+                                            <div key={i} style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, borderLeft: '2px solid var(--globant-accent)' }}>
+                                              <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 4 }}>On: "{r.for_comment}"</div>
+                                              <div style={{ fontSize: 12 }}>→ {r.reply}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     );
@@ -12666,17 +13152,17 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
           {tab === 'voice' && (
             <div>
               <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
-                <h3 style={{ fontSize: 15, marginBottom: 10 }}>🎙️ Tu voz</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 10 }}>🎙️ Your voice</h3>
                 <p style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 12, lineHeight: 1.55 }}>
-                  Pegá abajo 10-15 posts tuyos de LinkedIn (los que más te suenen a "vos"). La IA los va a leer para igualar tu vocabulario, ritmo, estructura de frase, tu energía. <strong style={{ color: 'var(--globant-text)' }}>Sin esto, los drafts salen genéricos.</strong>
+                  Paste 10-15 of your LinkedIn posts below (the ones that sound most like you). The AI will read them to match your vocabulary, rhythm, sentence length, and energy. <strong style={{ color: 'var(--globant-text)' }}>Without this, drafts come out generic.</strong>
                 </p>
                 <p style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 8 }}>
-                  💡 Tip: separá cada post con una línea de guiones <code>---</code> para que la IA los distinga.
+                  💡 Tip: separate each post with a line of dashes <code>---</code> so the AI can distinguish them.
                 </p>
                 <textarea
                   className="input-field"
                   style={{ width: '100%', minHeight: 360, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.6, resize: 'vertical' }}
-                  placeholder={`Pegá acá tus posts pasados. Ejemplo:\n\nAyer tuve una reunión con un CFO...\n[tu post 1]\n\n---\n\nEn 20 años vendiendo B2B...\n[tu post 2]\n\n---\n\n[etc]`}
+                  placeholder={`Paste your past posts here. Example:\n\nYesterday I had a meeting with a CFO...\n[your post 1]\n\n---\n\nIn 20 years selling B2B...\n[your post 2]\n\n---\n\n[etc]`}
                   value={voiceSamples}
                   onChange={e => setVoiceSamples(e.target.value)}
                 />
@@ -12685,7 +13171,7 @@ Output: SOLO el contenido del post, listo para copy-paste. Sin título encima. S
                     {voiceSaved ? '✅ Saved' : '💾 Save voice samples'}
                   </button>
                   <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>
-                    {voiceSamples.trim() ? `✓ ${voiceSamples.length} chars cargados · se usan automáticamente en Writer` : '⚠️ Sin samples, la voz sale genérica'}
+                    {voiceSamples.trim() ? `✓ ${voiceSamples.length} chars loaded · used automatically in Writer` : '⚠️ Without samples, voice comes out generic'}
                   </span>
                 </div>
               </div>
