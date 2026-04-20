@@ -62,9 +62,9 @@ async function getUserRefreshToken(email: string, airtableKey: string): Promise<
 }
 
 // ── Fetch all stakeholders with emails from a given Airtable base ──
-async function fetchStakeholders(baseId: string, tableId: string, airtableKey: string): Promise<Array<{ id: string; email: string; name: string }>> {
+async function fetchStakeholders(baseId: string, tableId: string, airtableKey: string): Promise<Array<{ id: string; email: string; name: string; accountIds: string[] }>> {
   const url = `${AIRTABLE_BASE}/${baseId}/${tableId}?pageSize=100`;
-  const stakeholders: Array<{ id: string; email: string; name: string }> = [];
+  const stakeholders: Array<{ id: string; email: string; name: string; accountIds: string[] }> = [];
   let nextOffset: string | null = null;
 
   do {
@@ -75,10 +75,14 @@ async function fetchStakeholders(baseId: string, tableId: string, airtableKey: s
     for (const r of (data.records || [])) {
       const email = r.fields?.['Email'] || '';
       if (email) {
+        // Account is a linked record field — array of record IDs
+        const accountRaw = r.fields?.['Account'];
+        const accountIds: string[] = Array.isArray(accountRaw) ? accountRaw : (accountRaw ? [accountRaw] : []);
         stakeholders.push({
-          id:    r.id,
-          email: email.trim().toLowerCase(),
-          name:  `${r.fields?.['First name'] || ''} ${r.fields?.['Last name'] || ''}`.trim(),
+          id:         r.id,
+          email:      email.trim().toLowerCase(),
+          name:       `${r.fields?.['First name'] || ''} ${r.fields?.['Last name'] || ''}`.trim(),
+          accountIds,
         });
       }
     }
@@ -184,6 +188,46 @@ async function logEmailActivity(
     body: JSON.stringify({ records: [{ fields }], typecast: true }),
   });
   return res.ok;
+}
+
+// ── Advance stakeholder Status in funnel — only advances forward, respects manual states ──
+const STAKEHOLDER_STATUS_PRIORITY: Record<string, number> = { '': 0, 'Not Contacted': 0, 'Contacted': 1, 'Replied': 2, 'Meeting Booked': 3 };
+const STAKEHOLDER_STATUS_PROTECTED = ['DNC', 'Left Company', 'Not Interested', 'Nurture', 'Bounced'];
+
+async function advanceStakeholderStatus(
+  baseId: string,
+  stakeholdersTableId: string,
+  stakeholderId: string,
+  targetStatus: string,
+  airtableKey: string
+): Promise<boolean> {
+  try {
+    // 1. Read current status
+    const getRes = await fetch(`${AIRTABLE_BASE}/${baseId}/${stakeholdersTableId}/${stakeholderId}`, {
+      headers: { 'Authorization': `Bearer ${airtableKey}` },
+    });
+    if (!getRes.ok) return false;
+    const rec = await getRes.json();
+    const currentStatus = String(rec?.fields?.['Status'] || '').trim();
+
+    // Respect manual/terminal states
+    if (STAKEHOLDER_STATUS_PROTECTED.includes(currentStatus)) return false;
+
+    const currentPriority = STAKEHOLDER_STATUS_PRIORITY[currentStatus] ?? 0;
+    const targetPriority = STAKEHOLDER_STATUS_PRIORITY[targetStatus] ?? 0;
+    if (targetPriority <= currentPriority) return false;
+
+    // 2. Update
+    const updRes = await fetch(`${AIRTABLE_BASE}/${baseId}/${stakeholdersTableId}/${stakeholderId}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Status': targetStatus }, typecast: true }),
+    });
+    return updRes.ok;
+  } catch (e) {
+    console.warn('[advanceStakeholderStatus] failed:', e);
+    return false;
+  }
 }
 
 export default async (req: Request, context: Context) => {
@@ -304,7 +348,7 @@ export default async (req: Request, context: Context) => {
         baseId,
         outreachTableId,
         matchedStakeholder.id,
-        [],
+        matchedStakeholder.accountIds,
         msg.id,
         subject,
         snippet,
@@ -313,7 +357,14 @@ export default async (req: Request, context: Context) => {
         payload.email || '',
         airtableKey
       );
-      if (logged) synced++;
+      if (logged) {
+        synced++;
+        // Advance stakeholder Status based on direction
+        // - received email → Replied (highest priority for inbound)
+        // - sent email → Contacted (only if still Not Contacted)
+        const targetStatus = direction === 'received' ? 'Replied' : 'Contacted';
+        await advanceStakeholderStatus(baseId, stakeholdersTableId, matchedStakeholder.id, targetStatus, airtableKey);
+      }
     }
 
     const diagMsg = synced > 0
