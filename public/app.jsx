@@ -3236,14 +3236,47 @@ Output ONLY the message, nothing else.`;
         let created = 0, failed = 0;
         let websitesAdded = 0;
         let industriesAdded = 0;
+        let accountsCreated = 0;
         const a = api || new AirtableAPI();
         // Track account-level fields we already wrote this session to avoid redundant writes
         const accountWebsiteUpdated = new Set();
         const accountIndustryUpdated = new Set();
+        // Build lookup map: lowerAccountName → account record (existing + newly-created this session)
+        const accountMap = new Map();
+        accounts.forEach(ac => {
+          const nm = (F(ac, 'Account Name') || '').toLowerCase().trim();
+          if (nm) accountMap.set(nm, ac);
+        });
+
         for (const row of toImport) {
           try {
-            // Resolve account by name
-            const matchedAcc = row.accountName ? accounts.find(ac => (F(ac, 'Account Name') || '').toLowerCase() === row.accountName.toLowerCase()) : null;
+            // Resolve or create account by name
+            let matchedAcc = null;
+            if (row.accountName) {
+              const key = row.accountName.toLowerCase().trim();
+              matchedAcc = accountMap.get(key);
+              if (!matchedAcc) {
+                // Account doesn't exist — create it on-the-fly
+                try {
+                  const newAccFields = { 'Account Name': row.accountName.trim() };
+                  if (row.website) newAccFields['Website'] = row.website;
+                  if (row.industry) newAccFields['Industry'] = row.industry;
+                  if (row.country) newAccFields['Country'] = row.country;
+                  if (CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name) newAccFields['BDR Owner'] = [{ id: CURRENT_USER.id }];
+                  const newAcc = await a.createRecord(TABLE_IDS.accounts, newAccFields);
+                  if (newAcc?.id) {
+                    matchedAcc = { id: newAcc.id, fields: newAccFields };
+                    accountMap.set(key, matchedAcc);
+                    accountsCreated++;
+                    // Mark website/industry as already set (came from creation, not update)
+                    if (row.website) accountWebsiteUpdated.add(newAcc.id);
+                    if (row.industry) accountIndustryUpdated.add(newAcc.id);
+                  }
+                } catch (accErr) {
+                  console.warn('[Import] account create failed for', row.accountName, accErr);
+                }
+              }
+            }
             const fields = { 'Name': row.firstName };
             if (row.lastName) fields['Last name'] = row.lastName;
             if (row.email) fields['Email'] = row.email;
@@ -3285,7 +3318,7 @@ Output ONLY the message, nothing else.`;
             await new Promise(r => setTimeout(r, 250));
           } catch (e) { failed++; console.error(e); }
         }
-        setContactImportResult({ created, failed, websitesAdded, industriesAdded });
+        setContactImportResult({ created, failed, websitesAdded, industriesAdded, accountsCreated });
         setContactImporting(false);
         if (onLogActivity) onLogActivity();
       };
@@ -3519,7 +3552,7 @@ Output ONLY the message, nothing else.`;
                 <div>
                   {contactImportResult ? (
                     <div style={{ padding: '12px', background: 'rgba(91,191,181,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} website${contactImportResult.websitesAdded !== 1 ? 's' : ''}` : ''}{contactImportResult.industriesAdded > 0 ? ` · 🏭 ${contactImportResult.industriesAdded} industr${contactImportResult.industriesAdded !== 1 ? 'ies' : 'y'}` : ''}{(contactImportResult.websitesAdded > 0 || contactImportResult.industriesAdded > 0) ? ' filled on accounts' : ''}.
+                      ✅ Import complete — <strong>{contactImportResult.created}</strong> contacts created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}{contactImportResult.accountsCreated > 0 ? ` · 🏢 ${contactImportResult.accountsCreated} new account${contactImportResult.accountsCreated !== 1 ? 's' : ''}` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} website${contactImportResult.websitesAdded !== 1 ? 's' : ''}` : ''}{contactImportResult.industriesAdded > 0 ? ` · 🏭 ${contactImportResult.industriesAdded} industr${contactImportResult.industriesAdded !== 1 ? 'ies' : 'y'}` : ''}.
                       <button className="action-btn btn-ghost" style={{ fontSize: 11, marginLeft: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>Import another</button>
                     </div>
                   ) : (
