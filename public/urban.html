@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oike × UrbanFlip · Onoma · Urbantech</title>
+  <meta name="description" content="Conversación de descubrimiento. Sales Intelligence for Humans." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0A0A14;
+      --bg-alt:    #12121F;
+      --card:      #1A1A2E;
+      --card-hi:   #232340;
+      --text:      #E8E8F0;
+      --muted:     #8888A8;
+      --green:     #5BBFB5;
+      --green-dk:  #3D9E94;
+      --orange:    #E08552;
+      --border:    #2A2A44;
+      --gold:      #D4AF6F;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background gradient ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at top left, rgba(91,191,181,0.08), transparent 50%),
+        radial-gradient(ellipse at bottom right, rgba(224,133,82,0.06), transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Side progress nav ── */
+    .nav-dots {
+      position: fixed;
+      right: 32px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      z-index: 100;
+    }
+    .nav-dots a {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      transition: all 0.3s;
+      position: relative;
+    }
+    .nav-dots a:hover {
+      background: var(--green);
+      transform: scale(1.4);
+    }
+    .nav-dots a.active {
+      background: var(--green);
+      box-shadow: 0 0 16px rgba(91,191,181,0.6);
+    }
+    .nav-dots a span {
+      position: absolute;
+      right: 22px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .nav-dots a:hover span { opacity: 1; }
+    @media (max-width: 768px) { .nav-dots { display: none; } }
+
+    /* ── Section base ── */
+    section {
+      min-height: 100vh;
+      padding: 96px 32px 80px;
+      max-width: 1100px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .section-num {
+      display: inline-block;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--orange);
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.8s ease;
+    }
+    .section-num.in-view { opacity: 1; transform: translateY(0); }
+
+    h1 {
+      font-size: clamp(40px, 7vw, 84px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    h2 {
+      font-size: clamp(32px, 5vw, 56px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 24px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.8s ease 0.1s;
+    }
+    h2.in-view { opacity: 1; transform: translateY(0); }
+    h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 12px;
+    }
+    h4 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    p { color: var(--muted); font-size: 16px; margin-bottom: 14px; }
+    p strong, li strong { color: var(--text); font-weight: 600; }
+
+    .lead {
+      font-size: clamp(18px, 2.2vw, 22px);
+      color: var(--text);
+      line-height: 1.5;
+      max-width: 720px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.8s ease 0.2s;
+    }
+    .lead.in-view { opacity: 1; transform: translateY(0); }
+
+    .accent { color: var(--green); }
+    .orange { color: var(--orange); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      text-align: left;
+      padding-top: 0;
+      padding-bottom: 0;
+      justify-content: center;
+    }
+    .hero .brand {
+      display: inline-block;
+      font-weight: 900;
+      font-size: clamp(80px, 14vw, 180px);
+      background: linear-gradient(135deg, var(--green) 0%, var(--green-dk) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      animation: brand-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .hero .tagline {
+      font-size: clamp(18px, 2.5vw, 28px);
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 8px;
+      animation: fadeUp 1s ease 0.3s both;
+    }
+    .hero .for-block {
+      margin-top: 56px;
+      animation: fadeUp 1s ease 0.6s both;
+    }
+    .hero .for-label {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .hero .for-names {
+      font-size: clamp(28px, 4.5vw, 52px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .hero .for-names span { color: var(--orange); }
+    .hero .meeting-type {
+      color: var(--orange);
+      font-size: clamp(15px, 2vw, 18px);
+      margin-top: 6px;
+    }
+    .hero .author {
+      margin-top: 80px;
+      animation: fadeUp 1s ease 0.9s both;
+    }
+    .hero .author-name { font-weight: 700; font-size: 16px; }
+    .hero .author-meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+    .hero .scroll-hint {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 2px;
+      animation: bob 2s ease infinite;
+    }
+
+    @keyframes brand-in {
+      from { opacity: 0; transform: translateY(40px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.6; }
+      50% { transform: translateX(-50%) translateY(-8px); opacity: 1; }
+    }
+
+    /* ── Cards ── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-top: 32px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 26px;
+      transition: all 0.4s ease;
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    .card.in-view { opacity: 1; transform: translateY(0); }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(91,191,181,0.4);
+      background: var(--card-hi);
+    }
+    .card.green { border-left: 3px solid var(--green); }
+    .card.orange { border-left: 3px solid var(--orange); }
+    .card.red { border-left: 3px solid #e57373; }
+
+    .card ul, .section-content ul {
+      list-style: none;
+      padding: 0;
+    }
+    .card li, .section-content > ul > li {
+      position: relative;
+      padding-left: 22px;
+      margin-bottom: 10px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .card li::before, .section-content > ul > li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 700;
+    }
+    .card.orange li::before { color: var(--orange); }
+    .card.red li::before { color: #e57373; content: '✕'; }
+
+    /* ── Timeline (career) ── */
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+      margin-top: 32px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: linear-gradient(180deg, var(--green) 0%, var(--orange) 100%);
+    }
+    .timeline-item {
+      position: relative;
+      padding-bottom: 22px;
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: all 0.6s ease;
+    }
+    .timeline-item.in-view { opacity: 1; transform: translateX(0); }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -32px;
+      top: 6px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 3px solid var(--green);
+    }
+    .timeline-item:last-child::before { border-color: var(--orange); background: var(--orange); }
+    .timeline-item .role {
+      font-weight: 700;
+      color: var(--text);
+      font-size: 16px;
+    }
+    .timeline-item .company {
+      color: var(--green);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .timeline-item .desc {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 2px;
+    }
+
+    /* ── Group table (3 columns: UrbanFlip / Onoma / Urbantech) ── */
+    .group-table {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 24px;
+    }
+    @media (max-width: 768px) {
+      .group-table { grid-template-columns: 1fr; }
+    }
+    .group-col {
+      background: var(--card);
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      transition: transform 0.3s ease, border-color 0.3s ease;
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    .group-col.in-view { opacity: 1; transform: translateY(0); }
+    .group-col:hover {
+      transform: translateY(-4px);
+      border-color: rgba(91,191,181,0.4);
+    }
+    .group-col .header {
+      padding: 16px 18px;
+      background: linear-gradient(135deg, var(--green) 0%, var(--green-dk) 100%);
+      color: #0A0A14;
+      font-weight: 800;
+      font-size: 17px;
+    }
+    .group-col .body {
+      padding: 18px;
+    }
+    .group-col .subtitle {
+      font-size: 11px;
+      color: var(--orange);
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .group-col .desc {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.55;
+      margin-bottom: 14px;
+    }
+    .group-col .icp {
+      padding: 10px 12px;
+      background: rgba(91,191,181,0.06);
+      border-left: 2px solid var(--green);
+      border-radius: 0 8px 8px 0;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .group-col .icp strong {
+      display: block;
+      font-size: 10px;
+      color: var(--green);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    /* ── Hypothesis blocks ── */
+    .hypothesis {
+      background: var(--card);
+      border-left: 3px solid var(--green);
+      border-radius: 0 12px 12px 0;
+      padding: 22px 26px;
+      margin-bottom: 16px;
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: all 0.7s ease;
+    }
+    .hypothesis.in-view { opacity: 1; transform: translateX(0); }
+    .hypothesis h4 {
+      color: var(--green);
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+    .hypothesis .h-label {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .hypothesis .h-hyp {
+      background: rgba(91,191,181,0.18);
+      color: var(--green);
+    }
+    .hypothesis .h-imp {
+      background: rgba(224,133,82,0.18);
+      color: var(--orange);
+    }
+    .hypothesis p { color: var(--text); margin-bottom: 12px; }
+    .hypothesis p:last-child { margin-bottom: 0; }
+
+    /* ── Stack diagram ── */
+    .stack {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .stack-box {
+      flex: 1;
+      min-width: 180px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      text-align: center;
+    }
+    .stack-box.oike { border-color: var(--green); background: rgba(91,191,181,0.08); }
+    .stack-box .label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+    .stack-box .name { font-size: 18px; font-weight: 800; color: var(--text); margin-top: 6px; }
+    .stack-box.oike .name { color: var(--green); }
+    .stack-box .what { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .stack-arrow { font-size: 28px; color: var(--green); }
+    @media (max-width: 768px) {
+      .stack { flex-direction: column; }
+      .stack-arrow { transform: rotate(90deg); }
+    }
+
+    /* ── Question groups ── */
+    .q-group {
+      margin-bottom: 28px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.6s ease;
+    }
+    .q-group.in-view { opacity: 1; transform: translateY(0); }
+    .q-group h4 {
+      font-size: 13px;
+      color: var(--orange);
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .q-list {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 8px 0;
+      border: 1px solid var(--border);
+    }
+    .q-list .q {
+      padding: 12px 22px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 15px;
+      transition: background 0.2s;
+    }
+    .q-list .q:last-child { border-bottom: none; }
+    .q-list .q:hover { background: rgba(91,191,181,0.05); }
+    .q-list .q::before {
+      content: '?';
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      line-height: 20px;
+      text-align: center;
+      background: var(--orange);
+      color: var(--bg);
+      border-radius: 50%;
+      font-weight: 800;
+      font-size: 12px;
+      margin-right: 12px;
+      vertical-align: middle;
+    }
+
+    /* ── Steps timeline ── */
+    .steps {
+      margin-top: 32px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 24px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.6s ease;
+    }
+    .step.in-view { opacity: 1; transform: translateY(0); }
+    .step:last-child { border-bottom: none; }
+    .step .when {
+      background: linear-gradient(135deg, var(--orange) 0%, #b85f30 100%);
+      color: #0A0A14;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 800;
+      text-align: center;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+    }
+    .step .what {
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    @media (max-width: 768px) {
+      .step { grid-template-columns: 1fr; gap: 8px; }
+      .step .when { justify-self: start; }
+    }
+
+    /* ── Closing ── */
+    .closing {
+      text-align: center;
+      padding-top: 120px;
+    }
+    .closing blockquote {
+      font-size: clamp(20px, 3vw, 32px);
+      font-style: italic;
+      color: var(--text);
+      line-height: 1.45;
+      max-width: 760px;
+      margin: 0 auto 32px;
+      position: relative;
+      padding: 0 40px;
+    }
+    .closing blockquote::before,
+    .closing blockquote::after {
+      font-size: 60px;
+      color: var(--green);
+      opacity: 0.4;
+      position: absolute;
+      line-height: 1;
+    }
+    .closing blockquote::before { content: '"'; left: 0; top: -10px; }
+    .closing blockquote::after { content: '"'; right: 0; bottom: -30px; }
+    .closing .signature {
+      margin-top: 64px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+      max-width: 560px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .closing .signature .name {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .closing .signature .role {
+      color: var(--green);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .closing .signature .links {
+      margin-top: 18px;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .closing .signature .links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+      border-bottom: 1px solid transparent;
+      padding-bottom: 2px;
+    }
+    .closing .signature .links a:hover {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+
+    /* ── Highlight box (problema/solución) ── */
+    .quote-box {
+      background: linear-gradient(135deg, rgba(91,191,181,0.10) 0%, rgba(224,133,82,0.06) 100%);
+      border-left: 4px solid var(--green);
+      padding: 22px 28px;
+      border-radius: 0 14px 14px 0;
+      font-size: clamp(17px, 2.2vw, 21px);
+      font-style: italic;
+      color: var(--text);
+      line-height: 1.5;
+      margin: 24px 0;
+    }
+    .quote-box strong { color: var(--green); font-style: normal; }
+
+    /* ── Stats inline ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin: 28px 0;
+    }
+    .stat {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .stat .num {
+      font-size: 36px;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--green) 0%, var(--orange) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1;
+    }
+    .stat .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      padding: 40px 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      margin-top: 80px;
+      position: relative;
+      z-index: 1;
+    }
+    footer a { color: var(--green); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Side progress nav -->
+  <nav class="nav-dots">
+    <a href="#hero" data-section="hero" class="active"><span>Inicio</span></a>
+    <a href="#objetivo" data-section="objetivo"><span>01 · Objetivo</span></a>
+    <a href="#quien-soy" data-section="quien-soy"><span>02 · Quién soy</span></a>
+    <a href="#oike" data-section="oike"><span>03 · Qué es Oike</span></a>
+    <a href="#ustedes" data-section="ustedes"><span>04 · Lo que sé de ustedes</span></a>
+    <a href="#hipotesis" data-section="hipotesis"><span>05 · Hipótesis</span></a>
+    <a href="#preguntas" data-section="preguntas"><span>06 · Preguntas</span></a>
+    <a href="#pasos" data-section="pasos"><span>07 · Próximos pasos</span></a>
+    <a href="#cierre" data-section="cierre"><span>08 · Cierre</span></a>
+  </nav>
+
+  <!-- ───────── HERO ───────── -->
+  <section id="hero" class="hero">
+    <div class="brand">OIKE</div>
+    <div class="tagline">Sales Intelligence for Humans</div>
+    <div class="for-block">
+      <div class="for-label">Presentación para</div>
+      <div class="for-names"><span>UrbanFlip</span> · <span>Onoma</span> · <span>Urbantech</span></div>
+      <div class="meeting-type">Primera reunión de descubrimiento</div>
+    </div>
+    <div class="author">
+      <div class="author-name">Alejandra Cadario</div>
+      <div class="author-meta">Fundadora de Oike · alecadario.com · oike.app</div>
+    </div>
+    <div class="scroll-hint">↓ SCROLL</div>
+  </section>
+
+  <!-- ───────── 01. OBJETIVO ───────── -->
+  <section id="objetivo">
+    <div class="section-num">01.</div>
+    <h2>Objetivo de esta reunión</h2>
+    <div class="lead">
+      Esta no es una reunión de venta. Es una conversación de <span class="accent">descubrimiento</span>.
+    </div>
+    <p style="margin-top:18px;max-width:760px;font-size:17px;">
+      Mi objetivo hoy es escuchar más de lo que hablo, entender el negocio desde adentro, y salir con contexto suficiente para armar una propuesta quirúrgica — no un paquete genérico.
+    </p>
+
+    <div class="grid-2">
+      <div class="card green">
+        <h3>✓ Lo que vamos a cubrir</h3>
+        <ul>
+          <li>Quién soy y por qué estoy del otro lado de la mesa</li>
+          <li>Qué es Oike y qué problema resuelve <span style="color:var(--muted);font-size:13px;">(no feature dump)</span></li>
+          <li>Lo que ya sé de ustedes <span style="color:var(--muted);font-size:13px;">(research previo + hipótesis a validar)</span></li>
+          <li>Preguntas abiertas — acá ustedes hablan, yo tomo notas</li>
+          <li>Próximos pasos — cierre con plazo concreto</li>
+        </ul>
+      </div>
+      <div class="card red">
+        <h3 style="color:#e57373;">✕ Lo que NO va a pasar hoy</h3>
+        <ul>
+          <li>No voy a tirar pricing en la reunión</li>
+          <li>No voy a ofrecer paquetes ni pedir firma</li>
+          <li>No voy a hablar mal de Attio ni de competencia</li>
+          <li>No voy a hacer demo técnica larga de Oike</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 02. QUIÉN SOY ───────── -->
+  <section id="quien-soy">
+    <div class="section-num">02.</div>
+    <h2>Quién soy</h2>
+    <div class="lead">
+      Soy <strong style="color:var(--text);">Alejandra Cadario</strong>. Boliviana, he vivido y trabajado en seis países. <span class="accent">20 años en ventas B2B reales</span> — no teoría, no consultoría de papel.
+    </div>
+
+    <div class="stats-row">
+      <div class="stat"><div class="num">20</div><div class="label">AÑOS EN VENTAS B2B</div></div>
+      <div class="stat"><div class="num">6</div><div class="label">PAÍSES</div></div>
+      <div class="stat"><div class="num">5</div><div class="label">INDUSTRIAS</div></div>
+      <div class="stat"><div class="num">€M+</div><div class="label">TICKETS CERRADOS</div></div>
+    </div>
+
+    <h3 style="margin-top:32px;">La trayectoria</h3>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="role">Trade Marketing</div>
+        <div class="company">Red Bull · Santa Cruz</div>
+        <div class="desc">Primer rol comercial</div>
+      </div>
+      <div class="timeline-item">
+        <div class="role">Sales &amp; Marketing Manager</div>
+        <div class="company">Laboratorios IFA</div>
+        <div class="desc">Equipo de visitadores médicos</div>
+      </div>
+      <div class="timeline-item">
+        <div class="role">Head of Foreign Trade</div>
+        <div class="company">Grupo Union Columbia</div>
+        <div class="desc">Import/export</div>
+      </div>
+      <div class="timeline-item">
+        <div class="role">Commercial Manager Norteamérica</div>
+        <div class="company">Pure Organic Foods · Toronto</div>
+        <div class="desc">4 años</div>
+      </div>
+      <div class="timeline-item">
+        <div class="role">BDR / Business Consultant</div>
+        <div class="company">Strommar, Speexx, Globant · Madrid</div>
+        <div class="desc">Ventas tech B2B</div>
+      </div>
+      <div class="timeline-item">
+        <div class="role">Sr. Business Consultant + Fundadora</div>
+        <div class="company">Globant MENA · Oike</div>
+        <div class="desc">Hoy</div>
+      </div>
+    </div>
+
+    <div class="quote-box" style="margin-top:40px;">
+      No soy una ingeniera que un día pensó <em>"voy a hacer un CRM"</em>.<br>
+      Soy <strong>una vendedora que se cansó de ver equipos comerciales con diez herramientas distintas, sin método, sin disciplina, que igual no cerraban</strong>. Oike nació de ahí.
+    </div>
+
+    <h3 style="margin-top:24px;">Qué aporto a esta conversación</h3>
+    <ul style="margin-top:8px;">
+      <li>Experiencia directa vendiendo tickets altos a decisores senior</li>
+      <li>Entiendo la dinámica de venta consultiva, no transaccional</li>
+      <li>He construido equipos comerciales desde cero en distintos países e industrias</li>
+      <li>Hoy mismo construyo Oike con clientes reales — mi mano está en el día a día</li>
+    </ul>
+  </section>
+
+  <!-- ───────── 03. QUÉ ES OIKE ───────── -->
+  <section id="oike">
+    <div class="section-num">03.</div>
+    <h2>Qué es Oike</h2>
+
+    <div class="quote-box">
+      Oike es la herramienta que usa un vendedor para saber <strong>a quién hablarle</strong>, <strong>qué decirle</strong>, y <strong>qué hacer hoy</strong> para mover pipeline — sin depender de motivación, sin depender del founder, y sin necesitar cuatro herramientas distintas.
+    </div>
+
+    <h3 style="margin-top:32px;">El problema que resolvemos</h3>
+    <p>En 20 años vendiendo B2B vi el mismo patrón: empresas que compran CRM, herramientas de email, de enriquecimiento, de LinkedIn automation, y siguen sin pipeline predecible.</p>
+    <p style="font-size:18px;color:var(--text);font-weight:600;margin-top:8px;">El problema nunca fue la tecnología. <span class="orange">Fue el método.</span></p>
+
+    <ul style="margin-top:14px;">
+      <li>Los equipos no cargan información porque es complejo</li>
+      <li>No saben leer los datos porque no hay estructura</li>
+      <li>No actúan sobre ellos porque nadie les dijo qué acción tomar hoy</li>
+    </ul>
+
+    <h3 style="margin-top:36px;">Qué hace Oike concretamente</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4>👥 Cuentas y stakeholders</h4>
+        <p style="font-size:14px;">Base de datos viva, multi-tenant, enriquecida automáticamente.</p>
+      </div>
+      <div class="card">
+        <h4>✨ Mensajes con IA</h4>
+        <p style="font-size:14px;">Personalización real con contexto del stakeholder y del negocio.</p>
+      </div>
+      <div class="card">
+        <h4>📊 Pipeline y oportunidades</h4>
+        <p style="font-size:14px;">Estado de cada conversación, sin inventar stages.</p>
+      </div>
+      <div class="card">
+        <h4>📅 Action plan diario</h4>
+        <p style="font-size:14px;">Oike te dice qué hacer hoy, no qué podrías hacer.</p>
+      </div>
+      <div class="card">
+        <h4>🎯 Estrategia integrada</h4>
+        <p style="font-size:14px;">No es solo ejecución, es método aplicado.</p>
+      </div>
+      <div class="card">
+        <h4>📧 Sync con Gmail</h4>
+        <p style="font-size:14px;">Tu correo es parte del sistema, no algo aparte.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:44px;">Dónde vive Oike en el stack</h3>
+    <div class="stack">
+      <div class="stack-box oike">
+        <div class="label">MOTOR</div>
+        <div class="name">Oike</div>
+        <div class="what">Inteligencia + acción</div>
+      </div>
+      <div class="stack-arrow">→</div>
+      <div class="stack-box">
+        <div class="label">CRM</div>
+        <div class="name">Attio</div>
+        <div class="what">Repositorio de deals</div>
+      </div>
+      <div class="stack-arrow">→</div>
+      <div class="stack-box">
+        <div class="label">CIERRE</div>
+        <div class="name">Pipeline</div>
+        <div class="what">Conversiones</div>
+      </div>
+    </div>
+    <p style="margin-top:18px;font-size:16px;color:var(--text);">
+      Oike vive <strong style="color:var(--green);">aguas arriba del CRM</strong>. Cuando un lead responde y pasa a oportunidad, se sincroniza al CRM. <strong>No reemplazamos Attio. Lo complementamos.</strong>
+    </p>
+  </section>
+
+  <!-- ───────── 04. LO QUE SÉ DE USTEDES ───────── -->
+  <section id="ustedes">
+    <div class="section-num">04.</div>
+    <h2>Lo que sé de ustedes</h2>
+    <div class="lead">
+      Antes de que me cuenten, déjenme mostrarles lo que entendí. <span class="accent">Me corrigen lo que esté mal.</span>
+    </div>
+
+    <h3 style="margin-top:36px;">El grupo en una mirada</h3>
+    <div class="group-table">
+      <div class="group-col">
+        <div class="header">UrbanFlip</div>
+        <div class="body">
+          <div class="subtitle">Inversión inmobiliaria</div>
+          <div class="desc">Compra, reforma y venta de propiedades. Escalar base de inversores.</div>
+          <div class="icp"><strong>ICP</strong>Retail €10K → Family offices €1M+</div>
+        </div>
+      </div>
+      <div class="group-col">
+        <div class="header">Onoma</div>
+        <div class="body">
+          <div class="subtitle">Venta de propiedades</div>
+          <div class="desc">Venden propiedades reformadas de €1M-€4M a compradores internacionales.</div>
+          <div class="icp"><strong>ICP</strong>Compradores LatAm, Middle East, US, Europa</div>
+        </div>
+      </div>
+      <div class="group-col">
+        <div class="header">Urbantech</div>
+        <div class="body">
+          <div class="subtitle">Infraestructura de pagos</div>
+          <div class="desc">Pagos especializados en real estate. Portfolios grandes de alquiler.</div>
+          <div class="icp"><strong>ICP</strong>Operadores con 1.000-3.000 propiedades en alquiler</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:36px;">
+      <div class="card green">
+        <h3>✓ Fortalezas</h3>
+        <ul>
+          <li><strong>Founder con 22K seguidores en LinkedIn</strong> — marca personal fuerte, diferenciador real</li>
+          <li><strong>Tres líneas con ICPs claros</strong> — deal sizes atractivos en cada una</li>
+          <li><strong>Attio ya implementado en UrbanFlip</strong> — hay intención de estructurar</li>
+          <li><strong>Modelo de negocio probado</strong> — el grupo crece, el producto existe</li>
+        </ul>
+      </div>
+      <div class="card orange">
+        <h3 style="color:var(--orange);">⚠️ Gaps</h3>
+        <ul>
+          <li><strong>Crecimiento 100% orgánico</strong> — si el founder deja de postear una semana, el pipeline se seca</li>
+          <li><strong>Sin base de datos estructurada</strong> de compradores ni inversores — cada venta empieza de cero</li>
+          <li><strong>Urbantech sin go-to-market</strong> — producto listo, sin motor comercial</li>
+          <li><strong>Dependencia del founder</strong> — es cara, canal y cierre</li>
+          <li><strong>Sin procesos de prospección activa</strong> — cero outbound, cero secuencias</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 05. HIPÓTESIS ───────── -->
+  <section id="hipotesis">
+    <div class="section-num">05.</div>
+    <h2>Hipótesis de mercado</h2>
+    <div class="lead">
+      Estas son las hipótesis con las que llego. Cada una es una pregunta que me gustaría <span class="accent">confirmar o descartar</span> con ustedes.
+    </div>
+
+    <div style="margin-top:36px;">
+      <div class="hypothesis">
+        <h4>UrbanFlip · Inversores</h4>
+        <p><span class="h-label h-hyp">HIPÓTESIS</span>El family office español típicamente invierte en real estate vía 3 canales: <strong>banca privada, asesor patrimonial directo, o clubes de inversión</strong>. Los inversores retail (€10K-€50K) y los de ticket medio (€50K-€500K) responden a canales diferentes.</p>
+        <p><span class="h-label h-imp">IMPLICACIÓN</span>Probablemente necesitan <strong>tres motores de captación distintos</strong>, no uno. Segmentar por ticket es tan importante como segmentar por sector.</p>
+      </div>
+
+      <div class="hypothesis">
+        <h4>Onoma · Compradores internacionales</h4>
+        <p><span class="h-label h-hyp">HIPÓTESIS</span>Los compradores de €1M-€4M en España están concentrados en corredores específicos: <strong>españoles repatriados (Londres, NY), latinos de Miami y CDMX, árabes del Golfo con oficinas en Londres, tech people del norte de Europa</strong> buscando segunda residencia.</p>
+        <p><span class="h-label h-imp">IMPLICACIÓN</span>El canal indirecto (personal shoppers, brokers, banca privada) probablemente <strong>convierte mejor que el directo</strong> para el ticket alto. Una base estructurada de aliados vale oro.</p>
+      </div>
+
+      <div class="hypothesis">
+        <h4>Urbantech · Operadores de alquiler</h4>
+        <p><span class="h-label h-hyp">HIPÓTESIS</span>Los operadores con 1.000-3.000 propiedades en alquiler en España son un universo identificable y acotado — probablemente <strong>entre 50 y 100 empresas target total</strong>. Es un mercado de account-based selling puro.</p>
+        <p><span class="h-label h-imp">IMPLICACIÓN</span>No necesitan volumen, necesitan <strong>penetración</strong>. Trabajo quirúrgico de mapeo de cuentas, identificación de stakeholders (CFO, Head of Ops, CTO según el caso), y secuencias de alto valor.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 06. PREGUNTAS ───────── -->
+  <section id="preguntas">
+    <div class="section-num">06.</div>
+    <h2>Lo que no puedo saber desde afuera</h2>
+    <div class="lead">
+      Estas son las preguntas que necesito que me respondan. <span class="accent">No hay orden específico</span> — lo que salga en la conversación, sale.
+    </div>
+
+    <div style="margin-top:36px;">
+      <div class="q-group">
+        <h4>Sobre el equipo</h4>
+        <div class="q-list">
+          <div class="q">¿Quién está dedicado a ventas hoy además del founder?</div>
+          <div class="q">¿Qué experiencia tienen en outbound estructurado?</div>
+          <div class="q">¿Cuánto bandwidth semanal tienen para construir algo nuevo, además de su trabajo actual?</div>
+        </div>
+      </div>
+
+      <div class="q-group">
+        <h4>Sobre el negocio</h4>
+        <div class="q-list">
+          <div class="q">¿Cuánto pipeline / revenue generan por línea hoy?</div>
+          <div class="q">¿Cuál es la meta de crecimiento para los próximos 12 meses, por línea?</div>
+          <div class="q">¿Cuál es la línea que más les quita el sueño hoy? ¿Cuál tiene más urgencia?</div>
+        </div>
+      </div>
+
+      <div class="q-group">
+        <h4>Sobre lo que intentaron antes</h4>
+        <div class="q-list">
+          <div class="q">¿Han hecho outbound antes? ¿Qué funcionó, qué no?</div>
+          <div class="q">¿Por qué eligieron Attio? ¿Cómo lo están adoptando hoy?</div>
+          <div class="q">¿Evaluaron otras herramientas (Apollo, Clay, Lemlist, HubSpot)? ¿Qué les pareció?</div>
+        </div>
+      </div>
+
+      <div class="q-group">
+        <h4>Sobre la visión</h4>
+        <div class="q-list">
+          <div class="q">Si imaginan este grupo en 12 meses, ¿qué cambió?</div>
+          <div class="q">¿Qué los frenó de hacer outbound hasta ahora?</div>
+          <div class="q">¿Cómo miden éxito en ventas hoy?</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 07. PRÓXIMOS PASOS ───────── -->
+  <section id="pasos">
+    <div class="section-num">07.</div>
+    <h2>Próximos pasos</h2>
+    <div class="lead">
+      Al final de esta reunión, mi compromiso con ustedes es <span class="accent">concreto</span>:
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="when">HOY</div>
+        <div class="what">Escuchar, tomar notas, procesar contexto. <strong>No ofertar.</strong></div>
+      </div>
+      <div class="step">
+        <div class="when">48-72h</div>
+        <div class="what">Procesar lo conversado. Identificar línea prioritaria, alcance correcto, formato de trabajo.</div>
+      </div>
+      <div class="step">
+        <div class="when">5 DÍAS</div>
+        <div class="what">Propuesta personalizada con recomendación concreta: <strong>qué atacar primero</strong>, con qué nivel de mi involucramiento, y pricing ajustado al equipo real.</div>
+      </div>
+      <div class="step">
+        <div class="when">7-10 DÍAS</div>
+        <div class="what">Segunda reunión: revisamos la propuesta juntos, ajustamos, deciden.</div>
+      </div>
+    </div>
+
+    <div class="quote-box" style="margin-top:40px;">
+      Lo que les pido hoy: <strong>transparencia</strong> sobre dónde están, qué les duele, y qué les entusiasma. Cuanto más honestos sean hoy, mejor propuesta les armo.
+    </div>
+  </section>
+
+  <!-- ───────── 08. CIERRE ───────── -->
+  <section id="cierre" class="closing">
+    <div class="section-num">08.</div>
+    <h2>Una nota final antes de empezar</h2>
+
+    <blockquote>
+      Crecí en Santa Cruz de la Sierra. Ahí aprendí lo más importante que sé: <span class="accent">empatía, conversación genuina, y el arte de construir relaciones</span>.
+    </blockquote>
+
+    <p style="font-size:18px;max-width:680px;margin:0 auto;color:var(--text);">
+      En Santa Cruz no te enseñan frameworks de ventas.<br>
+      Te enseñan a <strong style="color:var(--green);">mirar a los ojos, escuchar, y generar confianza</strong>.
+    </p>
+
+    <p style="font-size:22px;font-style:italic;color:var(--green);margin-top:32px;font-weight:600;">
+      Esta reunión va a funcionar mejor si la tratamos así.
+    </p>
+
+    <div class="signature">
+      <div class="name">Alejandra Cadario</div>
+      <div class="role">Fundadora de Oike</div>
+      <div class="links">
+        <a href="mailto:team@alecadario.com">team@alecadario.com</a>
+        <a href="https://oike.app" target="_blank" rel="noopener">oike.app</a>
+        <a href="https://alecadario.com" target="_blank" rel="noopener">alecadario.com</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Oike · Sales Intelligence for Humans · <a href="https://oike.app">oike.app</a>
+  </footer>
+
+  <script>
+    // ── Scroll-triggered fade-ins ──
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+        }
+      });
+    }, { threshold: 0.15 });
+
+    document.querySelectorAll('.section-num, h2, .lead, .card, .group-col, .hypothesis, .q-group, .step, .timeline-item').forEach(el => {
+      observer.observe(el);
+    });
+
+    // Stagger delays for grouped elements
+    document.querySelectorAll('.grid-2, .grid-3, .group-table').forEach(grid => {
+      [...grid.children].forEach((child, i) => {
+        child.style.transitionDelay = `${i * 80}ms`;
+      });
+    });
+    document.querySelectorAll('.timeline-item').forEach((el, i) => {
+      el.style.transitionDelay = `${i * 100}ms`;
+    });
+    document.querySelectorAll('.step').forEach((el, i) => {
+      el.style.transitionDelay = `${i * 120}ms`;
+    });
+
+    // ── Active dot on scroll ──
+    const sections = document.querySelectorAll('section');
+    const dots = document.querySelectorAll('.nav-dots a');
+    const activeObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          dots.forEach(d => d.classList.remove('active'));
+          const id = entry.target.id;
+          const dot = document.querySelector(`.nav-dots a[data-section="${id}"]`);
+          if (dot) dot.classList.add('active');
+        }
+      });
+    }, { threshold: 0.4 });
+    sections.forEach(s => activeObserver.observe(s));
+  </script>
+</body>
+</html>
