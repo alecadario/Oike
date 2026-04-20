@@ -1,0 +1,25 @@
+[build]
+  command = "npm install && npm run build"
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# App at /app
+[[redirects]]
+  from = "/app"
+  to = "/app.html"
+  status = 200
+
+# SPA fallback for app routes (keeps /app/* working)
+[[redirects]]
+  from = "/app/*"
+  to = "/app.html"
+  status = 200
+
+# Urban presentation
+[[redirects]]
+  from = "/urban"
+  to = "/urban.html"
+  status = 200
