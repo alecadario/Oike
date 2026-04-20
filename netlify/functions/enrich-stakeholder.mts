@@ -49,6 +49,14 @@ function mapDropcontactQualification(q: string): string {
   return 'risky';
 }
 
+function mapApolloStatus(s: string): string {
+  const v = String(s || '').toLowerCase();
+  if (v === 'verified') return 'valid';
+  if (v === 'likely to engage' || v === 'guessed') return 'risky';
+  if (v === 'unavailable' || v === 'invalid') return 'invalid';
+  return 'risky';
+}
+
 function confidenceFromQualification(q: string): number {
   switch (q) {
     case 'valid': return 95;
@@ -129,6 +137,43 @@ async function enrichWithDropcontact(firstName: string, lastName: string, domain
   return { ok: false, reason: 'timeout' };
 }
 
+// ── Apollo (fallback) ──
+async function enrichWithApollo(firstName: string, lastName: string, domain: string | null, apiKey: string) {
+  const body: any = {
+    first_name: firstName,
+    last_name: lastName,
+    reveal_personal_emails: true,
+  };
+  if (domain) body.domain = domain;
+
+  const res = await fetch('https://api.apollo.io/api/v1/people/match', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      'accept': 'application/json',
+      'X-Api-Key': apiKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.person) {
+    return { ok: false, reason: `apollo-${res.status}` };
+  }
+  const email = data.person.email;
+  if (!email || String(email).toLowerCase().includes('email_not_unlocked')) {
+    return { ok: false, reason: 'no-email' };
+  }
+  const qualification = mapApolloStatus(data.person.email_status || '');
+  return {
+    ok: true,
+    email: String(email).toLowerCase(),
+    qualification,
+    confidence: confidenceFromQualification(qualification),
+    source: 'apollo',
+  };
+}
+
 // ── Handler ──
 export default async (req: Request, context: Context) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 204 });
@@ -150,13 +195,14 @@ export default async (req: Request, context: Context) => {
 
   const AIRTABLE_KEY = Netlify.env.get('AIRTABLE_API_KEY');
   const DROPCONTACT_KEY = Netlify.env.get('DROPCONTACT_API_KEY');
+  const APOLLO_KEY = Netlify.env.get('APOLLO_API_KEY');
   if (!AIRTABLE_KEY) {
     return new Response(JSON.stringify({ error: 'Airtable API key not configured' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
-  if (!DROPCONTACT_KEY) {
-    return new Response(JSON.stringify({ error: 'Dropcontact API key not configured' }), {
+  if (!DROPCONTACT_KEY && !APOLLO_KEY) {
+    return new Response(JSON.stringify({ error: 'No enrichment provider configured (Dropcontact or Apollo)' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -215,8 +261,17 @@ export default async (req: Request, context: Context) => {
       }
     }
 
-    // 4. Dropcontact (single provider)
-    const result: any = await enrichWithDropcontact(firstName, lastName, domain, DROPCONTACT_KEY);
+    // 4. Waterfall: Dropcontact → Apollo fallback
+    let result: any = { ok: false, reason: 'no-provider-configured' };
+    if (DROPCONTACT_KEY) {
+      result = await enrichWithDropcontact(firstName, lastName, domain, DROPCONTACT_KEY);
+    }
+    if (!result.ok && APOLLO_KEY) {
+      const apolloResult = await enrichWithApollo(firstName, lastName, domain, APOLLO_KEY);
+      // Only overwrite if Apollo found something; otherwise keep Dropcontact's reason
+      if (apolloResult.ok) result = apolloResult;
+      else if (!DROPCONTACT_KEY) result = apolloResult; // no Dropcontact → surface Apollo's error
+    }
 
     // 5. Save to Airtable
     const today = new Date().toISOString().slice(0, 10);
