@@ -11281,20 +11281,20 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                               </div>
                               {!toEmail && !genGmail && (
                                 <div style={{ fontSize:11, color:'var(--globant-muted)', marginBottom:10, paddingLeft:2 }}>
-                                  💡 Seleccioná un stakeholder en Step 1 para pre-llenar el destinatario
+                                  💡 Select a stakeholder in Step 1 to pre-fill the recipient
                                 </div>
                               )}
                               {genGmail && (
                                 <div style={{ padding:'10px 14px', borderRadius:8, background:'rgba(66,133,244,0.08)', border:'1px solid rgba(66,133,244,0.2)', fontSize:12, color:'#93c5fd', marginBottom:10 }}>
                                   {toEmail
-                                    ? 'Gmail abierto con ' + toEmail + ' como destinatario y asunto pre-llenado. Solo pegá con '
-                                    : 'Gmail abierto. Pegá con '}
-                                  <strong>Ctrl+V</strong> (o ⌘V) en el cuerpo del correo.
+                                    ? 'Gmail opened with ' + toEmail + ' as recipient and subject pre-filled. Just paste with '
+                                    : 'Gmail opened. Paste with '}
+                                  <strong>Ctrl+V</strong> (or ⌘V) in the email body.
                                 </div>
                               )}
                               <div style={{ display:'flex', gap:10, marginBottom:10 }}>
                                 <button onClick={copyProposalHTML} style={{ flex:1, padding:'11px', borderRadius:10, background:'var(--globant-card)', border:'1px solid var(--globant-border)', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }}>
-                                  {genCopied ? '✅ Copiado!' : '📋 Solo copiar HTML'}
+                                  {genCopied ? '✅ Copied!' : '📋 Copy HTML only'}
                                 </button>
                               </div>
                             </div>
@@ -12516,24 +12516,42 @@ Return ONLY a valid JSON array:
         const srcCtx = buildSourceContext();
         const ctxPayload = srcCtx ? JSON.stringify(srcCtx).slice(0, 1500) : 'Last 14 days of outreach activity';
 
-        const prompt = `You are a content coach for a B2B founder. Before generating LinkedIn post ideas, ask 2-3 focused questions to sharpen the angle.
+        const prompt = `You are a content coach for a B2B founder. Before generating LinkedIn post ideas, ask 2-3 questions that pull OUT their authentic, specific, unfiltered perspective.
 
 SOURCE TYPE: ${ideaSource}
 SOURCE DATA:
 ${ctxPayload}
 
-Ask questions that:
-- Are specific to this source (not generic "what do you want to share")
-- Help identify the ONE angle the user cares about most
-- Probe for emotion / opinion / insight beyond the raw facts
-- Are answerable in 1-2 sentences each
+Your questions should EXTRACT truth, not invite structure. The goal is to get the founder to say something REAL that only they could say — so the posts don't sound AI-generated.
+
+RULES for your questions:
+✓ Specific to THIS source (not "what do you want to say about your work")
+✓ Ask for moments, feelings, specifics: numbers, names, dates, places, real quotes
+✓ Push for opinions, not observations ("what annoyed you" > "what happened")
+✓ Allow contradictions and uncomfortable truths
+✓ 1 question per concrete dimension (the feeling · the detail · the take)
+✓ Phrased as a human would ask a friend over coffee, not as a content coach
+
+AVOID:
+✗ Generic "what's your unique angle" questions
+✗ "What lesson did you learn" (invites AI-sounding lessons)
+✗ "What inspired you" (too vague)
+✗ Asking about frameworks or takeaways
+✗ Marketing-speak
+✗ More than 3 questions (keep it tight)
+
+Example good questions (different sources):
+• (past event) "What's the one thing someone said during X that you still haven't fully processed?"
+• (campaign) "Who specifically in this ICP have you been annoyed by lately, and why?"
+• (outreach) "Which reply from this week surprised you — and what did they say, literally?"
+• (upcoming event) "If you had 30 seconds with the audience, what would you actually want them to walk away remembering?"
 
 Return ONLY valid JSON:
 {
   "questions": [
-    "Specific question 1?",
-    "Specific question 2?",
-    "Specific question 3?"
+    "Specific, coffee-chat-style question 1?",
+    "Specific, coffee-chat-style question 2?",
+    "Specific, coffee-chat-style question 3?"
   ]
 }`;
         try {
@@ -12552,28 +12570,53 @@ Return ONLY valid JSON:
         setLoadingCoach(false);
       };
 
-      // ── Improve draft (4 modes) ──
+      // ── Improve draft (5 modes) ──
       const improveDraft = async (mode) => {
         if (!draft.trim()) { alert('Nothing to improve'); return; }
         setImproving(mode);
         const instructions = {
-          'shorter': 'Cut the draft by 30-50% while preserving the core point, hook and closing. Aim for punch. Keep the same voice.',
-          'hook': 'Rewrite ONLY the first line (the hook). Make it scroll-stopping, specific, bold, curiosity-triggering. Keep the rest of the post EXACTLY as is.',
-          'cta': 'Rewrite ONLY the final line/closing (the CTA / conversation starter). Make it a sharper invitation to engage. Keep the rest of the post EXACTLY as is.',
-          'polish': 'Polish the draft: tighten phrasing, kill filler words and corporate-speak, strengthen verbs, fix rhythm. Maintain voice and meaning. Do not restructure.',
-        };
-        const prompt = `You are a senior LinkedIn copywriter helping refine a post.
+          'shorter': 'Cut the draft by 30-50% while preserving the core point, hook and closing. Aim for punch. Keep the exact same voice — do NOT rewrite stylistically.',
+          'hook': 'Rewrite ONLY the first line (the hook). Make it scroll-stopping, specific, bold, curiosity-triggering. No cliché openers ("In today\'s world", "Let me ask you this", "Here\'s the thing"). Keep the rest of the post EXACTLY as is.',
+          'cta': 'Rewrite ONLY the final line/closing. Make it a sharper invitation to engage, but NOT a cliché ("Agree? Disagree?", "Let me know in the comments", "Thoughts?"). A real human closing — could be a question, a statement, or silence. Keep the rest EXACTLY as is.',
+          'polish': 'Polish the draft: tighten phrasing, kill filler words and corporate-speak, strengthen verbs, fix awkward rhythm. Maintain voice and meaning. Do not restructure or add content.',
+          'debot': `RE-HUMANIZE THIS POST. Identify and destroy every single AI-tell — the phrases, structures, and patterns that make LinkedIn content obviously AI-generated.
 
-${voiceSamples.trim() ? `VOICE SAMPLES (match this voice):\n"""\n${voiceSamples.slice(0, 3000)}\n"""\n\n` : ''}CURRENT DRAFT:
+Specifically eliminate:
+• Clichés: "Here's the thing", "Let me ask you this", "Imagine a world", "Most people don't realize", "The truth is", "And then it hit me", "Let that sink in"
+• Binary-flip patterns: "Stop X. Start Y." / "It's not X. It's Y."
+• Corporate-speak: leverage, synergy, ecosystem, empower, unlock, game-changer, next-level
+• "Unpopular opinion:" / "Hot take:" intros
+• Numbered lesson lists tied to anecdotes
+• Hashtag soup at end
+• Single-word dramatic paragraphs ("Stop." "Wait." "Pause.")
+• Perfect transitions
+• Motivational closing takeaways
+• "Agree? Disagree? Let me know in the comments."
+
+Add instead (if missing):
+• Uneven sentence length (some short, some meandering)
+• Concrete specifics (real numbers, real places, real dates, real names)
+• Strong opinion without apology
+• Contradictions — it's OK to disagree with yourself mid-post
+• Fragments
+• "And" or "But" at start of sentences
+• Ending abruptly if it feels right
+
+Keep the core message intact. Just strip the AI patina. The result should read like it was typed, not generated.`,
+        };
+        const prompt = `You are a senior LinkedIn editor helping refine a post.
+
+${voiceSamples.trim() ? `VOICE SAMPLES — this is the voice you must preserve/match:\n"""\n${voiceSamples.slice(0, 3000)}\n"""\n\n` : ''}CURRENT DRAFT:
 """
 ${draft}
 """
 
-INSTRUCTION: ${instructions[mode] || instructions.polish}
+INSTRUCTION:
+${instructions[mode] || instructions.polish}
 
-Output ONLY the revised post. No meta-commentary. No "Here's the improved version". Just the text.`;
+Output ONLY the revised post. No meta-commentary. No "Here's the improved version". No markdown fences. Just the post text, ready to copy-paste.`;
         try {
-          const response = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 900 });
+          const response = await callOpenAI({ prompt, temperature: mode === 'debot' ? 0.75 : 0.55, max_tokens: 1000 });
           setDraft(response.trim());
         } catch (e) {
           console.error('[improveDraft] failed:', e);
@@ -12630,25 +12673,69 @@ Keep each field short. Return ONLY the JSON, no markdown.`;
         const wordTarget = writerType === 'Article' ? '800-1500 words, with 3-4 sections (## Header)' : writerType === 'Long Post' ? '300-500 words' : '100-200 words';
 
         const prompt = `You are writing a ${writerType} for LinkedIn in the voice of ${COMPANY_PROFILE.senderName || 'the founder'}.
-${voiceSamples.trim() ? `\nVOICE SAMPLES (match vocabulary, rhythm, sentence length, energy):\n"""\n${voiceSamples.slice(0, 4000)}\n"""\n` : ''}
-TOPIC: ${writerTopic.trim()}
+
+${voiceSamples.trim() ? `VOICE SAMPLES — THIS IS THE PRIMARY REFERENCE. Match vocabulary, sentence rhythm, length variability, register, and energy. If samples use contractions, fragments, or casual interjections, keep them:\n"""\n${voiceSamples.slice(0, 4000)}\n"""\n\n` : 'NO VOICE SAMPLES PROVIDED — default to a direct, specific, operator tone (not influencer). Avoid any polished marketing voice.\n\n'}TOPIC: ${writerTopic.trim()}
 
 TYPE: ${writerType}
 TONE: ${writerTone}
 LANGUAGE: ${writerLanguage === 'es' ? 'Spanish (use voseo if the samples use it)' : 'English'}
+LENGTH: ${wordTarget}
+${writerType === 'Article' ? 'STRUCTURE: 3-4 sections with sub-headers (## Header)' : ''}
 
-CONSTRAINTS:
-- Length: ${wordTarget}
-- Hook in the first line (NO generic openers like "In today's world...")
-- ONE clear point
-- Zero corporate speak
-- Zero hashtag soup
-- End with a conversation starter (question OR bold claim OR invitation to comment)
-${writerType === 'Article' ? '- Use 3-4 sections with sub-headers (## Header)' : ''}
-- Never name specific clients
-- Don't overuse emojis
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-AI INSTRUCTIONS — READ CAREFULLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Output: ONLY the post content, ready to copy-paste. No title above. No meta-commentary.`;
+The #1 rule: do NOT sound like AI. Most AI-generated LinkedIn posts have the same 20 tells. Avoid ALL of them.
+
+BANNED PHRASES (never use or anything close):
+• "In today's fast-paced world" / "In today's world"
+• "Here's the thing"
+• "Let me ask you this"
+• "Imagine a world where"
+• "Most people don't realize"
+• "It took me X years to learn"
+• "The truth is…"
+• "And then it hit me"
+• "Let that sink in"
+• "Unpopular opinion:" / "Hot take:"
+• "This changed everything"
+• "Here's a framework I use"
+• "Stop doing X. Start doing Y." (the binary flip pattern)
+• "It's not X. It's Y." (two-part reveal pattern)
+• "What I learned from Z" (as opener)
+• "Agree? Disagree? Let me know in the comments."
+• Paragraphs that are just one word for dramatic effect: "Stop." "Wait." "Pause."
+
+BANNED CORPORATE-SPEAK:
+leverage, synergy, ecosystem, empower, unlock, game-changer, next-level, paradigm, holistic, align, scalable (when used as filler).
+
+BANNED STRUCTURAL PATTERNS:
+• Hook → Story → Lesson → CTA (too formulaic — break this)
+• Every paragraph a fresh insight (too dense)
+• Bullet lists for every point
+• Hashtag soup at end (#sales #founders #mindset) — max 2-3 hashtags if any, and only if the sample posts use them
+• Perfect transitions between paragraphs
+• Ending with a motivational takeaway
+• Numbered "5 things I learned" lists
+
+HUMAN-VOICE RULES (do THIS instead):
+• Dive in mid-thought — you don't always need a "hook"
+• Let sentence length be uneven (some short. Some that meander for a clause or two and then end abruptly.)
+• Use specifics: real dates, real locations, real numbers, real titles
+• Strong opinion, no apology, no throat-clearing
+• It's OK to not have a CTA
+• It's OK to end abruptly
+• Contradict yourself sometimes — real people do
+• Use "And" or "But" at the start of sentences
+• Fragments are fine
+• Don't explain every reference — let the reader work
+• NEVER name specific clients/companies you've worked with unless explicitly allowed
+• Avoid excessive emojis (max 2-3, and only if samples use them)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary. No "Here's your post:" preamble.`;
 
         try {
           const response = await callOpenAI({ prompt, temperature: 0.85, max_tokens: maxTokens });
@@ -12694,7 +12781,49 @@ Output: ONLY the post content, ready to copy-paste. No title above. No meta-comm
         setSavingDraft(false);
       };
 
-      // ── Mark as posted ──
+      // ── Post to LinkedIn: copy + open LinkedIn composer + log in Library ──
+      const postToLinkedIn = async () => {
+        if (!draft.trim()) { alert('Nothing to post'); return; }
+        // Synchronous first: clipboard + open tab (browsers require user-gesture context)
+        try { await navigator.clipboard.writeText(draft); } catch {}
+        window.open('https://www.linkedin.com/feed/?shareActive', '_blank');
+        // Log in Airtable in background
+        setSavingDraft(true);
+        try {
+          const a = api || new AirtableAPI();
+          const firstLine = draft.split('\n').find(l => l.trim())?.slice(0, 80) || 'Untitled';
+          const nowIso = new Date().toISOString();
+          const today = nowIso.slice(0, 10);
+          const fields = {
+            'Title': firstLine,
+            'Content': draft,
+            'Type': writerType,
+            'Status': 'Posted',
+            'Platform': 'LinkedIn',
+            'Posted Date': today,
+            ...(writerTag ? { 'Topic Tags': [writerTag] } : {}),
+            ...(sourceInsight ? { 'Source Insight': sourceInsight } : {}),
+            'Engagement Notes': `Posted ${nowIso.slice(0, 16).replace('T', ' ')} from Content Lab`,
+          };
+          const record = await a.createRecord(TABLE_IDS.contentLab, fields);
+          if (onLogActivity) onLogActivity();
+          // Prompt for URL (optional, after LinkedIn tab is open)
+          setTimeout(() => {
+            const url = prompt('📲 LinkedIn opened + post copied to clipboard.\n\nPaste with Cmd+V in LinkedIn and click Post.\n\nOnce posted, paste the LinkedIn URL here (or cancel — you can add it later):');
+            if (url && url.trim() && record?.id) {
+              a.updateRecord(TABLE_IDS.contentLab, record.id, { 'LinkedIn URL': url.trim() })
+                .then(() => { if (onLogActivity) onLogActivity(); })
+                .catch(e => console.warn('LinkedIn URL save failed:', e));
+            }
+          }, 400);
+        } catch (e) {
+          console.error('[postToLinkedIn] save failed:', e);
+          alert('Post copied + LinkedIn opened, but failed to log in Library: ' + (e.message || 'unknown'));
+        }
+        setSavingDraft(false);
+      };
+
+      // ── Mark as posted (simple update) ──
       const markPosted = async (post, linkedinUrl) => {
         try {
           const a = api || new AirtableAPI();
@@ -12707,6 +12836,34 @@ Output: ONLY the post content, ready to copy-paste. No title above. No meta-comm
         } catch (e) {
           console.error('[Content Lab] Mark posted failed:', e);
           alert('Failed: ' + (e.message || 'unknown'));
+        }
+      };
+
+      // ── Post from Library: copy + open LinkedIn + mark posted ──
+      const postFromLibrary = async (post) => {
+        const content = F(post, 'Content') || '';
+        if (!content.trim()) { alert('Empty post, nothing to share'); return; }
+        try { await navigator.clipboard.writeText(content); } catch {}
+        window.open('https://www.linkedin.com/feed/?shareActive', '_blank');
+        const nowIso = new Date().toISOString();
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.contentLab, post.id, {
+            'Status': 'Posted',
+            'Posted Date': nowIso.slice(0, 10),
+            'Engagement Notes': ((F(post, 'Engagement Notes') || '') + `\nPosted ${nowIso.slice(0, 16).replace('T', ' ')} from Content Lab`).trim(),
+          });
+          if (onLogActivity) onLogActivity();
+          setTimeout(() => {
+            const url = prompt('📲 LinkedIn opened + post copied.\n\nPaste in LinkedIn (Cmd+V) and click Post.\n\nOnce posted, paste the LinkedIn URL here (or cancel to add later):');
+            if (url && url.trim()) {
+              a.updateRecord(TABLE_IDS.contentLab, post.id, { 'LinkedIn URL': url.trim() })
+                .then(() => { if (onLogActivity) onLogActivity(); })
+                .catch(e => console.warn('LinkedIn URL save failed:', e));
+            }
+          }, 400);
+        } catch (e) {
+          console.error('[postFromLibrary] failed:', e);
         }
       };
 
@@ -12968,20 +13125,24 @@ Output: ONLY the post content, ready to copy-paste. No title above. No meta-comm
                       <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={copyDraft}>
                         {copied ? '✅ Copied!' : '📋 Copy'}
                       </button>
-                      <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={saveDraft} disabled={savingDraft}>
-                        {savingDraft ? '⏳' : '💾 Save to Library'}
+                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={saveDraft} disabled={savingDraft}>
+                        {savingDraft ? '⏳' : '💾 Save as Draft'}
+                      </button>
+                      <button className="action-btn btn-linkedin" style={{ fontSize: 11, background: 'rgba(10,102,194,0.18)', border: '1px solid rgba(10,102,194,0.5)', color: '#4A9BFF' }} onClick={postToLinkedIn} disabled={savingDraft}>
+                        {savingDraft ? '⏳' : '🔗 Post on LinkedIn'}
                       </button>
                     </div>
                   </div>
 
-                  {/* Improve with AI — 4 modes */}
+                  {/* Improve with AI — 5 modes */}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10, padding: '8px 10px', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 8 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#a78bfa', letterSpacing: 1, textTransform: 'uppercase', alignSelf: 'center', marginRight: 4 }}>✨ Improve:</span>
                     {[
-                      { key: 'shorter', label: '✂️ Shorter', title: 'Cut 30-50% keeping the core' },
-                      { key: 'hook', label: '🔥 Punchier hook', title: 'Rewrite only first line' },
-                      { key: 'cta', label: '🎯 Sharpen CTA', title: 'Rewrite only closing/CTA' },
-                      { key: 'polish', label: '✨ Polish', title: 'Tighten phrasing, kill filler' },
+                      { key: 'shorter', label: '✂️ Shorter', title: 'Cut 30-50% keeping the core', color: '#a78bfa' },
+                      { key: 'hook', label: '🔥 Punchier hook', title: 'Rewrite only first line', color: '#a78bfa' },
+                      { key: 'cta', label: '🎯 Sharpen CTA', title: 'Rewrite only closing/CTA', color: '#a78bfa' },
+                      { key: 'polish', label: '✨ Polish', title: 'Tighten phrasing, kill filler', color: '#a78bfa' },
+                      { key: 'debot', label: '🤖→👤 Debot', title: 'Strip AI tells — humanize the text', color: '#4ade80', special: true },
                     ].map(m => (
                       <button key={m.key}
                         onClick={() => improveDraft(m.key)}
@@ -12989,8 +13150,9 @@ Output: ONLY the post content, ready to copy-paste. No title above. No meta-comm
                         title={m.title}
                         style={{
                           fontSize: 10, padding: '4px 10px', borderRadius: 6, cursor: improving ? 'wait' : 'pointer',
-                          background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)',
-                          color: '#a78bfa', fontWeight: 600,
+                          background: m.special ? 'rgba(74,222,128,0.15)' : 'rgba(167,139,250,0.15)',
+                          border: `1px solid ${m.special ? 'rgba(74,222,128,0.4)' : 'rgba(167,139,250,0.35)'}`,
+                          color: m.color, fontWeight: 700,
                         }}>
                         {improving === m.key ? '⏳ Working...' : m.label}
                       </button>
@@ -13056,10 +13218,9 @@ Output: ONLY the post content, ready to copy-paste. No title above. No meta-comm
                               {editingPost === post.id ? '✕' : '👁️'}
                             </button>
                             {status !== 'Posted' && (
-                              <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={() => {
-                                const url = prompt('LinkedIn URL of the published post (optional):') || '';
-                                markPosted(post, url);
-                              }}>✓ Posted</button>
+                              <button className="action-btn btn-primary" style={{ fontSize: 10, background: 'rgba(10,102,194,0.18)', border: '1px solid rgba(10,102,194,0.5)', color: '#4A9BFF' }} onClick={() => postFromLibrary(post)}>
+                                🔗 Post on LinkedIn
+                              </button>
                             )}
                           </div>
                         </div>
