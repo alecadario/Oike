@@ -571,14 +571,19 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           } else if (data.cached) {
             alert('Already enriched recently — no credits consumed.');
           } else {
-            // Dropcontact couldn't find it — offer manual LinkedIn search fallback
-            const reason = data.reason || 'unknown';
+            // No provider found the email — offer manual LinkedIn search fallback
             const domainInfo = data.domain_used ? `Domain tried: ${data.domain_used}` : 'No company domain was available on the account';
             const fullName = `${F(stakeholder, 'Name') || ''} ${F(stakeholder, 'Last name') || ''}`.trim();
             const liSearch = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(fullName + (accountName ? ' ' + accountName : ''))}`;
+            const tried = Array.isArray(data.providers_tried) ? data.providers_tried : [];
+            const providerLines = [];
+            if (tried.includes('dropcontact')) providerLines.push(`• Dropcontact → ${data.dropcontact_reason || data.reason || 'no match'}`);
+            if (tried.includes('apollo'))      providerLines.push(`• Apollo → ${data.apollo_reason || data.reason || 'no match'}`);
+            if (providerLines.length === 0)    providerLines.push(`• No providers configured (check env vars)`);
             const shouldOpenLi = confirm(
-              `No email found by Dropcontact.\n\n` +
-              `Reason: ${reason}\n${domainInfo}\n\n` +
+              `No email found.\n\n` +
+              `Providers tried:\n${providerLines.join('\n')}\n\n` +
+              `${domainInfo}\n\n` +
               `Tip: small or private domains often aren't in enrichment DBs. Try manual search on LinkedIn → check their profile/contact info.\n\n` +
               `Open LinkedIn search for "${fullName}" now?`
             );
