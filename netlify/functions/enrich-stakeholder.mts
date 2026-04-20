@@ -263,14 +263,23 @@ export default async (req: Request, context: Context) => {
 
     // 4. Waterfall: Dropcontact → Apollo fallback
     let result: any = { ok: false, reason: 'no-provider-configured' };
+    const providersTried: string[] = [];
+    let dropcontactReason = '';
+    let apolloReason = '';
+
     if (DROPCONTACT_KEY) {
+      providersTried.push('dropcontact');
       result = await enrichWithDropcontact(firstName, lastName, domain, DROPCONTACT_KEY);
+      if (!result.ok) dropcontactReason = result.reason || 'unknown';
     }
     if (!result.ok && APOLLO_KEY) {
+      providersTried.push('apollo');
       const apolloResult = await enrichWithApollo(firstName, lastName, domain, APOLLO_KEY);
-      // Only overwrite if Apollo found something; otherwise keep Dropcontact's reason
-      if (apolloResult.ok) result = apolloResult;
-      else if (!DROPCONTACT_KEY) result = apolloResult; // no Dropcontact → surface Apollo's error
+      if (apolloResult.ok) {
+        result = apolloResult;
+      } else {
+        apolloReason = apolloResult.reason || 'unknown';
+      }
     }
 
     // 5. Save to Airtable
@@ -300,6 +309,9 @@ export default async (req: Request, context: Context) => {
       status: updateFields['enrichment_status'],
       reason: result.ok ? null : result.reason,
       domain_used: domain,
+      providers_tried: providersTried,
+      dropcontact_reason: dropcontactReason || null,
+      apollo_reason: apolloReason || null,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
