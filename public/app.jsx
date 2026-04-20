@@ -3124,6 +3124,7 @@ Output ONLY the message, nothing else.`;
       const [showContactImport, setShowContactImport] = useState(false);
       const [contactCsvRows, setContactCsvRows] = useState([]);
       const [contactImporting, setContactImporting] = useState(false);
+      const [updateDuplicates, setUpdateDuplicates] = useState(false);
       const [contactImportResult, setContactImportResult] = useState(null);
 
       const isInbound = (src) => src && src.startsWith('Inbound');
@@ -3230,14 +3231,17 @@ Output ONLY the message, nothing else.`;
       };
 
       const importContacts = async () => {
-        const toImport = contactCsvRows.filter(r => r.selected && !r.isDuplicate);
-        if (!toImport.length) return;
+        const toCreate = contactCsvRows.filter(r => r.selected && !r.isDuplicate);
+        const toUpdate = updateDuplicates ? contactCsvRows.filter(r => r.isDuplicate) : [];
+        if (toCreate.length === 0 && toUpdate.length === 0) return;
         setContactImporting(true);
         let created = 0, failed = 0;
+        let updated = 0, updateSkipped = 0;
         let websitesAdded = 0;
         let industriesAdded = 0;
         let accountsCreated = 0;
         const a = api || new AirtableAPI();
+        const toImport = toCreate; // alias for loop below (creation flow stays the same)
         // Track account-level fields we already wrote this session to avoid redundant writes
         const accountWebsiteUpdated = new Set();
         const accountIndustryUpdated = new Set();
@@ -3318,7 +3322,60 @@ Output ONLY the message, nothing else.`;
             await new Promise(r => setTimeout(r, 250));
           } catch (e) { failed++; console.error(e); }
         }
-        setContactImportResult({ created, failed, websitesAdded, industriesAdded, accountsCreated });
+        // ── Update pass for duplicates (if enabled) ──
+        for (const row of toUpdate) {
+          try {
+            // Find the existing stakeholder by email first, then by full name
+            let existing = null;
+            if (row.email) {
+              existing = stakeholders.find(s => (F(s, 'Email') || '').toLowerCase() === row.email.toLowerCase());
+            }
+            if (!existing) {
+              const fullName = ((row.firstName || '') + ' ' + (row.lastName || '')).trim().toLowerCase();
+              existing = stakeholders.find(s => (((F(s, 'Name') || '') + ' ' + (F(s, 'Last name') || '')).trim().toLowerCase()) === fullName);
+            }
+            if (!existing) { updateSkipped++; continue; }
+
+            // Build fields to update — ONLY fill empty fields (never overwrite existing data)
+            const updates = {};
+            if (row.email && !F(existing, 'Email')) updates['Email'] = row.email;
+            if (row.phone && !F(existing, 'Phone number')) updates['Phone number'] = row.phone;
+            if (row.role && !F(existing, 'Role')) updates['Role'] = row.role;
+            if (row.linkedin && !F(existing, 'LinkedIn')) updates['LinkedIn'] = row.linkedin;
+            if (row.source && !F(existing, 'Source')) updates['Source'] = row.source;
+            if (row.country && !F(existing, 'Country')) updates['Country'] = row.country;
+
+            if (Object.keys(updates).length > 0) {
+              await a.updateRecord(TABLE_IDS.stakeholders, existing.id, updates);
+              updated++;
+            } else {
+              updateSkipped++;
+            }
+
+            // Also update the linked account's Website/Industry if empty (same logic as creation)
+            const existingAccIds = linkedIds(existing, 'Account');
+            const existingAcc = existingAccIds.length > 0 ? accounts.find(ac => ac.id === existingAccIds[0]) : null;
+            if (existingAcc) {
+              const accUpdate = {};
+              if (row.website && !accountWebsiteUpdated.has(existingAcc.id) && !F(existingAcc, 'Website')) {
+                accUpdate['Website'] = row.website;
+                accountWebsiteUpdated.add(existingAcc.id);
+                websitesAdded++;
+              }
+              if (row.industry && !accountIndustryUpdated.has(existingAcc.id) && !F(existingAcc, 'Industry')) {
+                accUpdate['Industry'] = row.industry;
+                accountIndustryUpdated.add(existingAcc.id);
+                industriesAdded++;
+              }
+              if (Object.keys(accUpdate).length > 0) {
+                try { await a.updateRecord(TABLE_IDS.accounts, existingAcc.id, accUpdate); } catch {}
+              }
+            }
+            await new Promise(r => setTimeout(r, 250));
+          } catch (e) { failed++; console.error('[Update duplicate]', e); }
+        }
+
+        setContactImportResult({ created, failed, updated, updateSkipped, websitesAdded, industriesAdded, accountsCreated });
         setContactImporting(false);
         if (onLogActivity) onLogActivity();
       };
@@ -3552,7 +3609,7 @@ Output ONLY the message, nothing else.`;
                 <div>
                   {contactImportResult ? (
                     <div style={{ padding: '12px', background: 'rgba(91,191,181,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-                      ✅ Import complete — <strong>{contactImportResult.created}</strong> contacts created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}{contactImportResult.accountsCreated > 0 ? ` · 🏢 ${contactImportResult.accountsCreated} new account${contactImportResult.accountsCreated !== 1 ? 's' : ''}` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} website${contactImportResult.websitesAdded !== 1 ? 's' : ''}` : ''}{contactImportResult.industriesAdded > 0 ? ` · 🏭 ${contactImportResult.industriesAdded} industr${contactImportResult.industriesAdded !== 1 ? 'ies' : 'y'}` : ''}.
+                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.updated > 0 ? `, 🔄 ${contactImportResult.updated} updated` : ''}{contactImportResult.updateSkipped > 0 ? ` (${contactImportResult.updateSkipped} already complete)` : ''}{contactImportResult.failed > 0 ? `, ❌ ${contactImportResult.failed} failed` : ''}{contactImportResult.accountsCreated > 0 ? ` · 🏢 ${contactImportResult.accountsCreated} new account${contactImportResult.accountsCreated !== 1 ? 's' : ''}` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} website${contactImportResult.websitesAdded !== 1 ? 's' : ''}` : ''}{contactImportResult.industriesAdded > 0 ? ` · 🏭 ${contactImportResult.industriesAdded} industr${contactImportResult.industriesAdded !== 1 ? 'ies' : 'y'}` : ''}.
                       <button className="action-btn btn-ghost" style={{ fontSize: 11, marginLeft: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>Import another</button>
                     </div>
                   ) : (
@@ -3591,10 +3648,26 @@ Output ONLY the message, nothing else.`;
                           </tbody>
                         </table>
                       </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={importContacts} disabled={contactImporting || !contactCsvRows.some(r => r.selected && !r.isDuplicate)}>
-                          {contactImporting ? '⏳ Importing...' : `🚀 Import ${contactCsvRows.filter(r => r.selected && !r.isDuplicate).length} contacts`}
-                        </button>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--globant-text)' }}>
+                          <input type="checkbox" checked={updateDuplicates} onChange={e => setUpdateDuplicates(e.target.checked)} style={{ cursor: 'pointer' }} />
+                          <span>🔄 Update duplicates with new info <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>(fills empty fields only, never overwrites)</span></span>
+                        </label>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        {(() => {
+                          const toCreate = contactCsvRows.filter(r => r.selected && !r.isDuplicate).length;
+                          const toUpdate = updateDuplicates ? contactCsvRows.filter(r => r.isDuplicate).length : 0;
+                          const total = toCreate + toUpdate;
+                          const label = toUpdate > 0
+                            ? `🚀 Import (${toCreate} new${toUpdate > 0 ? ` + ${toUpdate} updates` : ''})`
+                            : `🚀 Import ${toCreate} contacts`;
+                          return (
+                            <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={importContacts} disabled={contactImporting || total === 0}>
+                              {contactImporting ? '⏳ Importing...' : label}
+                            </button>
+                          );
+                        })()}
                         <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>↩ Re-upload</button>
                       </div>
                     </>
