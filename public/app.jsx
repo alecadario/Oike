@@ -12897,8 +12897,9 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           return { s, score };
         }).sort((a, b) => b.score - a.score).slice(0, 40);
 
-        // Build compact pool for AI
-        const pool = scored.map(({ s }, i) => {
+        // Build RICH pool for AI — includes conversation history per stakeholder
+        const nowTs = Date.now();
+        const pool = scored.map(({ s }) => {
           const accName = (() => {
             const ids = linkedIds(s, 'Account');
             return ids.length > 0 ? (accounts.find(a => a.id === ids[0])) : null;
@@ -12906,8 +12907,47 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           const industry = accName ? F(accName, 'Industry') : '';
           const pain = F(s, 'Pain points') || F(s, 'Pain Points (Generated)') || '';
           const painText = typeof pain === 'string' ? pain.slice(0, 200) : '';
-          return `${s.id} | ${F(s, 'Name')} ${F(s, 'Last name') || ''} | ${F(s, 'Role') || '?'} | ${accName ? F(accName, 'Account Name') : '?'} | ${industry || '?'} | pain: ${painText || 'n/a'}`;
-        }).join('\n');
+          const stkStatus = F(s, 'Status') || 'Not Contacted';
+
+          // Pull conversation history
+          const stkOutreach = outreach
+            .filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+          const touchesCount = stkOutreach.length;
+          const last = stkOutreach[0];
+          const lastDaysAgo = last?.fields?.['Date'] ? Math.floor((nowTs - new Date(last.fields['Date']).getTime()) / 86400000) : null;
+          const lastStatus = last ? F(last, 'Status') : '';
+          const lastChannel = last ? F(last, 'Channel') : '';
+          const hasReplyBack = stkOutreach.some(o => ['Replied', 'Received'].includes(F(o, 'Status')));
+          const lastFromThem = stkOutreach.find(o => ['Replied', 'Received'].includes(F(o, 'Status')));
+          const lastFromThemExcerpt = lastFromThem ? (
+            (F(lastFromThem, 'Notes') || F(lastFromThem, 'Message') || '')
+              .replace(/^\[gmsg:[^\]]+\]\s*/, '')
+              .replace(/[-─]+\s*(Forwarded message|Original message|De:|From:).*/si, '')
+              .trim().slice(0, 250)
+          ) : '';
+          const lastDate = lastFromThem?.fields?.['Date'];
+          const lastFromThemDaysAgo = lastDate ? Math.floor((nowTs - new Date(lastDate).getTime()) / 86400000) : null;
+
+          // Build conversation history block
+          let historyBlock = '';
+          if (touchesCount === 0) {
+            historyBlock = 'COLD — no prior contact';
+          } else if (hasReplyBack && lastFromThemExcerpt) {
+            historyBlock = `ENGAGED — ${touchesCount} touches · they replied ${lastFromThemDaysAgo}d ago · last from them: "${lastFromThemExcerpt}"`;
+          } else if (hasReplyBack) {
+            historyBlock = `ENGAGED PREVIOUSLY — ${touchesCount} touches · they engaged at some point · last touch ${lastDaysAgo}d ago`;
+          } else {
+            historyBlock = `NO REPLY YET — ${touchesCount} touches · last ${lastDaysAgo}d ago (${lastChannel} ${lastStatus})`;
+          }
+
+          return `[${s.id}]
+Name: ${F(s, 'Name')} ${F(s, 'Last name') || ''}
+Role: ${F(s, 'Role') || '?'} at ${accName ? F(accName, 'Account Name') : '?'} (${industry || 'industry unknown'})
+Pipeline Status: ${stkStatus}
+Pain: ${painText || 'n/a'}
+Relationship: ${historyBlock}`;
+        }).join('\n\n');
 
         const prompt = `You are helping a B2B founder reach out to specific stakeholders with a thoughtful message inspired by a LinkedIn post they just wrote. The goal is NOT to broadcast the post. The goal is to OPEN CONVERSATIONS with people for whom the insight is genuinely relevant.
 
@@ -12916,45 +12956,77 @@ THE POST (use as INSPIRATION — extract the key insight, don't just paste the l
 ${content.slice(0, 2500)}
 """
 
-STAKEHOLDER POOL (ID | name | role | account | industry | pain):
+STAKEHOLDER POOL:
 ${pool}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 CRITICAL: RESPECT CONVERSATION HISTORY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Each stakeholder has a Relationship status. The intro message MUST match it:
+
+• **COLD (no prior contact)** → appropriate first-touch framing. OK to reference a signal ("saw you in X", "your post on Y"), OK to be exploratory. Never pretend you've spoken before.
+
+• **ENGAGED (they replied at some point)** — this is GOLD. Reference the last thing THEY said (use the excerpt provided). Continue the conversation naturally. DO NOT start cold. DO NOT write as if this is a first touch. Example: "You mentioned [their last point] — this is exactly what I was thinking about when I wrote [insight]..."
+
+• **ENGAGED PREVIOUSLY (replied long ago, went quiet)** → acknowledge the gap naturally. "It's been a while" style, but not apologetic. Reconnect with value, not guilt.
+
+• **NO REPLY YET (X touches, no response)** → do NOT just blast them again with the same angle. Acknowledge the silence implicitly by bringing a NEW angle (the post's insight). Soft, no pressure. Never imply they've been ignoring you.
+
+⚠️ NEVER write a first-touch-style opener to someone with ENGAGED status. That's the #1 way to lose trust.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HOW TO WRITE THE INTRO MESSAGES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-This is OUTREACH, not content distribution. Each intro should:
-
-1. **Open with their context** — reference their role, pain, situation. Make it clear you thought of THEM specifically (not a copy-paste blast).
+1. **Open with their context AND relationship state** (see above rules). Make it unmistakable you remember where you left off.
 
 2. **Tease the insight** from the post — share the key idea in your OWN voice (1-2 sentences). Do NOT paste the post. Do NOT just say "check out my post". Frame the insight as something you've been thinking about.
 
-3. **CTA tailored to match score:**
-   • HIGH match → Direct invitation to a call ("worth jumping on a 15-min call?", "want to grab a coffee?", "open to chatting more about this?")
-   • MEDIUM match → Soft engagement ("curious what you think", "would love your take", "happy to send more if useful")
-   • LOW match → Light tease, no hard CTA ("might resonate", "thought of you")
+3. **CTA tailored to match score AND relationship:**
+   • HIGH match + ENGAGED → strong invitation ("worth the call we talked about?", "let's book that 15 min")
+   • HIGH match + COLD → direct but respectful ("open to a 15-min call?")
+   • MEDIUM match → soft engagement ("curious what you think", "would love your take")
+   • LOW match → light tease, no hard CTA ("might resonate", "thought of you")
+   • Anyone STALLED / NO REPLY YET → very soft, no CTA that puts pressure. Just plant the seed.
 
-4. **Optional** post link: only mention it as a soft afterthought if it adds value ("dropped my full take on LinkedIn — happy to share if you want"). NEVER lead with the link. NEVER make it the CTA. The CTA is the conversation, not the read.
+4. **Optional** post link: only mention as soft afterthought if it truly adds. Use [POST_URL] placeholder.
 
-5. **Voice rules** (CRITICAL — avoid AI-tells):
-   • NO "Hope you're well", "Just wanted to share", "I came across..."
-   • NO generic openers. Dive straight into THEIR context.
+5. **Voice rules** (CRITICAL — warmth WITHOUT AI-tells):
+
+   **ALWAYS start with a proper greeting — warm and human:**
+   • Spanish: "Hola [FirstName]," / "Hola [FirstName], qué tal?" / "[FirstName]!"
+   • English: "Hey [FirstName]," / "Hi [FirstName]," / "[FirstName]!"
+   • After the greeting, directly into their context — not into filler
+
+   **BANNED filler after greeting (these are the AI-tells, NOT the greeting itself):**
+   • "Hope you're well" / "Espero que estés bien"
+   • "Hope this finds you well"
+   • "Just wanted to share" / "Solo quería compartir"
+   • "I came across..." / "Me crucé con..."
+   • "Hope you're having a great week"
+
+   **Example contrast:**
+   ❌ BAD (too cold): "Juan, when you mentioned the follow-up problem..."
+   ❌ BAD (AI-tell): "Hi Juan, hope you're well! Wanted to share something..."
+   ✅ GOOD (warm + direct): "Hola Juan — cuando me comentaste lo del follow-up hace unas semanas, estuve dándole vueltas..."
+   ✅ GOOD (English warm): "Hey Maria — remember what you said about the SDR ramp? I wrote something that directly answers it."
+
    • Conversational, like a Slack DM to a friend who happens to be a CFO
    • Short. 3-4 sentences max. No paragraphs.
    • Match the founder's voice from the post (rhythm, register)
-   • Use [POST_URL] placeholder ONLY if you actually mention sharing the post (optional)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Pick UP TO 15 stakeholders with REAL relevance (not forced — fewer is better than padding).
+Pick UP TO 15 stakeholders with REAL relevance (not forced — fewer is better than padding). ENGAGED/ENGAGED PREVIOUSLY stakeholders with relevant pain should be prioritized over COLD ones (warmer conversations convert better).
 
 Return ONLY valid JSON array:
 [
   {
     "stakeholder_id": "recXXX",
     "match_score": "high | medium | low",
-    "match_reason": "One line explaining why this person specifically",
-    "intro_message": "Personalized 3-4 sentence intro that opens with their context, teases the insight in your own voice, and ends with a CTA tailored to match score (call for high, soft engagement for medium, tease for low)"
+    "match_reason": "One line: why this person + relationship state (e.g. 'Replied 18d ago asking for case study — post answers their question directly')",
+    "intro_message": "Personalized intro that respects relationship history, opens with their context, teases the insight in your voice, ends with CTA matching score + relationship. 3-4 sentences max."
   }
 ]
 
@@ -13470,6 +13542,24 @@ No markdown, no commentary. JSON only.`;
                               const scoreColor = rec.match_score === 'high' ? '#4ade80' : rec.match_score === 'medium' ? '#fbbf24' : '#8888a8';
                               const scoreIcon = rec.match_score === 'high' ? '🟢' : rec.match_score === 'medium' ? '🟡' : '⚪';
                               const alreadySent = !!rec.sentChannel;
+
+                              // Compute relationship state for visual badge
+                              const stkOut = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(stk.id));
+                              const hasReply = stkOut.some(o => ['Replied', 'Received'].includes(F(o, 'Status')));
+                              const lastOut = stkOut.sort((a,b) => new Date(b.fields?.['Date']||0) - new Date(a.fields?.['Date']||0))[0];
+                              const lastFromThem = stkOut.find(o => ['Replied', 'Received'].includes(F(o, 'Status')));
+                              const lastFromThemDays = lastFromThem?.fields?.['Date'] ? Math.floor((Date.now() - new Date(lastFromThem.fields['Date']).getTime()) / 86400000) : null;
+                              let relState = 'cold', relLabel = 'Cold', relColor = '#8888a8';
+                              if (stkOut.length === 0) {
+                                relState = 'cold'; relLabel = 'Cold'; relColor = '#8888a8';
+                              } else if (hasReply && lastFromThemDays !== null && lastFromThemDays < 60) {
+                                relState = 'engaged'; relLabel = `Engaged · ${lastFromThemDays}d`; relColor = '#4ade80';
+                              } else if (hasReply) {
+                                relState = 'engaged-old'; relLabel = 'Engaged (old)'; relColor = '#60a5fa';
+                              } else {
+                                const lastDays = lastOut?.fields?.['Date'] ? Math.floor((Date.now() - new Date(lastOut.fields['Date']).getTime()) / 86400000) : 0;
+                                relState = 'stalled'; relLabel = `Stalled · ${stkOut.length} touches, no reply`; relColor = '#fbbf24';
+                              }
                               return (
                                 <div key={i} style={{ marginBottom: 10, padding: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 6, opacity: alreadySent ? 0.6 : 1 }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 10, marginBottom: 6 }}>
@@ -13477,6 +13567,7 @@ No markdown, no commentary. JSON only.`;
                                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-text)' }}>
                                         {scoreIcon} {stkName}
                                         <span style={{ fontSize: 9, marginLeft: 8, padding: '1px 7px', borderRadius: 8, background: `${scoreColor}25`, color: scoreColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{rec.match_score}</span>
+                                        <span style={{ fontSize: 9, marginLeft: 4, padding: '1px 7px', borderRadius: 8, background: `${relColor}20`, color: relColor, fontWeight: 700, border: `1px solid ${relColor}50` }}>{relLabel}</span>
                                       </div>
                                       <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>
                                         {stkRole}{accName ? ` · ${accName}` : ''}
