@@ -3203,6 +3203,7 @@ Output ONLY the message, nothing else.`;
                 if (kl === 'source' || kl === 'fuente') norm.source = row[k]?.trim();
                 if (kl === 'campaign' || kl === 'campaña') norm.campaign = row[k]?.trim();
                 if (kl === 'country' || kl === 'pais' || kl === 'país') norm.country = row[k]?.trim();
+                if (kl === 'website' || kl === 'web' || kl === 'url' || kl === 'account website' || kl === 'company website') norm.website = row[k]?.trim();
               });
               if (!norm.firstName) return null;
               // Auto-inherit country from matched account if not set
@@ -3232,7 +3233,10 @@ Output ONLY the message, nothing else.`;
         if (!toImport.length) return;
         setContactImporting(true);
         let created = 0, failed = 0;
+        let websitesAdded = 0;
         const a = api || new AirtableAPI();
+        // Track which accounts we already updated this session to avoid redundant writes
+        const accountWebsiteUpdated = new Set();
         for (const row of toImport) {
           try {
             // Resolve account by name
@@ -3251,10 +3255,21 @@ Output ONLY the message, nothing else.`;
             if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
             await a.createRecord(TABLE_IDS.stakeholders, fields);
             created++;
+            // If CSV provided a website AND account matched AND account has no Website yet → fill it
+            if (row.website && matchedAcc && !accountWebsiteUpdated.has(matchedAcc.id)) {
+              const existingWebsite = F(matchedAcc, 'Website');
+              if (!existingWebsite) {
+                try {
+                  await a.updateRecord(TABLE_IDS.accounts, matchedAcc.id, { 'Website': row.website });
+                  accountWebsiteUpdated.add(matchedAcc.id);
+                  websitesAdded++;
+                } catch (wErr) { console.warn('[Import] website update failed for', matchedAcc.id, wErr); }
+              }
+            }
             await new Promise(r => setTimeout(r, 250));
           } catch (e) { failed++; console.error(e); }
         }
-        setContactImportResult({ created, failed });
+        setContactImportResult({ created, failed, websitesAdded });
         setContactImporting(false);
         if (onLogActivity) onLogActivity();
       };
@@ -3475,7 +3490,7 @@ Output ONLY the message, nothing else.`;
             <div className="card" style={{ borderLeft: '3px solid #7c3aed', marginBottom: 16 }}>
               <div className="card-header">
                 <h3>📥 Import Contacts from CSV</h3>
-                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Country, Source, Campaign</span>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Website, Country, Source, Campaign</span>
               </div>
               {!contactCsvRows.length ? (
                 <div>
@@ -3488,7 +3503,7 @@ Output ONLY the message, nothing else.`;
                 <div>
                   {contactImportResult ? (
                     <div style={{ padding: '12px', background: 'rgba(91,191,181,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}.
+                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} account website${contactImportResult.websitesAdded !== 1 ? 's' : ''} filled` : ''}.
                       <button className="action-btn btn-ghost" style={{ fontSize: 11, marginLeft: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>Import another</button>
                     </div>
                   ) : (
