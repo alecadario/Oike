@@ -3204,6 +3204,7 @@ Output ONLY the message, nothing else.`;
                 if (kl === 'campaign' || kl === 'campaña') norm.campaign = row[k]?.trim();
                 if (kl === 'country' || kl === 'pais' || kl === 'país') norm.country = row[k]?.trim();
                 if (kl === 'website' || kl === 'web' || kl === 'url' || kl === 'account website' || kl === 'company website') norm.website = row[k]?.trim();
+                if (kl === 'industry' || kl === 'industria' || kl === 'sector') norm.industry = row[k]?.trim();
               });
               if (!norm.firstName) return null;
               // Auto-inherit country from matched account if not set
@@ -3234,9 +3235,11 @@ Output ONLY the message, nothing else.`;
         setContactImporting(true);
         let created = 0, failed = 0;
         let websitesAdded = 0;
+        let industriesAdded = 0;
         const a = api || new AirtableAPI();
-        // Track which accounts we already updated this session to avoid redundant writes
+        // Track account-level fields we already wrote this session to avoid redundant writes
         const accountWebsiteUpdated = new Set();
+        const accountIndustryUpdated = new Set();
         for (const row of toImport) {
           try {
             // Resolve account by name
@@ -3255,21 +3258,34 @@ Output ONLY the message, nothing else.`;
             if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
             await a.createRecord(TABLE_IDS.stakeholders, fields);
             created++;
-            // If CSV provided a website AND account matched AND account has no Website yet → fill it
-            if (row.website && matchedAcc && !accountWebsiteUpdated.has(matchedAcc.id)) {
-              const existingWebsite = F(matchedAcc, 'Website');
-              if (!existingWebsite) {
+            // Fill account-level fields from CSV if account matched and fields are empty
+            if (matchedAcc) {
+              const accountUpdate = {};
+              if (row.website && !accountWebsiteUpdated.has(matchedAcc.id) && !F(matchedAcc, 'Website')) {
+                accountUpdate['Website'] = row.website;
+                accountWebsiteUpdated.add(matchedAcc.id);
+                websitesAdded++;
+              }
+              if (row.industry && !accountIndustryUpdated.has(matchedAcc.id) && !F(matchedAcc, 'Industry')) {
+                accountUpdate['Industry'] = row.industry;
+                accountIndustryUpdated.add(matchedAcc.id);
+                industriesAdded++;
+              }
+              if (Object.keys(accountUpdate).length > 0) {
                 try {
-                  await a.updateRecord(TABLE_IDS.accounts, matchedAcc.id, { 'Website': row.website });
-                  accountWebsiteUpdated.add(matchedAcc.id);
-                  websitesAdded++;
-                } catch (wErr) { console.warn('[Import] website update failed for', matchedAcc.id, wErr); }
+                  await a.updateRecord(TABLE_IDS.accounts, matchedAcc.id, accountUpdate);
+                } catch (wErr) {
+                  console.warn('[Import] account update failed for', matchedAcc.id, wErr);
+                  // Rollback counters if update failed
+                  if (accountUpdate['Website']) { accountWebsiteUpdated.delete(matchedAcc.id); websitesAdded--; }
+                  if (accountUpdate['Industry']) { accountIndustryUpdated.delete(matchedAcc.id); industriesAdded--; }
+                }
               }
             }
             await new Promise(r => setTimeout(r, 250));
           } catch (e) { failed++; console.error(e); }
         }
-        setContactImportResult({ created, failed, websitesAdded });
+        setContactImportResult({ created, failed, websitesAdded, industriesAdded });
         setContactImporting(false);
         if (onLogActivity) onLogActivity();
       };
@@ -3490,7 +3506,7 @@ Output ONLY the message, nothing else.`;
             <div className="card" style={{ borderLeft: '3px solid #7c3aed', marginBottom: 16 }}>
               <div className="card-header">
                 <h3>📥 Import Contacts from CSV</h3>
-                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Website, Country, Source, Campaign</span>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Supported columns: First Name, Last Name, Email, Phone, Role, LinkedIn, Account, Website, Industry, Country, Source, Campaign</span>
               </div>
               {!contactCsvRows.length ? (
                 <div>
@@ -3503,7 +3519,7 @@ Output ONLY the message, nothing else.`;
                 <div>
                   {contactImportResult ? (
                     <div style={{ padding: '12px', background: 'rgba(91,191,181,0.08)', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} account website${contactImportResult.websitesAdded !== 1 ? 's' : ''} filled` : ''}.
+                      ✅ Import complete — <strong>{contactImportResult.created}</strong> created{contactImportResult.failed > 0 ? `, ${contactImportResult.failed} failed` : ''}{contactImportResult.websitesAdded > 0 ? ` · 🌐 ${contactImportResult.websitesAdded} website${contactImportResult.websitesAdded !== 1 ? 's' : ''}` : ''}{contactImportResult.industriesAdded > 0 ? ` · 🏭 ${contactImportResult.industriesAdded} industr${contactImportResult.industriesAdded !== 1 ? 'ies' : 'y'}` : ''}{(contactImportResult.websitesAdded > 0 || contactImportResult.industriesAdded > 0) ? ' filled on accounts' : ''}.
                       <button className="action-btn btn-ghost" style={{ fontSize: 11, marginLeft: 12 }} onClick={() => { setContactCsvRows([]); setContactImportResult(null); }}>Import another</button>
                     </div>
                   ) : (
