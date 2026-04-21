@@ -7480,7 +7480,33 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const [savingInviteTemplate, setSavingInviteTemplate] = useState(false);
       const [evCreating, setEvCreating] = useState(false);
       const [editingEvent, setEditingEvent] = useState(null);
+      const [evUploadingFile, setEvUploadingFile] = useState(false);
       const now = new Date();
+
+      // Handle file upload → AI summary → append to "Aditional context" as FILE: block
+      const handleEventFileUpload = async (e, eventRec) => {
+        const file = e.target.files?.[0];
+        if (!file || !eventRec) return;
+        setEvUploadingFile(true);
+        try {
+          const text = await file.text();
+          const prompt = `Summarize the following file content. Extract the most relevant points for a B2B sales team running this event. Be concise (5-8 bullets max).\n\nFile: ${file.name}\n\n${text.slice(0, 8000)}`;
+          const summary = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 500 });
+          const dateStr = new Date().toLocaleDateString('en-GB');
+          const entry = `\n\n📎 FILE: ${file.name} (uploaded ${dateStr})\n${summary}`;
+          const currentContext = F(eventRec, 'Aditional context') || '';
+          const updated = (currentContext + entry).trim();
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.events, eventRec.id, { 'Aditional context': updated });
+          if (onUpdateRecord) onUpdateRecord('events', eventRec.id, { 'Aditional context': updated });
+          if (onLogActivity) onLogActivity();
+        } catch (err) {
+          console.error('Event file upload failed:', err);
+          alert('File upload failed — try again with a smaller file or a different format.');
+        }
+        setEvUploadingFile(false);
+        e.target.value = '';
+      };
 
       const saveEventEdit = async (updatedFields) => {
         if (!editingEvent || !api) return;
@@ -7794,18 +7820,37 @@ Return ONLY the JSON array, nothing else.`;
             </div>
 
             {/* Context & Summary */}
-            {(context || summary) && (
-              <div className="card">
-                <div className="card-header"><h3>📝 Event Details</h3></div>
-                {context && <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', marginBottom: summary ? 14 : 0 }}>{context}</div>}
-                {summary && (
-                  <div style={{ padding: '10px 14px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, borderLeft: '3px solid var(--globant-accent)' }}>
-                    <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 6 }}>📎 Attachment Summary</div>
-                    <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap' }}>{typeof summary === 'string' ? summary.slice(0, 500) : String(summary).slice(0, 500)}</div>
-                  </div>
-                )}
+            <div className="card">
+              <div className="card-header">
+                <h3>📝 Event Details & Files</h3>
+                <label style={{ cursor: 'pointer' }}>
+                  <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml,.pdf" style={{ display: 'none' }} onChange={e => handleEventFileUpload(e, selectedEvent)} disabled={evUploadingFile} />
+                  <span className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 10px', display: 'inline-block' }}>
+                    {evUploadingFile ? '⏳ Processing...' : '📎 Upload File'}
+                  </span>
+                </label>
               </div>
-            )}
+              {context ? (
+                <FileNotesRenderer
+                  notes={context}
+                  accentColor="var(--globant-info)"
+                  onUpdateNotes={async (updated) => {
+                    const a = api || new AirtableAPI();
+                    await a.updateRecord(TABLE_IDS.events, selectedEvent.id, { 'Aditional context': updated });
+                    if (onUpdateRecord) onUpdateRecord('events', selectedEvent.id, { 'Aditional context': updated });
+                    if (onLogActivity) onLogActivity();
+                  }}
+                />
+              ) : (
+                <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No event context yet. Upload a file (PDF, CSV, TXT) and AI will extract key points, or add context manually via Edit.</p>
+              )}
+              {summary && (
+                <div style={{ padding: '10px 14px', background: 'rgba(91,191,181,0.06)', borderRadius: 8, borderLeft: '3px solid var(--globant-accent)', marginTop: 14 }}>
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 6 }}>📎 Airtable Attachment Summary</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap' }}>{typeof summary === 'string' ? summary.slice(0, 500) : String(summary).slice(0, 500)}</div>
+                </div>
+              )}
+            </div>
 
             {/* Invitation Template — editable */}
             <div className="card">
@@ -12051,6 +12096,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [contextDraft, setContextDraft] = useState('');
       const [savingContext, setSavingContext] = useState(false);
       const [generatingSummary, setGeneratingSummary] = useState(false);
+      const [campaignUploadingFile, setCampaignUploadingFile] = useState(false);
 
       const saveCampaignContext = async () => {
         if (!selectedCampaign) return;
@@ -12058,6 +12104,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         try {
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Context': contextDraft });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Context': contextDraft });
           setEditingContext(false);
           if (onLogActivity) onLogActivity();
         } catch (e) {
@@ -12065,6 +12112,31 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           alert('Failed to save context: ' + (e.message || 'unknown'));
         }
         setSavingContext(false);
+      };
+
+      // File upload → AI summary → append to Campaign "Context" as FILE: block
+      const handleCampaignFileUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !selectedCampaign) return;
+        setCampaignUploadingFile(true);
+        try {
+          const text = await file.text();
+          const prompt = `Summarize the following file content. Extract the most relevant points for a B2B sales team running this campaign. Be concise (5-8 bullets max).\n\nFile: ${file.name}\n\n${text.slice(0, 8000)}`;
+          const summary = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 500 });
+          const dateStr = new Date().toLocaleDateString('en-GB');
+          const entry = `\n\n📎 FILE: ${file.name} (uploaded ${dateStr})\n${summary}`;
+          const currentContext = F(selectedCampaign, 'Context') || '';
+          const updated = (currentContext + entry).trim();
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Context': updated });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Context': updated });
+          if (onLogActivity) onLogActivity();
+        } catch (err) {
+          console.error('Campaign file upload failed:', err);
+          alert('File upload failed — try again with a smaller file or a different format.');
+        }
+        setCampaignUploadingFile(false);
+        e.target.value = '';
       };
 
       const generateCampaignSummary = async () => {
@@ -12339,20 +12411,28 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               {/* Context (manual input) */}
               <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)', padding: '12px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-accent)', textTransform: 'uppercase', letterSpacing: 1 }}>📝 Campaign Context</div>
-                  {!editingContext ? (
-                    <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
-                      onClick={() => { setContextDraft(F(selectedCampaign, 'Context') || ''); setEditingContext(true); }}>
-                      {F(selectedCampaign, 'Context') ? '✏️ Edit' : '➕ Add Context'}
-                    </button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={saveCampaignContext} disabled={savingContext}>
-                        {savingContext ? '⏳' : '💾 Save'}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-accent)', textTransform: 'uppercase', letterSpacing: 1 }}>📝 Campaign Context & Files</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {!editingContext ? (
+                      <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
+                        onClick={() => { setContextDraft(F(selectedCampaign, 'Context') || ''); setEditingContext(true); }}>
+                        {F(selectedCampaign, 'Context') ? '✏️ Edit' : '➕ Add Context'}
                       </button>
-                      <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingContext(false)}>Cancel</button>
-                    </div>
-                  )}
+                    ) : (
+                      <>
+                        <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={saveCampaignContext} disabled={savingContext}>
+                          {savingContext ? '⏳' : '💾 Save'}
+                        </button>
+                        <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingContext(false)}>Cancel</button>
+                      </>
+                    )}
+                    <label style={{ cursor: 'pointer' }}>
+                      <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml,.pdf" style={{ display: 'none' }} onChange={handleCampaignFileUpload} disabled={campaignUploadingFile} />
+                      <span className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 10px', display: 'inline-block' }}>
+                        {campaignUploadingFile ? '⏳ Processing...' : '📎 Upload File'}
+                      </span>
+                    </label>
+                  </div>
                 </div>
                 {editingContext ? (
                   <textarea
@@ -12363,10 +12443,19 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                     onChange={e => setContextDraft(e.target.value)} />
                 ) : (
                   F(selectedCampaign, 'Context') ? (
-                    <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{F(selectedCampaign, 'Context')}</div>
+                    <FileNotesRenderer
+                      notes={F(selectedCampaign, 'Context')}
+                      accentColor="var(--globant-accent)"
+                      onUpdateNotes={async (updated) => {
+                        const a = api || new AirtableAPI();
+                        await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Context': updated });
+                        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Context': updated });
+                        if (onLogActivity) onLogActivity();
+                      }}
+                    />
                   ) : (
                     <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
-                      No context yet — click "Add Context" to tell the AI who this campaign targets, what pain it addresses, and your messaging angle.
+                      No context yet — click "Add Context" to write manually, or "Upload File" to let AI extract key points from a PDF / doc.
                     </div>
                   )
                 )}
