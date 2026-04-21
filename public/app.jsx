@@ -394,7 +394,7 @@
     };
 
     // ============ STAKEHOLDER HISTORY MODAL ============
-    function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData, onNavigateToAccount, onSend }) {
+    function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData, onNavigateToAccount, onSend, onAddRecord }) {
       if (!stakeholder) return null;
       const [genLoading, setGenLoading] = useState(''); // 'pain' | 'linkedin' | ''
       const PAIN_TS_LS_KEY = 'oike_pain_timestamps';
@@ -756,6 +756,11 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   disabled={!quickMsg.trim() || sendingQuickMsg}
                   onClick={() => {
                     if (!quickMsg.trim()) return;
+                    // Guard: stakeholder must be saved in Airtable, not tmp
+                    if (stakeholder.id && stakeholder.id.startsWith('tmp_')) {
+                      alert('This contact is still saving. Wait a moment and try again.');
+                      return;
+                    }
                     setSendingQuickMsg(true);
                     const name = F(stakeholder, 'Name') || '';
                     const email = F(stakeholder, 'Email') || '';
@@ -766,9 +771,8 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     if (quickMsgChannel === 'LinkedIn' && linkedin) window.open(linkedin, '_blank');
                     else if (quickMsgChannel === 'WhatsApp' && phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(quickMsg)}`, '_blank');
                     else if (quickMsgChannel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&body=${encodeURIComponent(quickMsg)}`, '_blank');
-                    // Log to Airtable in background
-                    const a = new AirtableAPI();
-                    a.createRecord(TABLE_IDS.outreach, {
+                    // Build outreach fields
+                    const outreachFields = {
                       'Activity Name': `${quickMsgChannel} to ${name} — ${new Date().toLocaleDateString('en-US')}`,
                       'Account': accountIds, 'Stakeholder': [stakeholder.id],
                       'Channel': quickMsgChannel, 'Date': new Date().toISOString(),
@@ -777,8 +781,18 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                       'Logged By': CURRENT_USER?.name || '',
                       ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
                       ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
-                    }).then(() => { if (onRefresh) onRefresh(); })
-                      .catch(e => console.error('Quick message log failed:', e));
+                    };
+                    // Optimistic update — so modal shows it immediately
+                    if (onAddRecord) onAddRecord('outreach', outreachFields);
+                    // API call in background
+                    const a = new AirtableAPI();
+                    a.createRecord(TABLE_IDS.outreach, outreachFields)
+                      .then(async () => {
+                        await activateAccountIfNeeded(a, accountIds, accounts);
+                        await updateStakeholderStatus(a, stakeholder.id, 'Contacted', allData?.stakeholders || []);
+                        if (onRefresh) onRefresh();
+                      })
+                      .catch(e => { console.error('Quick message log failed:', e); if (onRefresh) onRefresh(); });
                     setQuickMsg('');
                     setSendingQuickMsg(false);
                   }}>
@@ -3026,6 +3040,7 @@ Output ONLY the message, nothing else.`;
               accounts={accounts}
               onClose={() => setHistoryStakeholder(null)}
               onRefresh={onLogActivity}
+              onAddRecord={onAddRecord}
               allData={data}
               onNavigateToAccount={goToAccount}
               onSend={useMessage}
@@ -3822,6 +3837,7 @@ Output ONLY the message, nothing else.`;
               accounts={accounts}
               onClose={() => setHistoryStakeholder(null)}
               onRefresh={onLogActivity}
+              onAddRecord={onAddRecord}
               allData={data}
               onNavigateToAccount={goToAccount}
               onSend={useMessage}
@@ -6286,6 +6302,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
               accounts={accounts}
               onClose={() => setHistoryStakeholder(null)}
               onRefresh={onLogActivity}
+              onAddRecord={onAddRecord}
               allData={data}
               onNavigateToAccount={goToAccount}
               onSend={cpUseMessage}
@@ -7757,6 +7774,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 accounts={accounts}
                 onClose={() => setEvHistoryStakeholder(null)}
                 onRefresh={onLogActivity}
+                onAddRecord={onAddRecord}
                 allData={data}
                 onSend={(s, ch, msg, cc, evId) => evUseMessage(s, ch, msg, cc, evId || selectedEventId)}
               />
@@ -9286,6 +9304,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               accounts={accounts}
               onClose={() => setSolHistoryStakeholder(null)}
               onRefresh={onLogActivity}
+              onAddRecord={onAddRecord}
               allData={data}
               onSend={(s, ch, msg, cc, evId) => {
                 // Open channel synchronously first
