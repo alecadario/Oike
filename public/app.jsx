@@ -13745,7 +13745,7 @@ No markdown, no commentary. JSON only.`;
 
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data }) {
-      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [] } = data;
+      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [] } = data;
       const now = new Date();
       const fmt = (d) => d.toISOString().split('T')[0];
       const defaultFrom = fmt(new Date(now - 14 * 86400000));
@@ -13757,6 +13757,8 @@ No markdown, no commentary. JSON only.`;
       const [groupBy, setGroupBy]     = useState('accounts');
       const [selectedIds, setSelectedIds] = useState([]);
       const [searchQuery, setSearchQuery] = useState('');
+      // Report view filter: 'all' | 'replies' | 'meetings' | 'posts'
+      const [reportFilter, setReportFilter] = useState('all');
       const [reportHtml, setReportHtml] = useState('');
       const [copied, setCopied]       = useState(false);
       const [gmailOpened, setGmailOpened] = useState(false);
@@ -13963,20 +13965,21 @@ No markdown, no commentary. JSON only.`;
         });
 
         // Ask AI for one-liner status per contact + strategic thoughts
-        let aiStatuses = {};
+        let aiAnalysis = {}; // per-reply structured analysis { "1": { intent, summary, next_step, urgency } }
         let aiThoughts = '';
         const groupSummary = groupRows.map(r => `${r.name}: ${r.sent} sent, ${r.replies} replies (${r.rr}%), ${r.meetings} meetings${r.accs.length ? `, accounts: ${r.accs.map(a=>F(a,'Account Name')).join(', ')}` : ''}`).join('\n');
         const replyLines = replyRaw.map((r, i) => {
           const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
           const company = r.acc ? F(r.acc,'Account Name') : '';
-          return `${i+1}. ${name} (${company}) [${r.d}]: "${r.rawMsg}"`;
+          const role = r.stk ? F(r.stk,'Role') || '' : '';
+          return `${i+1}. ${name}${role ? ' (' + role + ')' : ''} at ${company} [${r.d}]: "${r.rawMsg}"`;
         }).join('\n');
 
         if (replyRaw.length > 0 || groupRows.length > 0) {
           try {
-            const prompt = `You are a senior sales intelligence analyst reviewing a bi-weekly sales report. Based on the data below, do TWO things:
+            const prompt = `You are a senior sales intelligence analyst reviewing a bi-weekly sales report. Do TWO things:
 
-1. For each reply (numbered), write ONE SHORT LINE (max 12 words) on WHERE the conversation stands. Be specific, action-oriented. NO "replied to email". Focus on momentum.
+1. For each reply (numbered), return structured analysis — not verbatim summary, but a SALES INTERPRETATION. What do they actually mean? What should the BDR do next? The goal is: the BDR reads this and knows exactly what action to take.
 
 2. Write 3-4 bullet points of STRATEGIC THOUGHTS — what's working, what's at risk, what needs immediate attention, suggested priorities. Be direct, specific, useful. Reference actual accounts/contacts when relevant.
 ${reportNotes.trim() ? `\nSender's own notes for context:\n"${reportNotes.trim()}"\n` : ''}
@@ -13989,34 +13992,50 @@ TOTAL: ${totalSent} messages sent, ${uniqueRepliers} unique replies (${replyRate
 REPLIES:
 ${replyLines || 'None'}
 
+For each reply, return:
+- intent: one of "meeting_request" | "info_request" | "objection" | "follow_up_needed" | "engaged" | "introduction_needed" | "not_now" | "ghosted" | "other"
+- summary: 1 sentence interpretation of what they're really saying (not a repeat of the reply — a READ of it)
+- next_step: SPECIFIC action the BDR should take (e.g. "Send 3 time slots for next week", "Forward case study to decision maker", "Ask for intro to Head of IT", "Close the loop with breakup message")
+- urgency: "high" (requires action this week) | "medium" (within 2 weeks) | "low" (no rush)
+
 Return ONLY valid JSON:
 {
-  "statuses": {"1": "...", "2": "..."},
+  "analysis": {
+    "1": { "intent": "...", "summary": "...", "next_step": "...", "urgency": "..." },
+    "2": { ... }
+  },
   "thoughts": ["bullet 1", "bullet 2", "bullet 3", "bullet 4"]
 }`;
 
-            const result = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 600 });
+            const result = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 1600 });
             const cleaned = result.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
             const parsed = JSON.parse(cleaned);
-            aiStatuses = parsed.statuses || {};
+            aiAnalysis = parsed.analysis || {};
             aiThoughts = (parsed.thoughts || []).join('|||');
           } catch(e) {
             console.error('AI analysis failed:', e);
-            // Fallback: try just statuses
+            // Fallback: basic structured data
             if (replyRaw.length > 0) {
               try {
-                const p2 = `Summarize each reply in one line (max 12 words). Return JSON: {"1":"...", "2":"..."}\n\nReplies:\n${replyLines}`;
-                const r2 = await callOpenAI({ prompt: p2, temperature: 0.3, max_tokens: 300 });
-                aiStatuses = JSON.parse(r2.replace(/```json?\n?/g,'').replace(/```/g,'').trim());
+                const p2 = `For each reply, return short JSON: {"1":{"intent":"engaged","summary":"...","next_step":"...","urgency":"medium"}, ...}\n\nReplies:\n${replyLines}`;
+                const r2 = await callOpenAI({ prompt: p2, temperature: 0.3, max_tokens: 800 });
+                const parsed2 = JSON.parse(r2.replace(/```json?\n?/g,'').replace(/```/g,'').trim());
+                aiAnalysis = parsed2.analysis || parsed2 || {};
               } catch(e2) { console.error('Fallback failed:', e2); }
             }
           }
         }
 
-        const replyDetails = replyRaw.map((r, i) => ({
-          ...r,
-          summary: aiStatuses[String(i+1)] || r.rawMsg.split(/[.!?]\s+/)[0]?.trim().slice(0,120) || '—',
-        }));
+        const replyDetails = replyRaw.map((r, i) => {
+          const a = aiAnalysis[String(i+1)] || {};
+          return {
+            ...r,
+            intent: a.intent || 'other',
+            summary: a.summary || r.rawMsg.split(/[.!?]\s+/)[0]?.trim().slice(0,120) || '—',
+            next_step: a.next_step || '',
+            urgency: a.urgency || 'medium',
+          };
+        });
 
         const kpiBox = (label, value, color) =>
           `<td style="width:25%;padding:16px 12px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb;">
@@ -14065,9 +14084,27 @@ Return ONLY valid JSON:
         });
         const replyGroups = Object.entries(replyByAcc).sort((a,b) => b[1].length - a[1].length);
 
+        // Intent → label + color map
+        const INTENT_STYLES = {
+          meeting_request:     { label: '📅 Meeting request', bg: '#dbeafe', fg: '#1e40af' },
+          info_request:        { label: '📎 Info request',    bg: '#e0e7ff', fg: '#4338ca' },
+          objection:           { label: '🚧 Objection',       bg: '#fee2e2', fg: '#b91c1c' },
+          follow_up_needed:    { label: '🔁 Follow-up needed',bg: '#fef3c7', fg: '#92400e' },
+          engaged:             { label: '✅ Engaged',          bg: '#d1fae5', fg: '#065f46' },
+          introduction_needed: { label: '🔗 Intro needed',    bg: '#f3e8ff', fg: '#6b21a8' },
+          not_now:             { label: '⏰ Not now',         bg: '#f3f4f6', fg: '#374151' },
+          ghosted:             { label: '👻 Ghosted',         bg: '#f3f4f6', fg: '#6b7280' },
+          other:               { label: '💬 Reply',           bg: '#f3f4f6', fg: '#374151' },
+        };
+        const URGENCY_STYLES = {
+          high:   { label: '🔥 HIGH',   fg: '#dc2626' },
+          medium: { label: '⏳ MEDIUM', fg: '#d97706' },
+          low:    { label: '🌙 LOW',    fg: '#6b7280' },
+        };
+
         const replySection = replyDetails.length === 0 ? '' : `
           <tr><td style="padding:24px 0 8px;">
-            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received (${uniqueRepliers} contact${uniqueRepliers !== 1 ? 's' : ''})</h2>
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">Replies Received — action-ready (${uniqueRepliers} contact${uniqueRepliers !== 1 ? 's' : ''})</h2>
             ${replyGroups.map(([accName, rList]) => `
             <div style="margin-bottom:16px;">
               <div style="font-size:12px;font-weight:700;color:${G};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding:4px 0;border-bottom:1px solid #d1fae5;">
@@ -14076,21 +14113,83 @@ Return ONLY valid JSON:
               ${rList.map(r => {
                 const name = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : 'Unknown';
                 const role = r.stk ? (F(r.stk,'Role')||'') : '';
+                const intent = INTENT_STYLES[r.intent] || INTENT_STYLES.other;
+                const urg = URGENCY_STYLES[r.urgency] || URGENCY_STYLES.medium;
                 return `
-              <div style="margin-bottom:8px;padding:10px 14px;background:#f0fdf4;border-left:3px solid #10b981;border-radius:0 6px 6px 0;">
+              <div style="margin-bottom:10px;padding:12px 14px;background:#f0fdf4;border-left:3px solid #10b981;border-radius:0 6px 6px 0;">
                 <table width="100%" cellpadding="0" cellspacing="0"><tr>
                   <td>
                     <div style="font-size:13px;font-weight:700;color:${T};">${name}</div>
                     ${role ? `<div style="font-size:11px;color:#6b7280;margin-top:1px;">${role}</div>` : ''}
                   </td>
                   <td style="text-align:right;vertical-align:top;white-space:nowrap;">
-                    <span style="font-size:10px;color:#9ca3af;">${r.channel} · ${r.d}</span>
+                    <span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${intent.bg};color:${intent.fg};margin-right:4px;">${intent.label}</span>
+                    <span style="font-size:10px;font-weight:700;color:${urg.fg};">${urg.label}</span>
+                    <div style="font-size:10px;color:#9ca3af;margin-top:2px;">${r.channel} · ${r.d}</div>
                   </td>
                 </tr></table>
-                ${r.summary ? `<div style="font-size:12px;color:${GR};margin-top:5px;line-height:1.5;font-style:italic;">"${r.summary}${r.summary.length>=180?'…':''}"</div>` : ''}
+                ${r.summary ? `<div style="font-size:13px;color:${T};margin-top:8px;line-height:1.45;font-weight:500;">${r.summary}</div>` : ''}
+                ${r.next_step ? `<div style="margin-top:8px;padding:7px 10px;background:#fff;border-left:2px solid ${G};border-radius:0 4px 4px 0;font-size:12px;color:${T};">
+                  <span style="font-size:9px;font-weight:700;color:${G};letter-spacing:1px;text-transform:uppercase;">➤ Next step</span><br>
+                  <span style="color:${GR};">${r.next_step}</span>
+                </div>` : ''}
               </div>`;
               }).join('')}
             </div>`).join('')}
+          </td></tr>`;
+
+        // ── Meetings-only section ──
+        const meetingsList = periodOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status')));
+        const meetingsSection = meetingsList.length === 0 ? '' : `
+          <tr><td style="padding:24px 0 8px;">
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">📅 Meetings Booked (${meetingsList.length})</h2>
+            ${meetingsList.map(o => {
+              const stkId = linkedIds(o,'Stakeholder')[0];
+              const stk = stakeholders.find(s => s.id === stkId);
+              const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : 'Unknown';
+              const stkRole = stk ? F(stk,'Role') || '' : '';
+              const accId = linkedIds(o,'Account')[0];
+              const acc = accounts.find(a => a.id === accId);
+              const accName = acc ? F(acc,'Account Name') : '';
+              const d = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '?';
+              return `
+              <div style="margin-bottom:8px;padding:10px 14px;background:#dbeafe;border-left:3px solid #2563eb;border-radius:0 6px 6px 0;">
+                <div style="font-size:13px;font-weight:700;color:${T};">${stkName}${accName ? ' · ' + accName : ''}</div>
+                ${stkRole ? `<div style="font-size:11px;color:#6b7280;margin-top:1px;">${stkRole}</div>` : ''}
+                <div style="font-size:11px;color:#2563eb;font-weight:700;margin-top:4px;">📅 ${d}</div>
+                ${F(o,'Notes') ? `<div style="font-size:11px;color:${GR};margin-top:4px;">${String(F(o,'Notes')).slice(0,200)}</div>` : ''}
+              </div>`;
+            }).join('')}
+          </td></tr>`;
+
+        // ── Content Lab posts section ──
+        const periodPosts = (contentLab || []).filter(p => {
+          const date = F(p, 'Posted Date') || p.createdTime;
+          if (!date) return false;
+          const ts = new Date(date).getTime();
+          return ts >= fromTs && ts <= toTs;
+        });
+        const postsSection = periodPosts.length === 0 ? '' : `
+          <tr><td style="padding:24px 0 8px;">
+            <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">✍️ Content Posted (${periodPosts.length})</h2>
+            ${periodPosts.map(p => {
+              const title = F(p,'Title') || 'Untitled';
+              const type = F(p,'Type') || 'Post';
+              const status = F(p,'Status') || 'Draft';
+              const postedDate = F(p,'Posted Date') || '';
+              const url = F(p,'LinkedIn URL') || '';
+              const tags = F(p,'Topic Tags');
+              const tagsText = Array.isArray(tags) ? tags.join(' · ') : '';
+              const statusColor = status === 'Posted' ? '#059669' : status === 'Scheduled' ? '#d97706' : '#6b7280';
+              return `
+              <div style="margin-bottom:8px;padding:10px 14px;background:#f5f3ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;">
+                <div style="font-size:13px;font-weight:700;color:${T};">${title}</div>
+                <div style="font-size:10px;color:#9ca3af;margin-top:2px;">
+                  <span style="color:${statusColor};font-weight:700;">${status}</span> · ${type}${postedDate ? ' · ' + postedDate : ''}${tagsText ? ' · ' + tagsText : ''}
+                </div>
+                ${url ? `<div style="font-size:11px;margin-top:4px;"><a href="${url}" style="color:#7c3aed;">🔗 View on LinkedIn</a></div>` : ''}
+              </div>`;
+            }).join('')}
           </td></tr>`;
 
         const html = `<!DOCTYPE html>
@@ -14131,8 +14230,10 @@ Return ONLY valid JSON:
         </table>
       </td></tr>
 
-      ${groupSection}
-      ${replySection}
+      ${reportFilter === 'all' ? groupSection : ''}
+      ${(reportFilter === 'all' || reportFilter === 'replies') ? replySection : ''}
+      ${(reportFilter === 'all' || reportFilter === 'meetings') ? meetingsSection : ''}
+      ${(reportFilter === 'all' || reportFilter === 'posts') ? postsSection : ''}
 
       <!-- Pipeline -->
       ${activeOpps.length > 0 ? `
@@ -14237,6 +14338,36 @@ Return ONLY valid JSON:
           <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:20, alignItems:'start' }}>
             {/* ── Left: Controls ── */}
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              {/* View filter */}
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>🎯 View</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                  {[
+                    { k:'all', label:'📊 Full report' },
+                    { k:'replies', label:'💬 Replies only' },
+                    { k:'meetings', label:'📅 Meetings only' },
+                    { k:'posts', label:'✍️ Posts generated' },
+                  ].map(opt => (
+                    <button key={opt.k}
+                      onClick={() => setReportFilter(opt.k)}
+                      style={{
+                        padding:'7px 8px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600,
+                        background: reportFilter === opt.k ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${reportFilter === opt.k ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                        color: reportFilter === opt.k ? 'var(--globant-green)' : 'var(--globant-text)',
+                      }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:8, fontStyle:'italic' }}>
+                  {reportFilter === 'all' && 'KPIs + breakdown + replies + posts'}
+                  {reportFilter === 'replies' && 'KPIs + replies received with AI status + next steps'}
+                  {reportFilter === 'meetings' && 'KPIs + meetings booked with stakeholder context'}
+                  {reportFilter === 'posts' && 'KPIs + Content Lab posts from the period'}
+                </div>
+              </div>
+
               {/* Date range */}
               <div className="card">
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📅 Period</div>
