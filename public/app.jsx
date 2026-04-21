@@ -393,6 +393,115 @@
       return (2 * inter) / (a.length + b.length - 2);
     };
 
+    // ============ FILE NOTES RENDERER ============
+    // Shared component for rendering Intel Notes / Solution Notes / etc. with file blocks
+    // Each 📎 FILE: block collapses to a 2-line preview with expand toggle + delete button
+    function FileNotesRenderer({ notes, onUpdateNotes, accentColor = 'var(--globant-info)' }) {
+      const [expanded, setExpanded] = useState({});
+      const [deletingIdx, setDeletingIdx] = useState(null);
+
+      const parts = useMemo(() => {
+        if (!notes) return [];
+        const result = [];
+        const regex = /📎 FILE:[\s\S]*?(?=\n📎 FILE:|$)/g;
+        let lastIdx = 0;
+        let m;
+        while ((m = regex.exec(notes)) !== null) {
+          if (m.index > lastIdx) {
+            const t = notes.slice(lastIdx, m.index).trim();
+            if (t) result.push({ type: 'text', content: t });
+          }
+          result.push({ type: 'file', content: m[0].trim() });
+          lastIdx = m.index + m[0].length;
+        }
+        if (lastIdx < notes.length) {
+          const t = notes.slice(lastIdx).trim();
+          if (t) result.push({ type: 'text', content: t });
+        }
+        return result;
+      }, [notes]);
+
+      const deleteBlock = async (block, idx) => {
+        const firstLine = block.split('\n')[0];
+        if (!window.confirm(`Delete this file?\n\n${firstLine}`)) return;
+        setDeletingIdx(idx);
+        try {
+          // Remove the block and normalize surrounding whitespace
+          let updated = notes.replace(block, '').replace(/\n{3,}/g, '\n\n').trim();
+          await onUpdateNotes(updated);
+        } catch (e) {
+          console.error('Delete file block failed:', e);
+          alert('Failed to delete — try again.');
+        } finally {
+          setDeletingIdx(null);
+        }
+      };
+
+      if (parts.length === 0) return null;
+
+      return (
+        <div>
+          {parts.map((part, i) => {
+            if (part.type === 'text') {
+              return (
+                <div key={i} style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', marginBottom: 10 }}>
+                  {part.content}
+                </div>
+              );
+            }
+            const lines = part.content.split('\n');
+            const header = lines[0]; // 📎 FILE: name.pdf (uploaded ...)
+            const body = lines.slice(1).join('\n').trim();
+            // 2-line preview: first non-empty lines, stripped of markdown bullets
+            const previewLines = body
+              .split('\n')
+              .map(l => l.trim().replace(/^[-*•]\s*/, '').replace(/\*\*/g, ''))
+              .filter(l => l.length > 0)
+              .slice(0, 2);
+            const preview = previewLines.join(' · ').slice(0, 180);
+            const isExpanded = !!expanded[i];
+            const isBusy = deletingIdx === i;
+
+            return (
+              <div key={i} style={{ padding: '10px 12px', background: 'rgba(96,165,250,0.06)', borderRadius: 8, border: `1px solid ${accentColor === 'var(--globant-info)' ? 'rgba(96,165,250,0.15)' : 'rgba(91,191,181,0.15)'}`, marginBottom: 8, opacity: isBusy ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                {/* Header row: filename + delete */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: preview || isExpanded ? 6 : 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: accentColor, overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{header}</div>
+                  <button
+                    onClick={() => deleteBlock(part.content, i)}
+                    disabled={isBusy}
+                    title="Delete this file entry"
+                    style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 4, cursor: isBusy ? 'wait' : 'pointer', flexShrink: 0 }}>
+                    {isBusy ? '⏳' : '🗑️ Delete'}
+                  </button>
+                </div>
+
+                {/* Preview or full body */}
+                {isExpanded ? (
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', marginTop: 4 }}>
+                    {body || <span style={{ fontStyle: 'italic', color: 'var(--globant-muted)' }}>No extracted content.</span>}
+                  </div>
+                ) : preview ? (
+                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {preview}
+                  </div>
+                ) : null}
+
+                {/* Toggle — only show if body has content worth expanding */}
+                {body && body.length > 120 && (
+                  <button
+                    onClick={() => setExpanded(p => ({ ...p, [i]: !p[i] }))}
+                    style={{ fontSize: 10, marginTop: 6, background: 'transparent', border: 'none', color: accentColor, cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                    {isExpanded ? '▲ Show less' : '▼ Show full content'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     // ============ STAKEHOLDER HISTORY MODAL ============
     function StakeholderHistoryModal({ stakeholder, outreach, accounts, onClose, onRefresh, allData, onNavigateToAccount, onSend, onAddRecord }) {
       if (!stakeholder) return null;
@@ -2247,8 +2356,8 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
     }
 
     // ============ FOLLOW-UP CENTER ============
-    function FollowupCenter({ data, api, onLogActivity, onAddRecord, goToAccount }) {
-      const { accounts, stakeholders, outreach } = data;
+    function FollowupCenter({ data, api, onLogActivity, onAddRecord, onUpdateRecord, goToAccount }) {
+      const { accounts, stakeholders, outreach, actionPlan = [] } = data;
       const [accountSearch, setAccountSearch] = useState('');
       const [selectedInfluence, setSelectedInfluence] = useState('');
       const [searchName, setSearchName] = useState('');
@@ -2310,6 +2419,86 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         });
         return results.sort((a, b) => b.daysSince - a.daysSince);
       }, [stakeholders, outreach, accounts, accountSearch, selectedInfluence, searchName]);
+
+      // ── Urgent Actions: AI-generated Action Plan tasks, not done, not snoozed for today ──
+      const DONE_STATUSES = new Set(['Completado', 'Cerrado', 'Done', 'Closed']);
+      const urgentActions = useMemo(() => {
+        const todayIso = new Date().toISOString().split('T')[0];
+        return (actionPlan || [])
+          .filter(a => {
+            const source = F(a, 'Source') || '';
+            if (!source.startsWith('AI')) return false;
+            const status = F(a, 'Status') || '';
+            if (DONE_STATUSES.has(status)) return false;
+            const snoozed = F(a, 'Snoozed Until');
+            if (snoozed && snoozed >= todayIso) return false;
+            return true;
+          })
+          .sort((a, b) => {
+            const urgWeight = { High: 3, Medium: 2, Low: 1 };
+            const ua = urgWeight[F(a, 'Urgency')] || 0;
+            const ub = urgWeight[F(b, 'Urgency')] || 0;
+            if (ub !== ua) return ub - ua;
+            return (a.createdTime || '').localeCompare(b.createdTime || '');
+          });
+      }, [actionPlan]);
+
+      const [editingTaskId, setEditingTaskId] = useState(null);
+      const [editingTaskText, setEditingTaskText] = useState('');
+      const [taskBusyId, setTaskBusyId] = useState(null);
+
+      const markTaskDone = async (task) => {
+        setTaskBusyId(task.id);
+        if (onUpdateRecord) onUpdateRecord('actionPlan', task.id, { 'Status': 'Completado' });
+        try {
+          const a = api || new AirtableAPI();
+          if (!String(task.id).startsWith('tmp_')) {
+            await a.updateRecord(TABLE_IDS.actionPlan, task.id, { 'Status': 'Completado' });
+          }
+        } catch (e) { console.error('Mark done failed:', e); }
+        finally { setTaskBusyId(null); }
+      };
+
+      const snoozeTask = async (task, days = 3) => {
+        setTaskBusyId(task.id);
+        const until = new Date(); until.setDate(until.getDate() + days);
+        const iso = until.toISOString().split('T')[0];
+        if (onUpdateRecord) onUpdateRecord('actionPlan', task.id, { 'Snoozed Until': iso });
+        try {
+          const a = api || new AirtableAPI();
+          if (!String(task.id).startsWith('tmp_')) {
+            await a.updateRecord(TABLE_IDS.actionPlan, task.id, { 'Snoozed Until': iso });
+          }
+        } catch (e) { console.error('Snooze failed:', e); }
+        finally { setTaskBusyId(null); }
+      };
+
+      const saveTaskEdit = async (task) => {
+        const newText = editingTaskText.trim();
+        if (!newText) { setEditingTaskId(null); return; }
+        setTaskBusyId(task.id);
+        if (onUpdateRecord) onUpdateRecord('actionPlan', task.id, { 'Nombre de la Acción': newText });
+        try {
+          const a = api || new AirtableAPI();
+          if (!String(task.id).startsWith('tmp_')) {
+            await a.updateRecord(TABLE_IDS.actionPlan, task.id, { 'Nombre de la Acción': newText });
+          }
+        } catch (e) { console.error('Edit task failed:', e); }
+        finally { setTaskBusyId(null); setEditingTaskId(null); }
+      };
+
+      // Intent → label + style for urgent task badges
+      const INTENT_BADGE = {
+        meeting_request:     { label: '📅 Meeting request', color: '#1e40af', bg: 'rgba(30,64,175,0.12)' },
+        info_request:        { label: '📎 Info request',    color: '#4338ca', bg: 'rgba(67,56,202,0.12)' },
+        objection:           { label: '🚧 Objection',       color: '#b91c1c', bg: 'rgba(185,28,28,0.12)' },
+        follow_up_needed:    { label: '🔁 Follow-up',       color: '#92400e', bg: 'rgba(146,64,14,0.12)' },
+        engaged:             { label: '✅ Engaged',          color: '#065f46', bg: 'rgba(6,95,70,0.12)' },
+        introduction_needed: { label: '🔗 Intro needed',    color: '#6b21a8', bg: 'rgba(107,33,168,0.12)' },
+        not_now:             { label: '⏰ Not now',         color: '#374151', bg: 'rgba(55,65,81,0.12)' },
+        ghosted:             { label: '👻 Ghosted',         color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
+        other:               { label: '💬 Reply',           color: '#374151', bg: 'rgba(55,65,81,0.12)' },
+      };
 
       // Log response
       const logResponse = async (stakeholder, responseContent) => {
@@ -2480,6 +2669,102 @@ Output ONLY the message, nothing else.`;
           })
           .then(() => { if (onLogActivity) onLogActivity(); })
           .catch(e => console.error('Auto-log failed:', e));
+      };
+
+      // ── Execute urgent task: AI-generate message from next_step + intent, open channel, log outreach, mark task done ──
+      const executeUrgentTask = async (task, channel) => {
+        const stkName = F(task, 'Stakeholder') || '';
+        const stkRec = stakeholders.find(s => {
+          const full = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+          return full && stkName && full.toLowerCase() === stkName.toLowerCase();
+        });
+        if (!stkRec) {
+          alert(`Stakeholder "${stkName}" not found. The contact may have been deleted — open the task and edit or skip.`);
+          return;
+        }
+        // Check channel availability
+        const phone = F(stkRec, 'Phone number');
+        const email = F(stkRec, 'Email');
+        const linkedin = F(stkRec, 'LinkedIn');
+        if (channel === 'Email' && !email) { alert('No email on file for this contact.'); return; }
+        if (channel === 'WhatsApp' && !phone) { alert('No phone on file for this contact.'); return; }
+        if (channel === 'LinkedIn' && !linkedin) { alert('No LinkedIn URL on file for this contact.'); return; }
+
+        setTaskBusyId(task.id);
+        try {
+          const intent = F(task, 'Intent') || 'other';
+          const nextStep = F(task, 'Nombre de la Acción') || '';
+          const accIds = linkedIds(task, 'Cuenta');
+          const acc = accIds[0] ? accounts.find(a => a.id === accIds[0]) : null;
+          const accName = acc ? F(acc, 'Account Name') : '';
+          const role = F(stkRec, 'Role') || '';
+
+          // Last 3 messages for context
+          const history = outreach
+            .filter(o => linkedIds(o, 'Stakeholder').includes(stkRec.id))
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0))
+            .slice(0, 3)
+            .map(o => `[${F(o,'Channel')||'?'} · ${F(o,'Status')||'?'} · ${o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'}]\n${(F(o,'Message') || F(o,'Notes') || '').slice(0, 250)}`)
+            .join('\n---\n');
+
+          const intentGuidance = {
+            meeting_request:     'They asked for a meeting. Propose 3 concrete time slots next week (morning EU time). Include a Google Meet link option.',
+            info_request:        'They asked for information. Acknowledge the specific ask, promise to send within 24h (or attach if ready), offer a 15-min walkthrough call.',
+            objection:           'They raised an objection. Acknowledge it briefly, reframe value in 1 line, suggest a short call to discuss — no defensiveness.',
+            follow_up_needed:    'They engaged but stalled. Bring a NEW angle (trigger, insight, question). Do not say "just following up". Ask ONE specific question.',
+            engaged:             'They are moving. Keep momentum — confirm the next concrete step with specific date/time.',
+            introduction_needed: 'They asked for intro to someone else. Acknowledge, ask best way to reach that person, offer to draft an intro blurb.',
+            not_now:             'They said not now. Respect briefly, ask when would be better, keep door open with one line of value.',
+            ghosted:             'No response. Try a new angle, be brief, add one micro-value point.',
+            other:               'Respond with a specific, actionable next step based on the guidance below.',
+          };
+
+          const senderName = (typeof COMPANY_PROFILE !== 'undefined' && COMPANY_PROFILE.senderName) ? COMPANY_PROFILE.senderName : (CURRENT_USER?.name || '');
+
+          const prompt = `You are writing ONE ${channel} message as ${senderName || 'the sender'} to ${stkName}${role ? ' (' + role + ')' : ''}${accName ? ' at ' + accName : ''}.
+
+WHAT THE AI RECOMMENDED AS NEXT STEP FOR THIS CONTACT:
+"${nextStep}"
+
+INTENT OF THEIR LAST REPLY: ${intent}
+GUIDANCE: ${intentGuidance[intent] || intentGuidance.other}
+
+PREVIOUS CONVERSATION (most recent first):
+${history || '— no history —'}
+
+RULES:
+- Short. Human. Direct. No filler.
+- Do NOT say "hope you're well", "just following up", "touching base", "I wanted to reach out".
+- Use the contact's first name once at the start. Be warm but not overly familiar.
+- Anchor the message to what they actually said and the recommended next step.
+${channel === 'Email' ? '- First line: "Subject: [concise subject]", then BLANK LINE, then body. Body max 6 lines.' : ''}
+${channel === 'WhatsApp' ? '- Ultra casual, max 4 lines, no subject line.' : ''}
+${channel === 'LinkedIn' ? '- Conversational, max 5 lines, no subject line.' : ''}
+
+Output ONLY the message, nothing else.`;
+
+          let message = '';
+          try {
+            const raw = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 400 });
+            message = (raw || '').trim();
+          } catch (e) {
+            console.error('AI message gen failed, using next_step as fallback:', e);
+            message = nextStep;
+          }
+
+          // Fire channel + log outreach (via existing useMessage helper — it handles both)
+          useMessage(stkRec, channel, message);
+
+          // Mark task as Done (optimistic + API)
+          if (onUpdateRecord) onUpdateRecord('actionPlan', task.id, { 'Status': 'Completado' });
+          if (!String(task.id).startsWith('tmp_')) {
+            const a = api || new AirtableAPI();
+            a.updateRecord(TABLE_IDS.actionPlan, task.id, { 'Status': 'Completado' })
+              .catch(e => console.error('Mark task done (after execute) failed:', e));
+          }
+        } finally {
+          setTaskBusyId(null);
+        }
       };
 
       // Manual stakeholder creation in Follow-up Center
@@ -2826,6 +3111,144 @@ Output ONLY the message, nothing else.`;
                 )}
               </div>
           </div>
+
+          {/* ⚡ Urgent Actions — AI-generated tasks from conversation analysis */}
+          {urgentActions.length > 0 && (
+            <div className="card" style={{ borderLeft: '3px solid #ef4444', background: 'rgba(239,68,68,0.03)' }}>
+              <div className="card-header">
+                <h3 style={{ color: '#ef4444' }}>⚡ Urgent Actions ({urgentActions.length})</h3>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>AI-generated next steps from recent conversations — handle these first</span>
+              </div>
+              <div>
+                {urgentActions.map(task => {
+                  const urgency = F(task, 'Urgency') || 'Medium';
+                  const intent = F(task, 'Intent') || 'other';
+                  const intentBadge = INTENT_BADGE[intent] || INTENT_BADGE.other;
+                  const stkName = F(task, 'Stakeholder') || '';
+                  const accIds = linkedIds(task, 'Cuenta');
+                  const acc = accIds[0] ? accounts.find(a => a.id === accIds[0]) : null;
+                  const accName = acc ? F(acc, 'Account Name') : '';
+                  const taskText = F(task, 'Nombre de la Acción') || '';
+                  // Find the full stakeholder record (to open history modal)
+                  const stkRec = stakeholders.find(s => {
+                    const full = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+                    return full && stkName && full.toLowerCase() === stkName.toLowerCase();
+                  });
+                  const urgColor = urgency === 'High' ? '#ef4444' : urgency === 'Medium' ? '#fbbf24' : '#9ca3af';
+                  const urgBg = urgency === 'High' ? 'rgba(239,68,68,0.08)' : urgency === 'Medium' ? 'rgba(251,191,36,0.08)' : 'rgba(156,163,175,0.06)';
+                  const isEditing = editingTaskId === task.id;
+                  const isBusy = taskBusyId === task.id;
+
+                  return (
+                    <div key={task.id} style={{ padding: '12px 14px', marginBottom: 8, borderRadius: 8, background: urgBg, borderLeft: `3px solid ${urgColor}`, opacity: isBusy ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                      {/* Top row: who + badges */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          {stkName && (
+                            <span
+                              style={{ fontWeight: 700, fontSize: 13, color: stkRec ? 'var(--globant-green)' : 'var(--globant-text)', cursor: stkRec ? 'pointer' : 'default' }}
+                              onClick={() => stkRec && setHistoryStakeholder(stkRec)}>
+                              {stkName}
+                            </span>
+                          )}
+                          {accName && <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: stkName ? 8 : 0 }}>{accName}</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: intentBadge.bg, color: intentBadge.color }}>{intentBadge.label}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: urgColor + '22', color: urgColor }}>{urgency === 'High' ? '🔥 HIGH' : urgency === 'Medium' ? '⏳ MEDIUM' : '🌙 LOW'}</span>
+                        </div>
+                      </div>
+
+                      {/* Task text (inline edit) */}
+                      {isEditing ? (
+                        <div style={{ marginBottom: 8 }}>
+                          <textarea
+                            className="input-field"
+                            style={{ width: '100%', minHeight: 60, fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }}
+                            value={editingTaskText}
+                            onChange={e => setEditingTaskText(e.target.value)}
+                            autoFocus
+                          />
+                          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                            <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px' }} onClick={() => saveTaskEdit(task)}>💾 Save</button>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '4px 10px' }} onClick={() => { setEditingTaskId(null); setEditingTaskText(''); }}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.5, marginBottom: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 6, borderLeft: `2px solid ${urgColor}` }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: urgColor, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 3 }}>➤ Next step</span>
+                          {taskText || '—'}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      {!isEditing && (() => {
+                        const stkEmail = stkRec ? F(stkRec, 'Email') : '';
+                        const stkPhone = stkRec ? F(stkRec, 'Phone number') : '';
+                        const stkLinkedin = stkRec ? F(stkRec, 'LinkedIn') : '';
+                        return (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {/* Channel actions — AI-generate message + open channel + log outreach + auto-mark done */}
+                            {stkEmail && (
+                              <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} disabled={isBusy}
+                                onClick={() => executeUrgentTask(task, 'Email')}>
+                                {isBusy ? '⏳' : '✉️ Send email + log'}
+                              </button>
+                            )}
+                            {stkPhone && (
+                              <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} disabled={isBusy}
+                                onClick={() => executeUrgentTask(task, 'WhatsApp')}>
+                                {isBusy ? '⏳' : '💬 WhatsApp + log'}
+                              </button>
+                            )}
+                            {stkLinkedin && (
+                              <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} disabled={isBusy}
+                                onClick={() => executeUrgentTask(task, 'LinkedIn')}>
+                                {isBusy ? '⏳' : '🔗 LinkedIn + log'}
+                              </button>
+                            )}
+                            {!stkRec && (
+                              <span style={{ fontSize: 10, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
+                                ⚠️ Contact not found — skip or edit
+                              </span>
+                            )}
+
+                            <div style={{ width: 1, background: 'var(--globant-border)', margin: '0 4px', alignSelf: 'stretch' }} />
+
+                            <button className="action-btn" style={{ fontSize: 10, padding: '5px 10px', background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }} disabled={isBusy}
+                              onClick={() => snoozeTask(task, 3)}>
+                              💤 Snooze 3d
+                            </button>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px' }} disabled={isBusy}
+                              onClick={() => { setEditingTaskId(task.id); setEditingTaskText(taskText); }}>
+                              ✏️ Edit
+                            </button>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px' }} disabled={isBusy}
+                              title="Close this task without sending a message (use when handled offline)"
+                              onClick={() => markTaskDone(task)}>
+                              ✅ Skip — mark done
+                            </button>
+                            {stkRec && (
+                              <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px' }}
+                                onClick={() => setHistoryStakeholder(stkRec)}>
+                                🔗 View conversation
+                              </button>
+                            )}
+                            {acc && goToAccount && (
+                              <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px' }}
+                                onClick={() => goToAccount(acc.id)}>
+                                🏢 Account
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Group 1: Follow-up Pending */}
           <div className="card" style={{ borderLeft: '3px solid var(--globant-info)' }}>
@@ -5688,22 +6111,16 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                         placeholder="Add your intel notes here... meeting insights, context, observations, next steps..."
                         style={{ width: '100%', minHeight: 120, fontSize: 12, lineHeight: 1.6, resize: 'vertical' }} />
                     ) : intelNotes ? (
-                      <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto' }}>
-                        {intelNotes.split(/(\n📎 FILE:)/g).map((block, i) => {
-                          if (block === '\n📎 FILE:') return null;
-                          const isFile = i > 0;
-                          if (isFile) {
-                            const fileBlock = '📎 FILE:' + block;
-                            const firstLine = fileBlock.split('\n')[0];
-                            return (
-                              <div key={i} style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(96,165,250,0.06)', borderRadius: 8, borderLeft: '3px solid var(--globant-info)' }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-info)', marginBottom: 4 }}>{firstLine}</div>
-                                <div style={{ fontSize: 12 }}>{fileBlock.split('\n').slice(1).join('\n')}</div>
-                              </div>
-                            );
-                          }
-                          return <div key={i}>{block}</div>;
-                        })}
+                      <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                        <FileNotesRenderer
+                          notes={intelNotes}
+                          accentColor="var(--globant-accent)"
+                          onUpdateNotes={async (updated) => {
+                            const a = api || new AirtableAPI();
+                            await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Intel Notes': updated });
+                            if (onLogActivity) onLogActivity();
+                          }}
+                        />
                       </div>
                     ) : (
                       <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No notes yet — click "Add Notes" to write, or "Upload File" to add intel from documents</div>
@@ -9076,7 +9493,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                     value={notesValue} onChange={e => setNotesValue(e.target.value)}
                     placeholder="Add notes about this solution — positioning, competitive intel, key differentiators..." />
                 ) : (
-                  solNotes ? renderNotes(solNotes) : <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No notes yet. Add context, competitive intel, or upload files.</p>
+                  solNotes ? (
+                    <FileNotesRenderer
+                      notes={solNotes}
+                      accentColor="var(--globant-info)"
+                      onUpdateNotes={async (updated) => {
+                        const a = api || new AirtableAPI();
+                        await a.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'Extra imput': updated });
+                        if (onLogActivity) onLogActivity();
+                      }}
+                    />
+                  ) : <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No notes yet. Add context, competitive intel, or upload files.</p>
                 )}
               </div>
 
@@ -13744,7 +14171,7 @@ No markdown, no commentary. JSON only.`;
     }
 
     // ============ REPORT BUILDER ============
-    function ReportBuilder({ data }) {
+    function ReportBuilder({ data, api, onAddRecord }) {
       const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [] } = data;
       const now = new Date();
       const fmt = (d) => d.toISOString().split('T')[0];
@@ -13764,6 +14191,10 @@ No markdown, no commentary. JSON only.`;
       const [gmailOpened, setGmailOpened] = useState(false);
       const [generating, setGenerating] = useState(false);
       const [reportNotes, setReportNotes] = useState('');
+      // Store AI-analyzed replies so they can be converted to urgent tasks after the report is generated
+      const [lastReplyDetails, setLastReplyDetails] = useState([]);
+      const [creatingTasks, setCreatingTasks] = useState(false);
+      const [tasksCreatedCount, setTasksCreatedCount] = useState(0);
 
       // Reset selection when switching group-by type
       const changeGroupBy = (g) => { setGroupBy(g); setSelectedIds([]); setSearchQuery(''); };
@@ -14284,11 +14715,66 @@ Return ONLY valid JSON:
 </body></html>`;
 
         setReportHtml(html);
+        // Cache the structured replies so the user can turn them into urgent tasks
+        setLastReplyDetails(replyDetails);
+        setTasksCreatedCount(0);
       } catch(e) {
         console.error('Report generation failed:', e);
       } finally {
         setGenerating(false);
       }
+      };
+
+      // ── Convert AI-analyzed replies into Action Plan tasks (High + Medium urgency) ──
+      const generateUrgentTasks = async () => {
+        if (!api || !TABLE_IDS.actionPlan) {
+          alert('Action Plan table not available.');
+          return;
+        }
+        const eligible = (lastReplyDetails || []).filter(r =>
+          (r.urgency === 'high' || r.urgency === 'medium') && r.next_step && r.next_step.trim()
+        );
+        if (eligible.length === 0) {
+          alert('No urgent actions to create — all replies are low urgency or have no next step.');
+          return;
+        }
+        setCreatingTasks(true);
+        let created = 0;
+        try {
+          for (const r of eligible) {
+            // Find the outreach record for this reply (match by stakeholder + Replied status)
+            const outreachRec = r.stk
+              ? outreach.find(o =>
+                  linkedIds(o, 'Stakeholder').includes(r.stk.id) &&
+                  F(o, 'Status') === 'Replied'
+                )
+              : null;
+            const accId = r.acc?.id || (r.stk ? linkedIds(r.stk, 'Account')[0] : null);
+            const stkName = r.stk ? `${F(r.stk,'Name')||''} ${F(r.stk,'Last name')||''}`.trim() : '';
+            const urgencyLabel = r.urgency === 'high' ? 'High' : 'Medium';
+
+            const fields = {
+              'Nombre de la Acción': String(r.next_step).slice(0, 200),
+              'Source': 'AI - Reply',
+              'Urgency': urgencyLabel,
+              'Intent': r.intent || 'other',
+            };
+            if (accId) fields['Cuenta'] = [accId];
+            if (stkName) fields['Stakeholder'] = stkName;
+            if (outreachRec) fields['Related Outreach'] = [outreachRec.id];
+
+            try {
+              const rec = await api.createRecord(TABLE_IDS.actionPlan, fields);
+              if (onAddRecord) onAddRecord('actionPlan', rec.fields || fields, rec.id);
+              created++;
+            } catch(e) {
+              console.error('Failed to create urgent task for', stkName, e);
+            }
+          }
+          setTasksCreatedCount(created);
+        } finally {
+          setCreatingTasks(false);
+        }
       };
 
       const copyHtml = async () => {
@@ -14526,8 +15012,26 @@ Return ONLY valid JSON:
                     <button style={{ padding:'10px 16px', borderRadius:8, border:'1px solid var(--globant-border)', background:'transparent', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }} onClick={printReportAsPdf}>
                       🖨️ PDF
                     </button>
+                    {(() => {
+                      const eligibleCount = (lastReplyDetails || []).filter(r => (r.urgency === 'high' || r.urgency === 'medium') && r.next_step && r.next_step.trim()).length;
+                      const disabled = creatingTasks || eligibleCount === 0 || tasksCreatedCount > 0;
+                      const label = creatingTasks
+                        ? '⏳ Creating...'
+                        : tasksCreatedCount > 0
+                          ? `✅ ${tasksCreatedCount} task${tasksCreatedCount!==1?'s':''} created — see Follow-up Center`
+                          : `⚡ Create ${eligibleCount} urgent task${eligibleCount!==1?'s':''}`;
+                      return (
+                        <button
+                          onClick={generateUrgentTasks}
+                          disabled={disabled}
+                          title={eligibleCount === 0 ? 'No high/medium urgency replies detected' : `Create ${eligibleCount} Action Plan task${eligibleCount!==1?'s':''} from high + medium urgency replies`}
+                          style={{ padding:'10px 16px', borderRadius:8, border:`1px solid ${disabled?'rgba(239,68,68,0.25)':'rgba(239,68,68,0.5)'}`, background: tasksCreatedCount > 0 ? 'rgba(16,185,129,0.15)' : disabled ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.15)', color: tasksCreatedCount > 0 ? '#10b981' : disabled ? 'rgba(239,68,68,0.5)' : '#f87171', fontWeight:700, fontSize:13, cursor: disabled ? 'not-allowed' : 'pointer' }}>
+                          {label}
+                        </button>
+                      );
+                    })()}
                     <button className="action-btn btn-ghost" style={{ padding:'10px 16px', fontSize:13, marginLeft:'auto' }}
-                      onClick={() => { setReportHtml(''); setCopied(false); setGmailOpened(false); }}>
+                      onClick={() => { setReportHtml(''); setCopied(false); setGmailOpened(false); setTasksCreatedCount(0); }}>
                       🔄 Reset
                     </button>
                   </div>
@@ -15563,7 +16067,7 @@ Return ONLY valid JSON:
       const bgSync = () => api && loadData(api, true);
       const pages = {
         overview: <StrategyOverview data={data} api={api} onUpdateRecord={updateInData} onAddRecord={addToData} onLogActivity={bgSync} />,
-        followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} goToAccount={goToAccount} />,
+        followup: <FollowupCenter data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} goToAccount={goToAccount} />,
         contacts: <ContactsSection data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} goToAccount={goToAccount} />,
         activity: <ActivityTracker data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} />,
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
@@ -15571,7 +16075,7 @@ Return ONLY valid JSON:
         insights: <InsightsView data={data} />,
         campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
-        reports:  <ReportBuilder data={data} />,
+        reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
