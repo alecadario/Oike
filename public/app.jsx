@@ -12055,7 +12055,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
     }
 
     // ============ CAMPAIGNS HUB ============
-    function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord }) {
+    function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, campaignPrefill, clearCampaignPrefill }) {
       const { campaigns = [], stakeholders = [], accounts = [], outreach = [] } = data;
 
       const [selectedId, setSelectedId] = useState(null);
@@ -12063,8 +12063,29 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [statusFilter, setStatusFilter] = useState('');
       const [showForm, setShowForm] = useState(false);
       const [editingCampaign, setEditingCampaign] = useState(null);
-      const [form, setForm] = useState({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'' });
+      const [form, setForm] = useState({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'', context:'', assignedIds: [] });
       const [saving, setSaving] = useState(false);
+
+      // Handle campaignPrefill coming from Report Builder (Create campaign from insight)
+      useEffect(() => {
+        if (campaignPrefill) {
+          setEditingCampaign(null);
+          setSelectedId(null);
+          setForm({
+            name: campaignPrefill.name || '',
+            type: campaignPrefill.type || 'White Paper',
+            status: 'Draft',
+            messageTemplate: '',
+            assetUrl: '',
+            startDate: '',
+            goal: '',
+            context: campaignPrefill.context || '',
+            assignedIds: campaignPrefill.stakeholderIds || [],
+          });
+          setShowForm(true);
+          if (clearCampaignPrefill) clearCampaignPrefill();
+        }
+      }, [campaignPrefill, clearCampaignPrefill]);
       const [filterIndustry, setFilterIndustry] = useState('');
       const [filterRole, setFilterRole] = useState('');
       const [filterSearch, setFilterSearch] = useState('');
@@ -12263,7 +12284,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       // ── Form helpers ──
       const openCreate = () => {
         setEditingCampaign(null);
-        setForm({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'' });
+        setForm({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'', context:'', assignedIds: [] });
         setShowForm(true);
       };
 
@@ -12277,6 +12298,8 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
           assetUrl: F(c,'Asset URL') || '',
           startDate: c.fields?.['Start Date'] || '',
           goal: c.fields?.['Goal'] ? String(c.fields['Goal']) : '',
+          context: F(c,'Context') || '',
+          assignedIds: linkedIds(c, 'Assigned Stakeholders'),
         });
         setShowForm(true);
       };
@@ -12293,13 +12316,17 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
             ...(form.assetUrl ? { 'Asset URL': form.assetUrl } : {}),
             ...(form.startDate ? { 'Start Date': form.startDate } : {}),
             ...(form.goal ? { 'Goal': parseInt(form.goal) || 0 } : {}),
+            ...(form.context ? { 'Context': form.context } : {}),
+            ...(form.assignedIds && form.assignedIds.length > 0 ? { 'Assigned Stakeholders': form.assignedIds } : {}),
           };
           if (editingCampaign) {
             await api.updateRecord(TABLE_IDS.campaigns, editingCampaign.id, fields);
             if (onUpdateRecord) onUpdateRecord('campaigns', editingCampaign.id, fields);
           } else {
             const created = await api.createRecord(TABLE_IDS.campaigns, fields);
-            if (onAddRecord) onAddRecord('campaigns', created?.fields || fields);
+            if (onAddRecord) onAddRecord('campaigns', created?.fields || fields, created?.id);
+            // After creating, navigate directly to the new campaign's detail view
+            if (created?.id) setSelectedId(created.id);
           }
           setShowForm(false);
           if (onLogActivity) onLogActivity();
@@ -12754,6 +12781,20 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         placeholder="Core angle, key message, or talking points. The AI uses this as reference to personalize for each contact."
                         value={form.messageTemplate} onChange={e=>setForm(p=>({...p,messageTemplate:e.target.value}))} />
                     </div>
+                    <div>
+                      <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Campaign Context (strategic brief)</label>
+                      <textarea style={{ ...inputSt, minHeight:120, resize:'vertical', fontFamily:'inherit' }}
+                        placeholder="Target cohort, pain addressed, angle, desired outcome..."
+                        value={form.context || ''} onChange={e=>setForm(p=>({...p,context:e.target.value}))} />
+                    </div>
+                    {form.assignedIds && form.assignedIds.length > 0 && (
+                      <div style={{ padding: '10px 12px', background: 'rgba(16,185,129,0.08)', borderRadius: 6, border: '1px solid rgba(16,185,129,0.2)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', marginBottom: 4 }}>👥 Pre-assigned stakeholders ({form.assignedIds.length})</div>
+                        <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>
+                          These contacts will be added to the campaign on save. You can remove any on the detail view after saving.
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display:'flex', gap:8, marginTop:18 }}>
                     <button className="action-btn btn-primary" style={{ fontSize:13 }} onClick={saveCampaign} disabled={saving}>{saving?'⏳ Saving...':'💾 Save Campaign'}</button>
@@ -12881,6 +12922,20 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       placeholder="Core angle, key message, or talking points. The AI uses this as reference to personalize for each contact."
                       value={form.messageTemplate} onChange={e=>setForm(p=>({...p,messageTemplate:e.target.value}))} />
                   </div>
+                  <div>
+                    <label style={{ fontSize:11, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>Campaign Context (strategic brief)</label>
+                    <textarea style={{ ...inputSt, minHeight:120, resize:'vertical', fontFamily:'inherit' }}
+                      placeholder="Target cohort, pain addressed, angle, desired outcome..."
+                      value={form.context || ''} onChange={e=>setForm(p=>({...p,context:e.target.value}))} />
+                  </div>
+                  {form.assignedIds && form.assignedIds.length > 0 && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(16,185,129,0.08)', borderRadius: 6, border: '1px solid rgba(16,185,129,0.2)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', marginBottom: 4 }}>👥 Pre-assigned stakeholders ({form.assignedIds.length})</div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>
+                        These contacts will be added to the campaign on save.
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display:'flex', gap:8, marginTop:18 }}>
                   <button className="action-btn btn-primary" style={{ fontSize:13 }} onClick={saveCampaign} disabled={saving}>{saving?'⏳ Saving...':'💾 Save Campaign'}</button>
@@ -14378,20 +14433,22 @@ No markdown, no commentary. JSON only.`;
     }
 
     // ============ REPORT BUILDER ============
-    function ReportBuilder({ data, api, onAddRecord }) {
+    function ReportBuilder({ data, api, onAddRecord, onCreateCampaignFromInsight }) {
       const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [] } = data;
       const now = new Date();
       const fmt = (d) => d.toISOString().split('T')[0];
       const defaultFrom = fmt(new Date(now - 14 * 86400000));
       const defaultTo   = fmt(now);
 
+      // ── Top-level report mode: 'outreach' | 'company' | 'stakeholder' ──
+      const [reportMode, setReportMode] = useState('outreach');
       const [dateFrom, setDateFrom]   = useState(defaultFrom);
       const [dateTo, setDateTo]       = useState(defaultTo);
-      // Grouping dimension: 'accounts' | 'solutions' | 'campaigns' | 'events'
+      // Grouping dimension (outreach mode): 'accounts' | 'solutions' | 'campaigns' | 'events'
       const [groupBy, setGroupBy]     = useState('accounts');
       const [selectedIds, setSelectedIds] = useState([]);
       const [searchQuery, setSearchQuery] = useState('');
-      // Report view filter: 'all' | 'replies' | 'meetings' | 'posts'
+      // Report view filter (outreach mode): 'all' | 'replies' | 'meetings' | 'posts'
       const [reportFilter, setReportFilter] = useState('all');
       const [reportHtml, setReportHtml] = useState('');
       const [copied, setCopied]       = useState(false);
@@ -14402,6 +14459,17 @@ No markdown, no commentary. JSON only.`;
       const [lastReplyDetails, setLastReplyDetails] = useState([]);
       const [creatingTasks, setCreatingTasks] = useState(false);
       const [tasksCreatedCount, setTasksCreatedCount] = useState(0);
+
+      // ── Intel report state (shared between Company & Stakeholder) ──
+      const [intelGroupBy, setIntelGroupBy] = useState('industry'); // industry | country | account (company) | industry | role | country (stakeholder)
+      const [intelIncludeOutreach, setIntelIncludeOutreach] = useState(false); // company report toggle
+      const [intelIncludeOpps, setIntelIncludeOpps] = useState(true); // stakeholder report toggle
+      const [intelFilterIndustry, setIntelFilterIndustry] = useState('');
+      const [intelFilterCountry, setIntelFilterCountry] = useState('');
+      const [intelFilterInfluence, setIntelFilterInfluence] = useState(''); // stakeholder only
+      // Cached insights per group (for "Create campaign from insight")
+      const [intelInsights, setIntelInsights] = useState([]);
+      // { groupKey, groupLabel, execSummary, suggestedCampaign: { name, type, context, stakeholderIds } }
 
       // Reset selection when switching group-by type
       const changeGroupBy = (g) => { setGroupBy(g); setSelectedIds([]); setSearchQuery(''); };
@@ -14984,6 +15052,449 @@ Return ONLY valid JSON:
         }
       };
 
+      // ══════════════════════════════════════════════════════════
+      // COMPANY INTEL REPORT — groups accounts by industry/country/account
+      // extracts news + intel notes + stakeholder breakdown + AI exec summary
+      // ══════════════════════════════════════════════════════════
+      const generateCompanyIntelHtml = async () => {
+        setGenerating(true);
+        try {
+          const T = '#1A1A2E', G = '#5BBFB5', GR = '#4A4A4A', LG = '#F5F5F5';
+
+          // Filter accounts
+          let poolAccounts = accounts.filter(a => {
+            if (intelFilterIndustry && F(a, 'Industry') !== intelFilterIndustry) return false;
+            if (intelFilterCountry && F(a, 'Country') !== intelFilterCountry) return false;
+            return true;
+          });
+
+          // Build groups by intelGroupBy
+          const groups = {};
+          poolAccounts.forEach(a => {
+            let key = '';
+            if (intelGroupBy === 'industry') key = F(a, 'Industry') || 'Uncategorized';
+            else if (intelGroupBy === 'country') key = F(a, 'Country') || 'Unknown';
+            else if (intelGroupBy === 'account') key = F(a, 'Account Name') || 'Unknown';
+            else key = 'All accounts';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(a);
+          });
+
+          const groupEntries = Object.entries(groups).sort((a,b) => b[1].length - a[1].length);
+          const insights = [];
+
+          // Build HTML sections per group
+          const groupSections = [];
+          for (const [groupLabel, groupAccs] of groupEntries) {
+            // Aggregate intel
+            const allNews = groupAccs.map(a => {
+              const name = F(a, 'Account Name') || '';
+              const news = F(a, 'Recent News') || '';
+              return news ? `- ${name}: ${String(news).slice(0, 300)}` : '';
+            }).filter(Boolean);
+
+            const allIntel = groupAccs.map(a => {
+              const name = F(a, 'Account Name') || '';
+              const notes = F(a, 'Intel Notes') || '';
+              if (!notes) return '';
+              // Strip FILE: bodies to just headers + preview
+              const cleaned = String(notes).replace(/📎 FILE:([^\n]+)\n([\s\S]*?)(?=\n📎 FILE:|$)/g, (_, header, body) => {
+                const firstLines = body.trim().split('\n').slice(0, 3).join(' ');
+                return `[FILE: ${header.trim()}] ${firstLines.slice(0, 200)}`;
+              });
+              return `- ${name}: ${cleaned.slice(0, 500)}`;
+            }).filter(Boolean);
+
+            // Outreach overlay (optional)
+            const groupAccIds = new Set(groupAccs.map(a => a.id));
+            const groupOutreach = outreach.filter(o => linkedIds(o, 'Account').some(id => groupAccIds.has(id)));
+            const sent = groupOutreach.length;
+            const replies = groupOutreach.filter(o => F(o, 'Status') === 'Replied').length;
+            const meetings = groupOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status'))).length;
+
+            // Top stakeholders in this group
+            const groupStks = stakeholders.filter(s => linkedIds(s, 'Account').some(id => groupAccIds.has(id)));
+            const topStks = groupStks
+              .filter(s => F(s, 'Level of Influence'))
+              .sort((a,b) => {
+                const order = { 'Champion': 0, 'Decision Maker': 1, 'Influencer': 2, 'Gatekeeper': 3 };
+                return (order[F(a,'Level of Influence')] ?? 9) - (order[F(b,'Level of Influence')] ?? 9);
+              })
+              .slice(0, 8);
+
+            // AI exec summary for this group
+            let execSummary = '';
+            let suggestedCampaign = null;
+            try {
+              const prompt = `You are a senior B2B sales strategist analyzing a group of accounts for ${COMPANY_PROFILE.companyName || 'our company'}.
+
+GROUP: ${groupLabel} (${groupAccs.length} accounts)
+
+RECENT NEWS:
+${allNews.slice(0, 15).join('\n') || '— none —'}
+
+INTEL NOTES:
+${allIntel.slice(0, 10).join('\n') || '— none —'}
+
+${intelIncludeOutreach ? `OUTREACH: ${sent} sent, ${replies} replies (${sent > 0 ? Math.round(replies/sent*100) : 0}%), ${meetings} meetings.` : ''}
+
+Top stakeholders: ${topStks.map(s => `${F(s,'Name')} (${F(s,'Role')||'?'}, ${F(s,'Level of Influence')||'?'})`).join(', ') || 'none'}
+
+Return JSON:
+{
+  "exec_summary": "3-5 sentences: what's happening in this group? What's the opportunity? What should we do? Be specific, reference real accounts/news.",
+  "suggested_campaign": {
+    "name": "short descriptive campaign name (max 60 chars)",
+    "type": "White Paper | News / Article | Product Launch | Case Study | Cold Outreach",
+    "context": "2-3 short paragraphs describing: who to target in this group, what pain/trigger to address based on the news/intel, what angle to use, what outcome we want. This will be used as context for AI to personalize messages."
+  }
+}
+
+Return ONLY valid JSON.`;
+              const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 900 });
+              const cleaned = raw.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+              const parsed = JSON.parse(cleaned);
+              execSummary = parsed.exec_summary || '';
+              suggestedCampaign = parsed.suggested_campaign || null;
+            } catch (e) {
+              console.error('Company intel AI failed for group', groupLabel, e);
+              execSummary = `${groupAccs.length} accounts in this group. ${allNews.length} have recent news. ${allIntel.length} have intel notes.`;
+            }
+
+            // Cache insight for "Create campaign" button
+            insights.push({
+              groupKey: groupLabel,
+              groupLabel,
+              execSummary,
+              suggestedCampaign,
+              stakeholderIds: topStks.map(s => s.id),
+            });
+
+            groupSections.push(`
+              <tr><td style="padding:18px 0 8px;">
+                <h2 style="margin:0 0 12px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">
+                  🏢 ${groupLabel} <span style="font-size:12px;font-weight:400;color:#9ca3af;">(${groupAccs.length} account${groupAccs.length!==1?'s':''})</span>
+                </h2>
+
+                ${execSummary ? `
+                <div style="padding:12px 14px;background:#f8f4ff;border-left:3px solid #8b5cf6;border-radius:0 6px 6px 0;margin-bottom:14px;font-size:13px;line-height:1.6;color:${T};">
+                  <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">🧠 Executive Summary</div>
+                  ${execSummary}
+                </div>` : ''}
+
+                ${suggestedCampaign ? `
+                <div style="padding:12px 14px;background:#ecfdf5;border-left:3px solid #10b981;border-radius:0 6px 6px 0;margin-bottom:14px;font-size:12px;line-height:1.6;">
+                  <div style="font-size:10px;font-weight:700;color:#10b981;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">💡 Suggested Campaign</div>
+                  <div style="font-weight:700;color:${T};margin-bottom:4px;">${suggestedCampaign.name || ''}</div>
+                  <div style="font-size:11px;color:${GR};margin-bottom:6px;">Type: ${suggestedCampaign.type || '?'}</div>
+                  <div style="font-size:12px;color:${T};white-space:pre-wrap;">${(suggestedCampaign.context || '').replace(/</g,'&lt;')}</div>
+                </div>` : ''}
+
+                ${allNews.length > 0 ? `
+                <div style="margin-bottom:12px;">
+                  <div style="font-size:11px;font-weight:700;color:${G};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">📰 Recent News (${allNews.length})</div>
+                  <div style="padding:10px 12px;background:#f0fdf4;border-radius:6px;font-size:12px;line-height:1.6;color:${GR};">
+                    ${allNews.slice(0, 8).map(n => `<div style="margin-bottom:4px;">${n.replace(/</g,'&lt;')}</div>`).join('')}
+                    ${allNews.length > 8 ? `<div style="font-style:italic;color:#9ca3af;margin-top:6px;">+ ${allNews.length - 8} more…</div>` : ''}
+                  </div>
+                </div>` : ''}
+
+                ${allIntel.length > 0 ? `
+                <div style="margin-bottom:12px;">
+                  <div style="font-size:11px;font-weight:700;color:${G};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">📝 Intel Notes (${allIntel.length})</div>
+                  <div style="padding:10px 12px;background:#fffbeb;border-radius:6px;font-size:12px;line-height:1.6;color:${GR};">
+                    ${allIntel.slice(0, 6).map(n => `<div style="margin-bottom:4px;">${n.replace(/</g,'&lt;')}</div>`).join('')}
+                    ${allIntel.length > 6 ? `<div style="font-style:italic;color:#9ca3af;margin-top:6px;">+ ${allIntel.length - 6} more…</div>` : ''}
+                  </div>
+                </div>` : ''}
+
+                ${intelIncludeOutreach ? `
+                <div style="margin-bottom:12px;padding:8px 12px;background:#eff6ff;border-radius:6px;">
+                  <span style="font-size:11px;font-weight:700;color:#2563eb;">📬 Outreach: </span>
+                  <span style="font-size:12px;color:${GR};">${sent} sent · ${replies} replies (${sent > 0 ? Math.round(replies/sent*100) : 0}%) · ${meetings} meetings</span>
+                </div>` : ''}
+
+                ${topStks.length > 0 ? `
+                <div>
+                  <div style="font-size:11px;font-weight:700;color:${G};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">👥 Top Stakeholders (${topStks.length})</div>
+                  <div style="font-size:12px;color:${GR};line-height:1.7;">
+                    ${topStks.map(s => {
+                      const accId = linkedIds(s, 'Account')[0];
+                      const acc = accId ? accounts.find(a => a.id === accId) : null;
+                      const accName = acc ? F(acc, 'Account Name') : '';
+                      return `<div>• <strong>${F(s,'Name')||''} ${F(s,'Last name')||''}</strong> — ${F(s,'Role')||'?'} @ ${accName}${F(s,'Level of Influence') ? ` <span style="color:${G};font-size:10px;">(${F(s,'Level of Influence')})</span>` : ''}</div>`;
+                    }).join('')}
+                  </div>
+                </div>` : ''}
+              </td></tr>`);
+          }
+
+          const dateLabel = `Generated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+          const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 16px;">
+<tr><td align="center">
+<table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;">
+  <tr><td style="background:${T};padding:24px 28px;border-radius:12px 12px 0 0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">🏢 Company Intel Report</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;color:#e5e7eb;font-weight:600;">${dateLabel}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Grouped by ${intelGroupBy}${intelFilterIndustry ? ` · ${intelFilterIndustry}` : ''}${intelFilterCountry ? ` · ${intelFilterCountry}` : ''}</div>
+      </div>
+    </div>
+  </td></tr>
+  <tr><td style="background:#fff;padding:28px;border-radius:0 0 12px 12px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:0 0 12px;font-size:12px;color:${GR};line-height:1.6;">
+        <strong>${poolAccounts.length}</strong> accounts analyzed across <strong>${groupEntries.length}</strong> group${groupEntries.length!==1?'s':''}. Each group has an AI executive summary + a suggested campaign angle.
+      </td></tr>
+      ${groupSections.join('')}
+    </table>
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+
+          setReportHtml(html);
+          setIntelInsights(insights);
+        } catch(e) {
+          console.error('Company Intel report failed:', e);
+        } finally {
+          setGenerating(false);
+        }
+      };
+
+      // ══════════════════════════════════════════════════════════
+      // STAKEHOLDER PAINS REPORT — aggregated pains + LinkedIn themes
+      // NOT one-by-one, grouped by industry/role/country
+      // ══════════════════════════════════════════════════════════
+      const generateStakeholderPainsHtml = async () => {
+        setGenerating(true);
+        try {
+          const T = '#1A1A2E', G = '#5BBFB5', GR = '#4A4A4A';
+
+          // Filter stakeholders
+          let poolStks = stakeholders.filter(s => {
+            // Must have pain or LinkedIn news to be useful
+            const hasPain = !!(F(s, 'Pain Points (Generated)') || F(s, 'Pain points'));
+            const hasLinkedin = !!(F(s, 'LinkedIn News (Generated)') || F(s, 'Linkedin lates news'));
+            if (!hasPain && !hasLinkedin) return false;
+            if (intelFilterCountry && F(s, 'Country') !== intelFilterCountry) return false;
+            if (intelFilterInfluence && F(s, 'Level of Influence') !== intelFilterInfluence) return false;
+            if (intelFilterIndustry) {
+              const accId = linkedIds(s, 'Account')[0];
+              const acc = accId ? accounts.find(a => a.id === accId) : null;
+              if (!acc || F(acc, 'Industry') !== intelFilterIndustry) return false;
+            }
+            return true;
+          });
+
+          // Group by intelGroupBy
+          const groups = {};
+          poolStks.forEach(s => {
+            let key = '';
+            if (intelGroupBy === 'industry') {
+              const accId = linkedIds(s, 'Account')[0];
+              const acc = accId ? accounts.find(a => a.id === accId) : null;
+              key = acc ? (F(acc, 'Industry') || 'Uncategorized') : 'No account';
+            } else if (intelGroupBy === 'role') {
+              key = F(s, 'Role') || 'Unknown role';
+            } else if (intelGroupBy === 'country') {
+              key = F(s, 'Country') || 'Unknown';
+            } else {
+              // Default: industry
+              const accId = linkedIds(s, 'Account')[0];
+              const acc = accId ? accounts.find(a => a.id === accId) : null;
+              key = acc ? (F(acc, 'Industry') || 'Uncategorized') : 'No account';
+            }
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(s);
+          });
+
+          const groupEntries = Object.entries(groups).sort((a,b) => b[1].length - a[1].length);
+          const insights = [];
+          const groupSections = [];
+
+          for (const [groupLabel, groupStks] of groupEntries) {
+            // Aggregate pains + LinkedIn
+            const painsRaw = groupStks.map(s => {
+              const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
+              if (!pain) return null;
+              const name = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+              return { name, role: F(s,'Role')||'', text: String(pain).slice(0, 300) };
+            }).filter(Boolean);
+
+            const linkedinRaw = groupStks.map(s => {
+              const news = F(s, 'LinkedIn News (Generated)') || F(s, 'Linkedin lates news') || '';
+              if (!news) return null;
+              const name = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+              return { name, role: F(s,'Role')||'', text: String(news).slice(0, 250) };
+            }).filter(Boolean);
+
+            // Opportunities for this group (if enabled)
+            let oppsValue = 0;
+            let oppsCount = 0;
+            if (intelIncludeOpps) {
+              const groupAccIds = new Set(groupStks.flatMap(s => linkedIds(s, 'Account')));
+              const groupOpps = opportunities.filter(o =>
+                linkedIds(o, 'Account').some(id => groupAccIds.has(id)) &&
+                !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o,'Stage'))
+              );
+              oppsCount = groupOpps.length;
+              oppsValue = groupOpps.reduce((s,o) => s + (o.fields?.['Value'] || 0), 0);
+            }
+
+            // AI aggregates pains + themes + timing + suggested campaign
+            let aiBlock = { top_pains: [], linkedin_themes: [], timing_signals: [], exec_summary: '', suggested_campaign: null };
+            try {
+              const prompt = `You are a senior B2B sales strategist. Analyze a group of stakeholders and synthesize aggregated insights. DO NOT list them one by one — synthesize patterns.
+
+GROUP: ${groupLabel} (${groupStks.length} stakeholders)
+${intelIncludeOpps ? `OPPORTUNITIES IN GROUP: ${oppsCount} open, total value: ${formatCurrency(oppsValue)}` : ''}
+
+PAIN POINTS ACROSS THE GROUP:
+${painsRaw.slice(0, 30).map(p => `- ${p.name} (${p.role}): ${p.text}`).join('\n') || '— none —'}
+
+LINKEDIN NEWS / UPDATES ACROSS THE GROUP:
+${linkedinRaw.slice(0, 30).map(l => `- ${l.name} (${l.role}): ${l.text}`).join('\n') || '— none —'}
+
+Return JSON:
+{
+  "top_pains": [
+    { "pain": "short pain label (5-8 words)", "frequency": "X of N mention this", "example": "1 concrete example quote" }
+  ],
+  "linkedin_themes": [
+    { "theme": "short theme label", "details": "1 sentence on what's happening" }
+  ],
+  "timing_signals": [
+    { "signal": "specific trigger (promotion, funding, expansion, rebranding, etc.)", "who": "who triggered it" }
+  ],
+  "exec_summary": "4-6 sentences: What is this cohort dealing with? What's the narrative? What's the opportunity? Reference real pains and real LinkedIn signals.",
+  "suggested_campaign": {
+    "name": "descriptive campaign name (max 60 chars) that captures the pain/trigger",
+    "type": "White Paper | News / Article | Product Launch | Case Study | Cold Outreach",
+    "context": "2-3 short paragraphs: target cohort (role + industry), the core pain this campaign addresses, the angle/hook, what outcome we want from each touch. This becomes AI context for personalized messages."
+  }
+}
+
+Extract max 5 top_pains, max 4 themes, max 4 timing_signals. Be specific — no generic BS.
+Return ONLY valid JSON.`;
+              const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 1400 });
+              const cleaned = raw.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+              aiBlock = JSON.parse(cleaned);
+            } catch (e) {
+              console.error('Stakeholder pains AI failed for group', groupLabel, e);
+              aiBlock.exec_summary = `${groupStks.length} stakeholders in ${groupLabel}. ${painsRaw.length} with pains, ${linkedinRaw.length} with LinkedIn data.`;
+            }
+
+            insights.push({
+              groupKey: groupLabel,
+              groupLabel,
+              execSummary: aiBlock.exec_summary,
+              suggestedCampaign: aiBlock.suggested_campaign,
+              stakeholderIds: groupStks.map(s => s.id),
+            });
+
+            groupSections.push(`
+              <tr><td style="padding:18px 0 8px;">
+                <h2 style="margin:0 0 12px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">
+                  🎯 ${groupLabel} <span style="font-size:12px;font-weight:400;color:#9ca3af;">(${groupStks.length} stakeholder${groupStks.length!==1?'s':''})</span>
+                </h2>
+
+                ${aiBlock.exec_summary ? `
+                <div style="padding:12px 14px;background:#f8f4ff;border-left:3px solid #8b5cf6;border-radius:0 6px 6px 0;margin-bottom:14px;font-size:13px;line-height:1.6;color:${T};">
+                  <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">🧠 Executive Summary</div>
+                  ${aiBlock.exec_summary}
+                </div>` : ''}
+
+                ${intelIncludeOpps && oppsCount > 0 ? `
+                <div style="padding:10px 14px;background:#eff6ff;border-radius:6px;margin-bottom:12px;font-size:12px;">
+                  <span style="color:#2563eb;font-weight:700;">💰 Pipeline in this group: </span>${oppsCount} open opp${oppsCount!==1?'s':''} · ${formatCurrency(oppsValue)}
+                </div>` : ''}
+
+                ${aiBlock.top_pains && aiBlock.top_pains.length > 0 ? `
+                <div style="margin-bottom:14px;">
+                  <div style="font-size:11px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">🔥 Top Pains</div>
+                  ${aiBlock.top_pains.slice(0, 5).map((p,i) => `
+                  <div style="padding:8px 12px;background:#fee2e2;border-left:3px solid #ef4444;border-radius:0 6px 6px 0;margin-bottom:6px;">
+                    <div style="font-size:13px;font-weight:700;color:${T};">${i+1}. ${(p.pain||'').replace(/</g,'&lt;')}</div>
+                    ${p.frequency ? `<div style="font-size:11px;color:#991b1b;margin-top:2px;">${p.frequency}</div>` : ''}
+                    ${p.example ? `<div style="font-size:11px;color:${GR};margin-top:4px;font-style:italic;">"${(p.example||'').replace(/</g,'&lt;').slice(0,200)}"</div>` : ''}
+                  </div>`).join('')}
+                </div>` : ''}
+
+                ${aiBlock.linkedin_themes && aiBlock.linkedin_themes.length > 0 ? `
+                <div style="margin-bottom:14px;">
+                  <div style="font-size:11px;font-weight:700;color:#0a66c2;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">💼 LinkedIn Themes</div>
+                  ${aiBlock.linkedin_themes.slice(0, 4).map(t => `
+                  <div style="padding:8px 12px;background:#dbeafe;border-left:3px solid #0a66c2;border-radius:0 6px 6px 0;margin-bottom:6px;font-size:12px;color:${T};">
+                    <strong>${(t.theme||'').replace(/</g,'&lt;')}</strong>${t.details ? ` — <span style="color:${GR};">${(t.details||'').replace(/</g,'&lt;')}</span>` : ''}
+                  </div>`).join('')}
+                </div>` : ''}
+
+                ${aiBlock.timing_signals && aiBlock.timing_signals.length > 0 ? `
+                <div style="margin-bottom:14px;">
+                  <div style="font-size:11px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">⏰ Timing Signals</div>
+                  ${aiBlock.timing_signals.slice(0, 4).map(t => `
+                  <div style="padding:8px 12px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:6px;font-size:12px;color:${T};">
+                    <strong>${(t.signal||'').replace(/</g,'&lt;')}</strong>${t.who ? ` — <span style="color:${GR};">${(t.who||'').replace(/</g,'&lt;')}</span>` : ''}
+                  </div>`).join('')}
+                </div>` : ''}
+
+                ${aiBlock.suggested_campaign ? `
+                <div style="padding:12px 14px;background:#ecfdf5;border-left:3px solid #10b981;border-radius:0 6px 6px 0;margin-bottom:6px;font-size:12px;line-height:1.6;">
+                  <div style="font-size:10px;font-weight:700;color:#10b981;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">💡 Suggested Campaign</div>
+                  <div style="font-weight:700;color:${T};margin-bottom:4px;">${(aiBlock.suggested_campaign.name || '').replace(/</g,'&lt;')}</div>
+                  <div style="font-size:11px;color:${GR};margin-bottom:6px;">Type: ${aiBlock.suggested_campaign.type || '?'}</div>
+                  <div style="font-size:12px;color:${T};white-space:pre-wrap;">${(aiBlock.suggested_campaign.context || '').replace(/</g,'&lt;')}</div>
+                </div>` : ''}
+              </td></tr>`);
+          }
+
+          const dateLabel = `Generated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+          const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 16px;">
+<tr><td align="center">
+<table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;">
+  <tr><td style="background:${T};padding:24px 28px;border-radius:12px 12px 0 0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">🎯 Stakeholder Pains & LinkedIn Intel</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;color:#e5e7eb;font-weight:600;">${dateLabel}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Grouped by ${intelGroupBy}${intelFilterIndustry ? ` · ${intelFilterIndustry}` : ''}${intelFilterInfluence ? ` · ${intelFilterInfluence}` : ''}</div>
+      </div>
+    </div>
+  </td></tr>
+  <tr><td style="background:#fff;padding:28px;border-radius:0 0 12px 12px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:0 0 12px;font-size:12px;color:${GR};line-height:1.6;">
+        <strong>${poolStks.length}</strong> stakeholders analyzed across <strong>${groupEntries.length}</strong> ${intelGroupBy} group${groupEntries.length!==1?'s':''}. Each cluster includes top pains, LinkedIn themes, timing signals, and a suggested campaign.
+      </td></tr>
+      ${groupSections.join('')}
+    </table>
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+
+          setReportHtml(html);
+          setIntelInsights(insights);
+        } catch(e) {
+          console.error('Stakeholder pains report failed:', e);
+        } finally {
+          setGenerating(false);
+        }
+      };
+
       const copyHtml = async () => {
         try {
           const blob = new Blob([reportHtml], { type: 'text/html' });
@@ -15021,17 +15532,47 @@ Return ONLY valid JSON:
 
       const toggleItem = (id) => setSelectedIds(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
 
+      // Industry / country options for filters
+      const industryOptions = useMemo(() => [...new Set(accounts.map(a => F(a,'Industry')).filter(Boolean))].sort(), [accounts]);
+      const countryOptions = useMemo(() => [...new Set([...accounts.map(a => F(a,'Country')), ...stakeholders.map(s => F(s,'Country'))].filter(Boolean))].sort(), [accounts, stakeholders]);
+      const influenceOptions = useMemo(() => [...new Set(stakeholders.map(s => F(s,'Level of Influence')).filter(Boolean))].sort(), [stakeholders]);
+
       return (
         <div>
           <div className="page-header">
             <h1>📧 Report Builder</h1>
-            <p>Generate a bi-weekly activity report ready to email</p>
+            <p>Outreach activity, company intel, or stakeholder pains — ready to email, or turn into a campaign</p>
+          </div>
+
+          {/* ── Top-level mode selector ── */}
+          <div className="card" style={{ marginBottom: 16, padding: '12px 14px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Report Type</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {[
+                { k: 'outreach',    icon: '📊', label: 'Outreach Activity',     sub: 'Messages sent, replies, meetings, posts' },
+                { k: 'company',     icon: '🏢', label: 'Company Intel',         sub: 'News, intel notes, grouped insights' },
+                { k: 'stakeholder', icon: '🎯', label: 'Stakeholder Pains',     sub: 'Pains + LinkedIn, aggregated by cluster' },
+              ].map(opt => (
+                <button key={opt.k}
+                  onClick={() => { setReportMode(opt.k); setReportHtml(''); setIntelInsights([]); setTasksCreatedCount(0); }}
+                  style={{
+                    padding: '12px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                    background: reportMode === opt.k ? 'rgba(91,191,181,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${reportMode === opt.k ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                    color: reportMode === opt.k ? 'var(--globant-green)' : 'var(--globant-text)',
+                  }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{opt.icon} {opt.label}</div>
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 400 }}>{opt.sub}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:20, alignItems:'start' }}>
             {/* ── Left: Controls ── */}
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              {/* View filter */}
+              {/* View filter — only in outreach mode */}
+              {reportMode === 'outreach' && (
               <div className="card">
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>🎯 View</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
@@ -15060,8 +15601,73 @@ Return ONLY valid JSON:
                   {reportFilter === 'posts' && 'KPIs + Content Lab posts from the period'}
                 </div>
               </div>
+              )}
 
-              {/* Date range */}
+              {/* Intel mode controls (Company / Stakeholder) */}
+              {reportMode !== 'outreach' && (
+              <div className="card">
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>🗂️ Group by</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                  {(reportMode === 'company'
+                    ? [{k:'industry',label:'🏭 Industry'},{k:'country',label:'🌎 Country'},{k:'account',label:'🏢 Account'}]
+                    : [{k:'industry',label:'🏭 Industry'},{k:'role',label:'👤 Role'},{k:'country',label:'🌎 Country'}]
+                  ).map(opt => (
+                    <button key={opt.k}
+                      onClick={() => setIntelGroupBy(opt.k)}
+                      style={{
+                        padding:'7px 8px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600,
+                        background: intelGroupBy === opt.k ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${intelGroupBy === opt.k ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                        color: intelGroupBy === opt.k ? 'var(--globant-green)' : 'var(--globant-text)',
+                      }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Filters */}
+                <div style={{ marginTop:12 }}>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4 }}>INDUSTRY FILTER</div>
+                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6 }} value={intelFilterIndustry} onChange={e => setIntelFilterIndustry(e.target.value)}>
+                    <option value="">All industries</option>
+                    {industryOptions.map(i => <option key={i} value={i}>{i}</option>)}
+                  </select>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4 }}>COUNTRY FILTER</div>
+                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6 }} value={intelFilterCountry} onChange={e => setIntelFilterCountry(e.target.value)}>
+                    <option value="">All countries</option>
+                    {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {reportMode === 'stakeholder' && (
+                    <>
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4 }}>INFLUENCE FILTER</div>
+                      <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6 }} value={intelFilterInfluence} onChange={e => setIntelFilterInfluence(e.target.value)}>
+                        <option value="">All levels</option>
+                        {influenceOptions.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </>
+                  )}
+                </div>
+
+                {/* Toggles */}
+                <div style={{ marginTop:10, padding:8, borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+                  {reportMode === 'company' && (
+                    <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, cursor:'pointer' }}>
+                      <input type="checkbox" checked={intelIncludeOutreach} onChange={e => setIntelIncludeOutreach(e.target.checked)} />
+                      <span>Include outreach overlay (sent / replies / meetings per group)</span>
+                    </label>
+                  )}
+                  {reportMode === 'stakeholder' && (
+                    <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, cursor:'pointer' }}>
+                      <input type="checkbox" checked={intelIncludeOpps} onChange={e => setIntelIncludeOpps(e.target.checked)} />
+                      <span>Include open pipeline value per group</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+              )}
+
+              {/* Date range — only in outreach mode */}
+              {reportMode === 'outreach' && (
               <div className="card">
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>📅 Period</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
@@ -15083,8 +15689,10 @@ Return ONLY valid JSON:
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* Group by selector + search */}
+              {/* Group by selector + search — outreach only */}
+              {reportMode === 'outreach' && (
               <div className="card">
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>🎯 Report Scope</div>
 
@@ -15168,8 +15776,10 @@ Return ONLY valid JSON:
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Stats preview */}
+              {/* Stats preview — outreach only */}
+              {reportMode === 'outreach' && (
               <div className="card" style={{ background:'rgba(91,191,181,0.06)', border:'1px solid rgba(91,191,181,0.2)' }}>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Preview Stats</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
@@ -15181,8 +15791,10 @@ Return ONLY valid JSON:
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* Notes */}
+              {/* Notes — outreach only */}
+              {reportMode === 'outreach' && (
               <div className="card">
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📝 My Notes / Next Steps</div>
                 <textarea className="input-field"
@@ -15192,10 +15804,15 @@ Return ONLY valid JSON:
                   onChange={e => setReportNotes(e.target.value)}
                 />
               </div>
+              )}
 
               <button className="action-btn btn-primary" style={{ width:'100%', padding:'12px', fontSize:14, fontWeight:700 }}
-                onClick={generateHtml} disabled={generating}>
-                {generating ? '⏳ Generating...' : '✨ Generate Report'}
+                onClick={() => {
+                  if (reportMode === 'outreach') generateHtml();
+                  else if (reportMode === 'company') generateCompanyIntelHtml();
+                  else if (reportMode === 'stakeholder') generateStakeholderPainsHtml();
+                }} disabled={generating}>
+                {generating ? '⏳ Generating...' : `✨ Generate ${reportMode === 'outreach' ? 'Activity' : reportMode === 'company' ? 'Company Intel' : 'Stakeholder Pains'} Report`}
               </button>
             </div>
 
@@ -15219,7 +15836,7 @@ Return ONLY valid JSON:
                     <button style={{ padding:'10px 16px', borderRadius:8, border:'1px solid var(--globant-border)', background:'transparent', color:'var(--globant-muted)', fontWeight:600, fontSize:13, cursor:'pointer' }} onClick={printReportAsPdf}>
                       🖨️ PDF
                     </button>
-                    {(() => {
+                    {reportMode === 'outreach' && (() => {
                       const eligibleCount = (lastReplyDetails || []).filter(r => (r.urgency === 'high' || r.urgency === 'medium') && r.next_step && r.next_step.trim()).length;
                       const disabled = creatingTasks || eligibleCount === 0 || tasksCreatedCount > 0;
                       const label = creatingTasks
@@ -15238,10 +15855,41 @@ Return ONLY valid JSON:
                       );
                     })()}
                     <button className="action-btn btn-ghost" style={{ padding:'10px 16px', fontSize:13, marginLeft:'auto' }}
-                      onClick={() => { setReportHtml(''); setCopied(false); setGmailOpened(false); setTasksCreatedCount(0); }}>
+                      onClick={() => { setReportHtml(''); setCopied(false); setGmailOpened(false); setTasksCreatedCount(0); setIntelInsights([]); }}>
                       🔄 Reset
                     </button>
                   </div>
+
+                  {/* 💡 Create campaign from insight (intel reports only) */}
+                  {reportMode !== 'outreach' && intelInsights.length > 0 && (
+                    <div style={{ padding: '12px 14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: 8 }}>💡 Create campaign from insight</div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 10 }}>
+                        Each group has a suggested campaign. Click to open a pre-filled campaign with its context + assigned stakeholders.
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {intelInsights.filter(i => i.suggestedCampaign).map((ins, i) => (
+                          <button key={i}
+                            onClick={() => {
+                              if (onCreateCampaignFromInsight) {
+                                onCreateCampaignFromInsight({
+                                  name: ins.suggestedCampaign?.name || ins.groupLabel,
+                                  type: ins.suggestedCampaign?.type || 'Cold Outreach',
+                                  context: (ins.suggestedCampaign?.context || '') + (ins.execSummary ? `\n\n--- CONTEXT FROM REPORT ---\n${ins.execSummary}` : ''),
+                                  stakeholderIds: ins.stakeholderIds || [],
+                                });
+                              }
+                            }}
+                            style={{ padding: '10px 12px', borderRadius: 6, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--globant-text)', textAlign: 'left', cursor: 'pointer', fontSize: 12 }}>
+                            <div style={{ fontWeight: 700, color: '#10b981', marginBottom: 2 }}>💡 {ins.suggestedCampaign.name || ins.groupLabel}</div>
+                            <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>
+                              {ins.groupLabel} · {ins.stakeholderIds.length} stakeholder{ins.stakeholderIds.length!==1?'s':''} · Type: {ins.suggestedCampaign.type || '?'}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {gmailOpened && (
                     <div style={{ padding:'8px 12px', borderRadius:8, background:'rgba(66,133,244,0.08)', border:'1px solid rgba(66,133,244,0.2)', fontSize:12, color:'#93c5fd', marginBottom:10 }}>
                       Gmail is open. Paste with <strong>Ctrl+V</strong> (or ⌘V) in the message body — it renders as formatted HTML.
@@ -16060,6 +16708,8 @@ Return ONLY valid JSON:
       const [navigateToSolId, setNavigateToSolId] = useState('');
       const [navigateToEventId, setNavigateToEventId] = useState('');
       const [navigateToProposalId, setNavigateToProposalId] = useState('');
+      // Campaign prefill from Report Builder → Campaigns (Create campaign from insight)
+      const [campaignPrefill, setCampaignPrefill] = useState(null); // { name, type, context, stakeholderIds }
       const [sidebarOpen, setSidebarOpen] = useState(false);
 
       const goToAccount = useCallback((accountId) => {
@@ -16075,6 +16725,11 @@ Return ONLY valid JSON:
       const goToProposal = useCallback((proposalId) => {
         if (proposalId) setNavigateToProposalId(proposalId);
         setPageAndSave('proposals');
+      }, [setPageAndSave]);
+
+      const createCampaignFromInsight = useCallback((prefill) => {
+        setCampaignPrefill(prefill);
+        setPageAndSave('campaigns');
       }, [setPageAndSave]);
 
       // Optimistic update: add a record to local state instantly (before API response)
@@ -16280,9 +16935,9 @@ Return ONLY valid JSON:
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
         proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
-        campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
+        campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} campaignPrefill={campaignPrefill} clearCampaignPrefill={() => setCampaignPrefill(null)} />,
         contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
-        reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} />,
+        reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} onCreateCampaignFromInsight={createCampaignFromInsight} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
