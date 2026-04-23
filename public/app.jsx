@@ -12167,6 +12167,9 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
 
       const selectedCampaign = campaigns.find(c => c.id === selectedId) || null;
       const reachedIds = selectedCampaign ? linkedIds(selectedCampaign, 'Stakeholders Reached') : [];
+      // Assigned = curated list of contacts for this campaign. Includes legacy Reached for backward compatibility.
+      const assignedIdsRaw = selectedCampaign ? linkedIds(selectedCampaign, 'Assigned Stakeholders') : [];
+      const assignedIds = [...new Set([...assignedIdsRaw, ...reachedIds])];
 
       // ── Filtered campaigns list ──
       const filteredCampaigns = campaigns.filter(c => {
@@ -12179,8 +12182,9 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const industryOptions = [...new Set(accounts.map(a => F(a,'Industry')).filter(Boolean))].sort();
       const roleOptions = [...new Set(stakeholders.map(s => F(s,'Role')).filter(Boolean))].sort();
 
-      // ── Contacts for detail view (all stakeholders, sorted: unreached first) ──
+      // ── Detail contacts: ONLY those assigned to this campaign (curated) ──
       const detailContacts = selectedCampaign ? stakeholders.filter(s => {
+        if (!assignedIds.includes(s.id)) return false; // Only assigned contacts
         if (filterSearch) {
           const q = filterSearch.toLowerCase();
           if (!(`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(q)) return false;
@@ -12193,9 +12197,68 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
         return true;
       }).sort((a,b) => {
         const aR = reachedIds.includes(a.id), bR = reachedIds.includes(b.id);
-        if (aR !== bR) return aR ? 1 : -1;
+        if (aR !== bR) return aR ? 1 : -1; // Pending first, reached last
         return (F(a,'Name')||'').localeCompare(F(b,'Name')||'');
       }) : [];
+
+      // ── Add / Remove contacts from campaign ──
+      const [showAddContacts, setShowAddContacts] = useState(false);
+      const [addContactsSearch, setAddContactsSearch] = useState('');
+      const [addingContactId, setAddingContactId] = useState(null);
+
+      const addContactToCampaign = async (stakeholderId) => {
+        if (!selectedCampaign) return;
+        const currentAssigned = linkedIds(selectedCampaign, 'Assigned Stakeholders');
+        if (currentAssigned.includes(stakeholderId)) return;
+        setAddingContactId(stakeholderId);
+        const newAssigned = [...currentAssigned, stakeholderId];
+        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
+        } catch (e) { console.error('Add contact to campaign failed:', e); }
+        setAddingContactId(null);
+      };
+
+      const removeContactFromCampaign = async (stakeholderId) => {
+        if (!selectedCampaign) return;
+        if (!window.confirm('Remove this contact from the campaign? (Their outreach history stays intact.)')) return;
+        setAddingContactId(stakeholderId);
+        const currentAssigned = linkedIds(selectedCampaign, 'Assigned Stakeholders');
+        const currentReached = linkedIds(selectedCampaign, 'Stakeholders Reached');
+        const newAssigned = currentAssigned.filter(id => id !== stakeholderId);
+        const newReached = currentReached.filter(id => id !== stakeholderId);
+        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, {
+          'Assigned Stakeholders': newAssigned,
+          'Stakeholders Reached': newReached,
+        });
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+            'Assigned Stakeholders': newAssigned,
+            'Stakeholders Reached': newReached,
+          });
+        } catch (e) { console.error('Remove contact from campaign failed:', e); }
+        setAddingContactId(null);
+      };
+
+      // Available contacts to add (not yet assigned, filtered by search)
+      const availableToAdd = useMemo(() => {
+        if (!selectedCampaign || !showAddContacts) return [];
+        const assigned = new Set(assignedIds);
+        const q = addContactsSearch.toLowerCase().trim();
+        let pool = stakeholders.filter(s => !assigned.has(s.id));
+        if (q) {
+          pool = pool.filter(s => {
+            const full = `${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`.toLowerCase();
+            const accId = linkedIds(s,'Account')[0];
+            const acc = accId ? accounts.find(a => a.id === accId) : null;
+            const accName = acc ? (F(acc,'Account Name')||'').toLowerCase() : '';
+            return full.includes(q) || accName.includes(q);
+          });
+        }
+        return pool.slice(0, 50); // cap to avoid huge lists
+      }, [selectedCampaign, showAddContacts, addContactsSearch, assignedIds, stakeholders, accounts]);
 
       // ── Form helpers ──
       const openCreate = () => {
@@ -12333,8 +12396,11 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           'Logged By': CURRENT_USER?.name || '',
         }).then(async () => {
           const currentReached = linkedIds(selectedCampaign, 'Stakeholders Reached');
+          const currentAssigned = linkedIds(selectedCampaign, 'Assigned Stakeholders');
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
             'Stakeholders Reached': [...new Set([...currentReached, s.id])],
+            // Also ensure the contact is in Assigned (in case they were added ad-hoc)
+            'Assigned Stakeholders': [...new Set([...currentAssigned, s.id])],
           }).catch(e => console.error('Campaign reached update failed:', e));
           await activateAccountIfNeeded(a, companyIds, data.accounts);
           await updateStakeholderStatus(a, s.id, 'Contacted', data.stakeholders);
@@ -12484,22 +12550,66 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
             {/* Stats */}
             <div className="kpi-row" style={{ gridTemplateColumns:'repeat(3,1fr)', marginBottom:14 }}>
               <div className="kpi-card">
-                <div className="kpi-label">Contacts (filtered)</div>
-                <div className="kpi-value">{detailContacts.length}</div>
+                <div className="kpi-label">Assigned</div>
+                <div className="kpi-value">{assignedIds.length}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-label">Reached</div>
-                <div className="kpi-value" style={{ color:'#4ade80' }}>{detailContacts.filter(s=>reachedIds.includes(s.id)).length}</div>
+                <div className="kpi-value" style={{ color:'#4ade80' }}>{assignedIds.filter(id=>reachedIds.includes(id)).length}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-label">Pending</div>
-                <div className="kpi-value" style={{ color:'#fbbf24' }}>{detailContacts.filter(s=>!reachedIds.includes(s.id)).length}</div>
+                <div className="kpi-value" style={{ color:'#fbbf24' }}>{assignedIds.filter(id=>!reachedIds.includes(id)).length}</div>
               </div>
             </div>
 
+            {/* Add contacts panel */}
+            {showAddContacts && (
+              <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--globant-green)', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>➕ Add contacts to campaign</div>
+                  <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setShowAddContacts(false); setAddContactsSearch(''); }}>✕ Close</button>
+                </div>
+                <input
+                  className="input-field"
+                  style={{ width: '100%', fontSize: 12, marginBottom: 10 }}
+                  placeholder="Search by name, role, or account..."
+                  value={addContactsSearch}
+                  onChange={e => setAddContactsSearch(e.target.value)}
+                  autoFocus
+                />
+                <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--globant-border)', borderRadius: 6 }}>
+                  {availableToAdd.length === 0 ? (
+                    <div style={{ padding: 14, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 12 }}>
+                      {addContactsSearch ? `No contacts match "${addContactsSearch}"` : 'All contacts are already assigned to this campaign'}
+                    </div>
+                  ) : (
+                    availableToAdd.map(s => {
+                      const accId = linkedIds(s, 'Account')[0];
+                      const acc = accId ? accounts.find(a => a.id === accId) : null;
+                      const accName = acc ? F(acc, 'Account Name') : '';
+                      const industry = acc ? F(acc, 'Industry') : '';
+                      const isAdding = addingContactId === s.id;
+                      return (
+                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--globant-border)', opacity: isAdding ? 0.5 : 1 }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</div>
+                            <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>{F(s,'Role')}{accName ? ` · ${accName}` : ''}{industry ? ` · ${industry}` : ''}</div>
+                          </div>
+                          <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px' }} disabled={isAdding} onClick={() => addContactToCampaign(s.id)}>
+                            {isAdding ? '⏳' : '+ Add'}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Contact filters */}
             <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
-              <input className="input-field" style={{ fontSize:12, flex:1, minWidth:160 }} placeholder="Search contacts..." value={filterSearch} onChange={e=>setFilterSearch(e.target.value)} />
+              <input className="input-field" style={{ fontSize:12, flex:1, minWidth:160 }} placeholder="Search assigned contacts..." value={filterSearch} onChange={e=>setFilterSearch(e.target.value)} />
               <select className="input-field" style={{ fontSize:12, minWidth:160 }} value={filterIndustry} onChange={e=>setFilterIndustry(e.target.value)}>
                 <option value="">🏭 All industries</option>
                 {industryOptions.map(i=><option key={i} value={i}>{i}</option>)}
@@ -12513,11 +12623,23 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
             {/* Contacts list */}
             <div className="card" style={{ padding:0, overflow:'hidden' }}>
               <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--globant-border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:13, fontWeight:700 }}>Contacts ({detailContacts.length})</span>
-                <span style={{ fontSize:11, color:'var(--globant-muted)' }}>✅ = already reached</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize:13, fontWeight:700 }}>Assigned contacts ({detailContacts.length}{assignedIds.length !== detailContacts.length ? ` of ${assignedIds.length}` : ''})</span>
+                  <span style={{ fontSize:11, color:'var(--globant-muted)' }}>✅ = reached · ⏳ = pending</span>
+                </div>
+                <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setShowAddContacts(!showAddContacts)}>
+                  {showAddContacts ? '✕ Cancel' : '➕ Add contacts'}
+                </button>
               </div>
-              {detailContacts.length === 0 ? (
-                <div style={{ padding:24, textAlign:'center', color:'var(--globant-muted)', fontSize:13 }}>No contacts match the current filters.</div>
+              {assignedIds.length === 0 ? (
+                <div style={{ padding: 32, textAlign:'center', color:'var(--globant-muted)', fontSize:13 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: 'var(--globant-text)' }}>No contacts assigned yet</div>
+                  <div style={{ marginBottom: 14 }}>Click <strong>➕ Add contacts</strong> above to select who you want to reach with this campaign.</div>
+                  <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => setShowAddContacts(true)}>➕ Add contacts</button>
+                </div>
+              ) : detailContacts.length === 0 ? (
+                <div style={{ padding:24, textAlign:'center', color:'var(--globant-muted)', fontSize:13 }}>No assigned contacts match the current filters.</div>
               ) : (
                 <div style={{ maxHeight:540, overflowY:'auto' }}>
                   {detailContacts.map(s => {
@@ -12531,13 +12653,18 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                     const hasLinkedin = !!F(s,'LinkedIn');
                     const isActive = invitePreview?.id === s.id;
 
+                    const isRemoving = addingContactId === s.id;
                     return (
-                      <div key={s.id} style={{ borderBottom:'1px solid var(--globant-border)', opacity: isReached&&!isActive ? 0.65 : 1 }}>
+                      <div key={s.id} style={{ borderBottom:'1px solid var(--globant-border)', opacity: (isReached&&!isActive) || isRemoving ? 0.65 : 1 }}>
                         {/* Contact row */}
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px' }}>
-                          <div>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', gap: 8 }}>
+                          <div style={{ flex: 1 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                              {isReached && <span style={{ fontSize:12 }}>✅</span>}
+                              {isReached ? (
+                                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>✅ Reached</span>
+                              ) : (
+                                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>⏳ Pending</span>
+                              )}
                               <span style={{ fontWeight:600, fontSize:13 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</span>
                               {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ fontSize:9 }}>{F(s,'Level of Influence')}</span>}
                             </div>
@@ -12545,12 +12672,21 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                               {F(s,'Role')}{accName ? ` · ${accName}` : ''}{industry ? ` · ${industry}` : ''}
                             </div>
                           </div>
-                          <button
-                            className="action-btn btn-primary" style={{ fontSize:10, padding:'4px 12px' }}
-                            disabled={isActive && invitePreview.generating}
-                            onClick={() => isActive ? setInvitePreview(null) : generateMsg(s)}>
-                            {isActive && invitePreview.generating ? '⏳' : isActive ? '✕ Close' : isReached ? '🔄 Resend' : '✨ Generate'}
-                          </button>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <button
+                              className="action-btn btn-primary" style={{ fontSize:10, padding:'4px 12px' }}
+                              disabled={(isActive && invitePreview.generating) || isRemoving}
+                              onClick={() => isActive ? setInvitePreview(null) : generateMsg(s)}>
+                              {isActive && invitePreview.generating ? '⏳' : isActive ? '✕ Close' : isReached ? '🔄 Resend' : '✨ Generate'}
+                            </button>
+                            <button
+                              className="action-btn btn-ghost" style={{ fontSize: 10, padding: '4px 8px', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                              disabled={isRemoving}
+                              title="Remove from campaign"
+                              onClick={() => removeContactFromCampaign(s.id)}>
+                              {isRemoving ? '⏳' : '🗑️'}
+                            </button>
+                          </div>
                         </div>
                         {/* Preview panel */}
                         {isActive && !invitePreview.generating && invitePreview.msg && (
@@ -12660,6 +12796,8 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 const status = F(c,'Status') || '';
                 const type = F(c,'Type') || '';
                 const reached = linkedIds(c,'Stakeholders Reached').length;
+                const cardAssignedRaw = linkedIds(c,'Assigned Stakeholders');
+                const assigned = [...new Set([...cardAssignedRaw, ...linkedIds(c,'Stakeholders Reached')])].length;
                 const goal = c.fields?.['Goal'] || 0;
                 const pct = goal>0 ? Math.min(100, Math.round((reached/goal)*100)) : null;
                 return (
@@ -12680,7 +12818,8 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         "{(F(c,'Message Template')||'').slice(0,100)}{(F(c,'Message Template')||'').length>100?'...':''}"
                       </div>
                     )}
-                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize:12, color:'var(--globant-muted)', fontWeight:600 }}>👥 {assigned} assigned</span>
                       <span style={{ fontSize:12, color:'#4ade80', fontWeight:700 }}>✅ {reached} reached</span>
                       {goal>0 && <span style={{ fontSize:11, color:'var(--globant-muted)' }}>/ {goal} goal</span>}
                     </div>
