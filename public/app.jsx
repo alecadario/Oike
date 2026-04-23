@@ -12226,6 +12226,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [showAddContacts, setShowAddContacts] = useState(false);
       const [addContactsSearch, setAddContactsSearch] = useState('');
       const [addingContactId, setAddingContactId] = useState(null);
+      const [campaignHistoryStk, setCampaignHistoryStk] = useState(null); // for StakeholderHistoryModal
 
       const addContactToCampaign = async (stakeholderId) => {
         if (!selectedCampaign) return;
@@ -12692,7 +12693,12 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                               ) : (
                                 <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>⏳ Pending</span>
                               )}
-                              <span style={{ fontWeight:600, fontSize:13 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</span>
+                              <span
+                                style={{ fontWeight:600, fontSize:13, cursor:'pointer', color:'var(--globant-green)' }}
+                                title="Open contact history"
+                                onClick={() => setCampaignHistoryStk(s)}>
+                                {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                              </span>
                               {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ fontSize:9 }}>{F(s,'Level of Influence')}</span>}
                             </div>
                             <div style={{ fontSize:11, color:'var(--globant-muted)', marginTop:2 }}>
@@ -12802,6 +12808,34 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Stakeholder history modal — opens when clicking a contact name */}
+            {campaignHistoryStk && (
+              <StakeholderHistoryModal
+                stakeholder={campaignHistoryStk}
+                outreach={outreach}
+                accounts={accounts}
+                onClose={() => setCampaignHistoryStk(null)}
+                onRefresh={onLogActivity}
+                onAddRecord={onAddRecord}
+                allData={data}
+                onSend={(stakeholder, channel, message) => {
+                  // Reuse sendMsg — but since that uses invitePreview, build message directly via channel
+                  const email = F(stakeholder,'Email')||'';
+                  const phone = F(stakeholder,'Phone number')||'';
+                  const linkedin = F(stakeholder,'LinkedIn')||'';
+                  let subject = '', body = message;
+                  if (channel === 'Email') {
+                    const lines = body.split('\n');
+                    const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                    if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+                  }
+                  if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(message)}`,'_blank');
+                  else if (channel==='Email'&&email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+                  else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(message).catch(()=>{}); window.open(linkedin,'_blank'); }
+                }}
+              />
             )}
           </div>
         );
