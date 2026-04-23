@@ -2606,10 +2606,8 @@ Output ONLY the message, nothing else.`;
         setGeneratingFollowup(null);
       };
 
-      // Split into two groups
-      const hasPregenMsg = (s) => !!(F(s, 'Personalized Email Introduction'));
-      const withMessages = filtered.filter(hasPregenMsg);
-      const withoutMessages = filtered.filter(s => !hasPregenMsg(s));
+      // All contacts in "Needs First Contact" are in a single list now —
+      // messages are generated on-demand via AI when user clicks ✨ Message (no pregen)
 
       // Get unique influence levels from actual data
       const influenceLevels = useMemo(() => {
@@ -2812,22 +2810,17 @@ Output ONLY the message, nothing else.`;
             <td><span className="badge badge-accent">{F(s, 'Level of Influence')}</span></td>
             <td style={{ textAlign: 'center' }}>{isDone ? <span style={{ color: 'var(--globant-success)' }}>✅</span> : <span style={{ color: 'var(--globant-muted)' }}>—</span>}</td>
             <td>
-              {(() => {
-                const preMsg = F(s, 'Personalized Email Introduction') || '';
-                const fallback = `Hi ${F(s, 'Name')}, reaching out from ${COMPANY_PROFILE.companyName} regarding potential collaboration.`;
-                const msg = preMsg || fallback;
-                return (
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setSelectedStakeholder(s)}>✨ Message</button>
-                    {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'WhatsApp', msg)}>💬</button>}
-                    {email && <button className="action-btn btn-email" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'Email', msg)}>✉️</button>}
-                    {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'LinkedIn', msg)}>🔗</button>}
-                    {phone && <button className="action-btn btn-call" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => useMessage(s, 'Call', msg)}>📞</button>}
-                    <button className="action-btn" style={{ fontSize: 11, padding: '4px 8px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }}
-                      onClick={() => { setMeetingModal({ stakeholder: s }); setMeetingNotes(''); setMeetingDate(''); setMeetingTime(''); }}>📅</button>
-                  </div>
-                );
-              })()}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {/* Main CTA — always opens AI Message Modal (generates message on demand via OpenAI) */}
+                <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setSelectedStakeholder(s)}>✨ Message</button>
+                {/* Channel shortcuts also open the AI Message Modal so user can pick channel after generation */}
+                {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 11, padding: '4px 8px' }} title="Generate WhatsApp message with AI" onClick={() => setSelectedStakeholder(s)}>💬</button>}
+                {email && <button className="action-btn btn-email" style={{ fontSize: 11, padding: '4px 8px' }} title="Generate email with AI" onClick={() => setSelectedStakeholder(s)}>✉️</button>}
+                {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} title="Generate LinkedIn message with AI" onClick={() => setSelectedStakeholder(s)}>🔗</button>}
+                {phone && <button className="action-btn btn-call" style={{ fontSize: 11, padding: '4px 8px' }} title="Call this contact" onClick={() => useMessage(s, 'Call', '')}>📞</button>}
+                <button className="action-btn" style={{ fontSize: 11, padding: '4px 8px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }}
+                  onClick={() => { setMeetingModal({ stakeholder: s }); setMeetingNotes(''); setMeetingDate(''); setMeetingTime(''); }}>📅</button>
+              </div>
             </td>
           </tr>
         );
@@ -3268,9 +3261,6 @@ Output ONLY the message, nothing else.`;
                   const phone = F(s, 'Phone number');
                   const email = F(s, 'Email');
                   const linkedin = F(s, 'LinkedIn');
-                  const fu2 = F(s, 'Follow up 2') || '';
-                  const fu3 = F(s, 'Follow up 3') || '';
-                  const nextFollowup = fu2 || fu3 || `Hi ${F(s, 'Name')}, just following up on my previous message. Would love to connect when you have a moment.`;
                   const urgencyColor = daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : '#60a5fa';
                   const urgencyBg = daysSince > 14 ? 'rgba(239,68,68,0.06)' : daysSince > 7 ? 'rgba(251,191,36,0.06)' : 'rgba(96,165,250,0.04)';
 
@@ -6896,8 +6886,6 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const insightContactedIds = new Set();
       outreach.forEach(o => linkedIds(o, 'Stakeholder').forEach(id => insightContactedIds.add(id)));
       const contacted = stakeholders.filter(s => insightContactedIds.has(s.id));
-      const withPregen = stakeholders.filter(s => !!F(s, 'Personalized Email Introduction'));
-      const withoutPregen = stakeholders.filter(s => !F(s, 'Personalized Email Introduction'));
 
       // ─── OUTREACH ANALYSIS ───
       const byChannel = {};
@@ -7012,10 +7000,6 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       // Pipeline
       conclusions.push({ icon: '💰', title: 'Pipeline Health', text: `${openOpps.length} open opportunities worth ${formatCurrency(totalPipelineValue)}. Win rate: ${winRate}% (${closedWon.length} won / ${closedLost.length} lost).${wonValue > 0 ? ` Total won: ${formatCurrency(wonValue)}.` : ''}${goalTarget > 0 ? ` Pipeline is at ${Math.round((totalPipelineValue / goalTarget) * 100)}% of your ${formatCurrency(goalTarget)} goal.` : ''}` });
 
-      // Message readiness
-      const pregenPct = stakeholders.length > 0 ? Math.round((withPregen.length / stakeholders.length) * 100) : 0;
-      conclusions.push({ icon: '✉️', title: 'Message Readiness', text: `${withPregen.length} stakeholders (${pregenPct}%) have pre-generated messages. ${withoutPregen.length} still need personalized copy.` });
-
       // Stale contacts
       if (staleStakeholders.length > 0) {
         improvements.push({ icon: '⏰', priority: 'high', title: 'Re-engage Stale Contacts', text: `${staleStakeholders.length} stakeholder${staleStakeholders.length > 1 ? 's' : ''} haven't been contacted in 14+ days. Top: ${staleStakeholders.sort((a,b) => b.days - a.days).slice(0, 3).map(x => `${F(x.s, 'Name')} (${x.days}d)`).join(', ')}.` });
@@ -7029,11 +7013,6 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       // Accounts with stakeholders but no outreach
       if (accountsNoOutreach.length > 0) {
         improvements.push({ icon: '🚨', priority: 'high', title: 'Activate Mapped Accounts', text: `${accountsNoOutreach.length} mapped account${accountsNoOutreach.length > 1 ? 's' : ''} have zero outreach: ${accountsNoOutreach.slice(0, 4).map(a => F(a, 'Account Name')).join(', ')}${accountsNoOutreach.length > 4 ? '...' : ''}.` });
-      }
-
-      // Without pre-generated messages
-      if (withoutPregen.length > 5) {
-        improvements.push({ icon: '✍️', priority: 'medium', title: 'Generate More Messages', text: `${withoutPregen.length} stakeholders don't have AI-generated intros yet. This blocks quick outreach from the Follow-up Center.` });
       }
 
       // Channel diversification
