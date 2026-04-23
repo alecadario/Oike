@@ -14467,6 +14467,8 @@ No markdown, no commentary. JSON only.`;
       const [intelFilterIndustry, setIntelFilterIndustry] = useState('');
       const [intelFilterCountry, setIntelFilterCountry] = useState('');
       const [intelFilterInfluence, setIntelFilterInfluence] = useState(''); // stakeholder only
+      const [intelFilterAccountIds, setIntelFilterAccountIds] = useState([]); // specific account picker
+      const [intelAccountSearch, setIntelAccountSearch] = useState('');
       // Cached insights per group (for "Create campaign from insight")
       const [intelInsights, setIntelInsights] = useState([]);
       // { groupKey, groupLabel, execSummary, suggestedCampaign: { name, type, context, stakeholderIds } }
@@ -15063,6 +15065,8 @@ Return ONLY valid JSON:
 
           // Filter accounts
           let poolAccounts = accounts.filter(a => {
+            // Specific account filter wins over broader filters
+            if (intelFilterAccountIds.length > 0) return intelFilterAccountIds.includes(a.id);
             if (intelFilterIndustry && F(a, 'Industry') !== intelFilterIndustry) return false;
             if (intelFilterCountry && F(a, 'Country') !== intelFilterCountry) return false;
             return true;
@@ -15284,6 +15288,12 @@ Return ONLY valid JSON.`;
             const hasPain = !!(F(s, 'Pain Points (Generated)') || F(s, 'Pain points'));
             const hasLinkedin = !!(F(s, 'LinkedIn News (Generated)') || F(s, 'Linkedin lates news'));
             if (!hasPain && !hasLinkedin) return false;
+            // Specific account filter wins over broader filters
+            if (intelFilterAccountIds.length > 0) {
+              const accIds = linkedIds(s, 'Account');
+              if (!accIds.some(id => intelFilterAccountIds.includes(id))) return false;
+              return true;
+            }
             if (intelFilterCountry && F(s, 'Country') !== intelFilterCountry) return false;
             if (intelFilterInfluence && F(s, 'Level of Influence') !== intelFilterInfluence) return false;
             if (intelFilterIndustry) {
@@ -15627,13 +15637,70 @@ Return ONLY valid JSON.`;
 
                 {/* Filters */}
                 <div style={{ marginTop:12 }}>
-                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4 }}>INDUSTRY FILTER</div>
-                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6 }} value={intelFilterIndustry} onChange={e => setIntelFilterIndustry(e.target.value)}>
+                  {/* Specific account picker (overrides other filters) */}
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <span>🏢 SPECIFIC ACCOUNT(S)</span>
+                    {intelFilterAccountIds.length > 0 && (
+                      <span style={{ color:'var(--globant-green)', fontWeight:400 }}>{intelFilterAccountIds.length} selected</span>
+                    )}
+                    {intelFilterAccountIds.length === 0 && (
+                      <span style={{ color:'var(--globant-muted)', fontWeight:400, fontStyle:'italic' }}>empty = use other filters</span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="🔍 Search accounts by name..."
+                    style={{ width:'100%', fontSize:12, marginBottom:6 }}
+                    value={intelAccountSearch}
+                    onChange={e => setIntelAccountSearch(e.target.value)}
+                  />
+                  {/* Selected chips */}
+                  {intelFilterAccountIds.length > 0 && (
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6, padding:'4px', background:'rgba(91,191,181,0.06)', borderRadius:6 }}>
+                      {intelFilterAccountIds.map(id => {
+                        const acc = accounts.find(a => a.id === id);
+                        if (!acc) return null;
+                        return (
+                          <span key={id} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', background:'rgba(91,191,181,0.18)', border:'1px solid rgba(91,191,181,0.4)', borderRadius:10, fontSize:10, color:'var(--globant-green)', fontWeight:600 }}>
+                            {F(acc,'Account Name')}
+                            <span onClick={() => setIntelFilterAccountIds(p => p.filter(x => x !== id))} style={{ cursor:'pointer', marginLeft:2, opacity:0.7, fontSize:12 }}>×</span>
+                          </span>
+                        );
+                      })}
+                      <button className="action-btn btn-ghost" style={{ fontSize:9, padding:'2px 8px' }} onClick={() => setIntelFilterAccountIds([])}>Clear</button>
+                    </div>
+                  )}
+                  {/* Account list (filtered by search) */}
+                  {intelAccountSearch.trim().length > 0 && (() => {
+                    const q = intelAccountSearch.toLowerCase();
+                    const matches = accounts
+                      .filter(a => !intelFilterAccountIds.includes(a.id) && (F(a,'Account Name')||'').toLowerCase().includes(q))
+                      .slice(0, 20);
+                    return (
+                      <div style={{ maxHeight:180, overflowY:'auto', border:'1px solid rgba(255,255,255,0.05)', borderRadius:6, marginBottom:6 }}>
+                        {matches.length === 0 ? (
+                          <div style={{ padding:10, fontSize:11, color:'var(--globant-muted)', textAlign:'center', fontStyle:'italic' }}>No matches</div>
+                        ) : (
+                          matches.map(a => (
+                            <div key={a.id} onClick={() => { setIntelFilterAccountIds(p => [...p, a.id]); setIntelAccountSearch(''); }}
+                              style={{ padding:'6px 10px', cursor:'pointer', borderBottom:'1px solid rgba(255,255,255,0.03)', fontSize:12 }}>
+                              <div style={{ fontWeight:600 }}>{F(a,'Account Name')}</div>
+                              <div style={{ fontSize:10, color:'var(--globant-muted)' }}>{F(a,'Industry') || '—'}{F(a,'Country') ? ` · ${F(a,'Country')}` : ''}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, marginTop: 8, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }}>INDUSTRY FILTER</div>
+                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }} value={intelFilterIndustry} onChange={e => setIntelFilterIndustry(e.target.value)} disabled={intelFilterAccountIds.length > 0}>
                     <option value="">All industries</option>
                     {industryOptions.map(i => <option key={i} value={i}>{i}</option>)}
                   </select>
-                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4 }}>COUNTRY FILTER</div>
-                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6 }} value={intelFilterCountry} onChange={e => setIntelFilterCountry(e.target.value)}>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }}>COUNTRY FILTER</div>
+                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }} value={intelFilterCountry} onChange={e => setIntelFilterCountry(e.target.value)} disabled={intelFilterAccountIds.length > 0}>
                     <option value="">All countries</option>
                     {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
