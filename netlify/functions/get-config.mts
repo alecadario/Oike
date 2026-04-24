@@ -17,6 +17,7 @@ const STANDARD_TABLES: Record<string, string> = {
   proposals: 'tblyjHMsB9BbuFYUo',
   campaigns: 'tblHFXH59guU4QIVU',
   contentLab: 'tblUaBbUYHnLLKW01',
+  landings: 'tblf3djqCQ5KZJgGT',
 };
 
 // ── Build config dynamically from baseId ──
