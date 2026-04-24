@@ -17,3 +17,15 @@
   from = "/app/*"
   to = "/app.html"
   status = 200
+
+# Urban presentation
+[[redirects]]
+  from = "/urban"
+  to = "/urban.html"
+  status = 200
+
+# Appex proposal
+[[redirects]]
+  from = "/appex"
+  to = "/appex.html"
+  status = 200
