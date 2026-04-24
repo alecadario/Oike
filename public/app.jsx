@@ -16798,7 +16798,7 @@ Return ONLY valid JSON.`;
         localStorage.setItem('oike_page', p);
         navSetUrl(p, null); // clear ?id when switching pages
       }, []);
-      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [], campaigns: [] });
+      const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [], campaigns: [], contentLab: [], landings: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
@@ -16866,8 +16866,8 @@ Return ONLY valid JSON.`;
         if (!silent) setLoading(true);
         if (silent) setRefreshing(true);
         try {
-          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals','campaigns','contentLab'];
-          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals, TABLE_IDS.campaigns, TABLE_IDS.contentLab];
+          const keys = ['accounts','stakeholders','opportunities','actionPlan','outreach','solutions','events','clientPartners','sources','icp','users','strategy','proposals','campaigns','contentLab','landings'];
+          const ids = [TABLE_IDS.accounts, TABLE_IDS.stakeholders, TABLE_IDS.opportunities, TABLE_IDS.actionPlan, TABLE_IDS.outreach, TABLE_IDS.solutions, TABLE_IDS.events, TABLE_IDS.clientPartners, TABLE_IDS.sources, TABLE_IDS.icp, TABLE_IDS.users, TABLE_IDS.strategy, TABLE_IDS.proposals, TABLE_IDS.campaigns, TABLE_IDS.contentLab, TABLE_IDS.landings];
           // Load all tables in parallel — ~0.5s instead of ~4s
           const fetched = await Promise.all(keys.map((k, i) => apiInstance.fetchTable(ids[i]).catch(() => [])));
           const results = {};
