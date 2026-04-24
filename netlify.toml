@@ -24,8 +24,16 @@
   to = "/urban.html"
   status = 200
 
-# Appex proposal
+# Propuestas dinámicas — oike.app/p/{slug}
+# Para cualquier propuesta nueva: guardar archivo en public/p/{slug}.html
+# No hace falta tocar este archivo nunca más.
+[[redirects]]
+  from = "/p/*"
+  to = "/p/:splat.html"
+  status = 200
+
+# Backward compat: link viejo /appex redirige a /p/appex
 [[redirects]]
   from = "/appex"
-  to = "/appex.html"
+  to = "/p/appex.html"
   status = 200
