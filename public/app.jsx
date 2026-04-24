@@ -833,15 +833,29 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
 
             {/* AI Message Generator toggle */}
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ marginBottom: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <button
                 onClick={() => setShowAIGenerator(v => !v)}
-                style={{ width: '100%', padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                style={{ padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
                   background: showAIGenerator ? 'rgba(91,191,181,0.15)' : 'rgba(91,191,181,0.07)',
                   border: '1px solid rgba(91,191,181,0.35)', color: 'var(--globant-green)',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>✨ Generate with AI</span>
-                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{showAIGenerator ? '▲ collapse' : '▼ expand'}</span>
+                <span>✨ Generate Message</span>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{showAIGenerator ? '▲' : '▼'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  // Save stakeholder ID to sessionStorage so LandingsHub can pick it up
+                  try { sessionStorage.setItem('oike_landing_prefill_stakeholder', stakeholder.id); } catch {}
+                  // Navigate to landings page
+                  window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }));
+                  if (onClose) onClose();
+                }}
+                style={{ padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                  background: 'rgba(167,139,250,0.12)',
+                  border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                📨 Generate Landing
               </button>
             </div>
 
@@ -14466,6 +14480,517 @@ No markdown, no commentary. JSON only.`;
       );
     }
 
+    // ============ LANDINGS HUB ============
+    // Prospect landings — generate personalized HTML for first-touch prospecting
+    // Output: copy HTML for Gmail OR public URL oike.app/p/{slug}
+    function LandingsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord }) {
+      const { landings = [], stakeholders = [], accounts = [], solutions = [] } = data;
+
+      const [selectedId, setSelectedId] = useState(null);
+      const [showForm, setShowForm] = useState(false);
+      const [editingLanding, setEditingLanding] = useState(null);
+      const [saving, setSaving] = useState(false);
+      const [generatingAI, setGeneratingAI] = useState(false);
+      const [copied, setCopied] = useState(false);
+      const [listSearch, setListSearch] = useState('');
+      const [statusFilter, setStatusFilter] = useState('');
+
+      // Form state
+      const emptyForm = {
+        slug: '',
+        stakeholderId: '',
+        solutionId: '',
+        hook: '',
+        painContext: '',
+        valueProposition: '',
+        bullets: '',
+        socialProof: '',
+        ctaText: 'Hablemos 20 minutos',
+        ctaLink: COMPANY_PROFILE.calendarLink || 'https://calendar.app.google/',
+        status: 'Draft',
+      };
+      const [form, setForm] = useState(emptyForm);
+
+      // Branding from Settings (localStorage)
+      const branding = (() => {
+        try { return JSON.parse(localStorage.getItem('oike_proposal_branding') || '{}'); } catch { return {}; }
+      })();
+      const senderName = branding.senderName || COMPANY_PROFILE.senderName || CURRENT_USER?.name || 'Ale';
+      const senderEmail = branding.senderEmail || CURRENT_USER?.email || '';
+      const senderLogo = branding.senderLogo || '';
+      const accentColor = branding.accentColor || '#5BBFB5';
+
+      // ── Check for prefill stakeholder from navigation (e.g. from Stakeholder History Modal) ──
+      useEffect(() => {
+        try {
+          const prefillId = sessionStorage.getItem('oike_landing_prefill_stakeholder');
+          if (prefillId && stakeholders.find(s => s.id === prefillId)) {
+            setForm(f => ({
+              ...emptyForm,
+              stakeholderId: prefillId,
+              slug: autoSlugFromStakeholder(prefillId),
+            }));
+            setShowForm(true);
+            sessionStorage.removeItem('oike_landing_prefill_stakeholder');
+          }
+        } catch {}
+      }, [stakeholders.length]);
+
+      // ── Filtered landings list ──
+      const filteredLandings = useMemo(() => landings.filter(l => {
+        if (statusFilter && F(l, 'Status') !== statusFilter) return false;
+        if (listSearch) {
+          const q = listSearch.toLowerCase();
+          const slug = (F(l, 'Slug') || '').toLowerCase();
+          const stkIds = linkedIds(l, 'Stakeholder');
+          const stk = stkIds[0] ? stakeholders.find(s => s.id === stkIds[0]) : null;
+          const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.toLowerCase() : '';
+          if (!slug.includes(q) && !stkName.includes(q)) return false;
+        }
+        return true;
+      }).sort((a,b) => new Date(b.createdTime || 0) - new Date(a.createdTime || 0)), [landings, listSearch, statusFilter, stakeholders]);
+
+      // ── Helpers for auto-fill ──
+      const autoSlugFromStakeholder = (stakeholderId) => {
+        const s = stakeholders.find(x => x.id === stakeholderId);
+        if (!s) return '';
+        const n = (F(s,'Name')||'').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const l = (F(s,'Last name')||'').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const accId = linkedIds(s,'Account')[0];
+        const acc = accId ? accounts.find(a => a.id === accId) : null;
+        const accSlug = acc ? (F(acc,'Account Name')||'').toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
+        return [n, l, accSlug].filter(Boolean).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      };
+
+      // Pick stakeholder → auto-fill slug + pre-populate form
+      const onPickStakeholder = (stakeholderId) => {
+        const s = stakeholders.find(x => x.id === stakeholderId);
+        setForm(f => ({
+          ...f,
+          stakeholderId,
+          slug: f.slug || autoSlugFromStakeholder(stakeholderId),
+        }));
+      };
+
+      // AI auto-fill — uses stakeholder + solution + account context
+      const aiAutofill = async () => {
+        if (!form.stakeholderId) { alert('Pick a stakeholder first'); return; }
+        setGeneratingAI(true);
+        try {
+          const s = stakeholders.find(x => x.id === form.stakeholderId);
+          const sol = form.solutionId ? solutions.find(x => x.id === form.solutionId) : null;
+          const accId = linkedIds(s, 'Account')[0];
+          const acc = accId ? accounts.find(a => a.id === accId) : null;
+
+          const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+          const sRole = F(s,'Role') || '';
+          const accName = acc ? F(acc,'Account Name') : '';
+          const industry = acc ? F(acc,'Industry') : '';
+          const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 400);
+          const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 300);
+          const accNews = acc ? (F(acc,'Recent News')||'').slice(0, 300) : '';
+          const solName = sol ? F(sol,'Name') : '';
+          const solDetail = sol ? (F(sol,'Service | Solution Detail')||'').slice(0, 300) : '';
+          const solKeyMsg = sol ? F(sol,'Stakeholder Key Message') : '';
+
+          const prompt = `Generate content for a personalized landing page for a B2B prospect.
+
+PROSPECT: ${sName}${sRole ? ` (${sRole})` : ''}${accName ? ` at ${accName}` : ''}${industry ? ` in ${industry}` : ''}
+${pain ? `Pain points: ${pain}` : ''}
+${linkedinNews ? `LinkedIn news: ${linkedinNews}` : ''}
+${accNews ? `Company news: ${accNews}` : ''}
+
+${solName ? `SOLUTION WE OFFER: ${solName}\n${solDetail}\n${solKeyMsg ? `Key message: ${solKeyMsg}` : ''}` : ''}
+
+Generate 4 short sections in JSON format. Each very direct, human, no filler. Use "vos" if Spanish.
+
+Return ONLY this JSON:
+{
+  "hook": "Opening line — max 2 sentences. Reference a specific trigger (news, role, their context). NOT generic.",
+  "painContext": "2-3 sentences describing what we see happening in their company and why it's a real pain. Be specific.",
+  "valueProposition": "2-3 sentences on how our solution addresses their specific context. Concrete, not salesy.",
+  "bullets": "3-4 specific value points, one per line (no markdown, just plain text)."
+}
+
+BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic business jargon.`;
+
+          const raw = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 800 });
+          const cleaned = raw.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+          const parsed = JSON.parse(cleaned);
+
+          setForm(f => ({
+            ...f,
+            hook: parsed.hook || f.hook,
+            painContext: parsed.painContext || f.painContext,
+            valueProposition: parsed.valueProposition || f.valueProposition,
+            bullets: parsed.bullets || f.bullets,
+          }));
+        } catch (e) {
+          console.error('AI autofill failed:', e);
+          alert('AI autofill failed — check the console');
+        }
+        setGeneratingAI(false);
+      };
+
+      // Build the HTML preview
+      const buildLandingHTML = (f) => {
+        const s = f.stakeholderId ? stakeholders.find(x => x.id === f.stakeholderId) : null;
+        const sol = f.solutionId ? solutions.find(x => x.id === f.solutionId) : null;
+        const accId = s ? linkedIds(s,'Account')[0] : null;
+        const acc = accId ? accounts.find(a => a.id === accId) : null;
+        const sName = s ? `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() : 'Prospect';
+        const sRole = s ? F(s,'Role') || '' : '';
+        const accName = acc ? F(acc,'Account Name') : '';
+        const solName = sol ? F(sol,'Name') : '';
+        const bulletsList = (f.bullets||'').split('\n').map(b => b.trim()).filter(Boolean);
+        const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+        return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Para ${escape(sName)}${accName ? ' · ' + escape(accName) : ''}</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
+<tr><td align="center">
+<table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);">
+
+  <!-- Hero -->
+  <tr><td style="background:linear-gradient(135deg,#1A1A2E 0%,#0D0D1A 100%);padding:36px 32px;text-align:center;border-bottom:3px solid ${accentColor};">
+    ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" style="max-height:50px;margin-bottom:16px;" />` : ''}
+    <h1 style="margin:0;font-size:28px;color:#fff;font-weight:800;line-height:1.2;">Hola ${escape(sName.split(' ')[0])},</h1>
+    <p style="margin:8px 0 0;font-size:15px;color:#9CA3AF;">armé esto pensando en <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="padding:32px;">
+
+    ${f.hook ? `
+    <div style="padding:16px 20px;background:#F0FDF4;border-left:4px solid ${accentColor};border-radius:0 8px 8px 0;margin-bottom:24px;font-size:15px;color:#1A1A2E;">
+      ${escape(f.hook).replace(/\n/g, '<br>')}
+    </div>` : ''}
+
+    ${f.painContext ? `
+    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">Lo que veo en ${escape(accName || 'tu empresa')}</h2>
+    <p style="margin:0 0 24px;font-size:14px;color:#374151;white-space:pre-wrap;">${escape(f.painContext)}</p>` : ''}
+
+    ${f.valueProposition ? `
+    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">Cómo puedo ayudarte${solName ? ` con ${escape(solName)}` : ''}</h2>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;white-space:pre-wrap;">${escape(f.valueProposition)}</p>` : ''}
+
+    ${bulletsList.length ? `
+    <ul style="margin:0 0 24px;padding:0;list-style:none;">
+      ${bulletsList.map(b => `<li style="padding:8px 0 8px 28px;position:relative;font-size:14px;color:#1A1A2E;">
+        <span style="position:absolute;left:0;top:8px;color:${accentColor};font-weight:800;">▸</span>${escape(b)}
+      </li>`).join('')}
+    </ul>` : ''}
+
+    ${f.socialProof ? `
+    <div style="padding:14px 18px;background:#EFF6FF;border-radius:8px;margin-bottom:24px;font-size:13px;color:#374151;font-style:italic;white-space:pre-wrap;">
+      ${escape(f.socialProof)}
+    </div>` : ''}
+
+    <!-- CTA -->
+    <div style="text-align:center;padding:24px 0;border-top:1px solid #E5E7EB;margin-top:24px;">
+      <p style="margin:0 0 14px;font-size:14px;color:#6B7280;">Si lo que digo hace sentido:</p>
+      <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:14px 32px;background:${accentColor};color:#1A1A2E;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;">
+        ${escape(f.ctaText || 'Hablemos 20 minutos')} →
+      </a>
+      <p style="margin:14px 0 0;font-size:12px;color:#9CA3AF;font-style:italic;">
+        Si no aplica, al menos te quedan estas ideas. No vendo en esta call.
+      </p>
+    </div>
+
+  </td></tr>
+
+  <!-- Footer -->
+  <tr><td style="padding:20px 32px;background:#F9FAFB;border-top:1px solid #E5E7EB;text-align:center;">
+    <p style="margin:0;font-size:13px;color:#374151;">
+      <strong>${escape(senderName)}</strong>${senderEmail ? ` · <a href="mailto:${escape(senderEmail)}" style="color:${accentColor};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
+    </p>
+    <p style="margin:6px 0 0;font-size:11px;color:#9CA3AF;">
+      Powered by <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:600;">Oike</a> · Sales Intelligence
+    </p>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body></html>`;
+      };
+
+      const htmlPreview = useMemo(() => buildLandingHTML(form), [form, stakeholders, accounts, solutions]);
+
+      // Save
+      const saveLanding = async (sendStatus = 'Draft') => {
+        if (!form.slug.trim()) { alert('Slug is required'); return; }
+        if (!form.stakeholderId) { alert('Pick a stakeholder'); return; }
+        setSaving(true);
+        try {
+          const fields = {
+            'Slug': form.slug,
+            'Stakeholder': [form.stakeholderId],
+            ...(form.solutionId ? { 'Solution': [form.solutionId] } : {}),
+            'Hook': form.hook,
+            'Pain Context': form.painContext,
+            'Value Proposition': form.valueProposition,
+            'Bullets': form.bullets,
+            'Social Proof': form.socialProof,
+            'CTA Text': form.ctaText,
+            ...(form.ctaLink ? { 'CTA Link': form.ctaLink } : {}),
+            'Status': sendStatus,
+            'Saved HTML': htmlPreview,
+            'Created By': CURRENT_USER?.name || '',
+            ...(sendStatus === 'Sent' ? { 'Sent Date': new Date().toISOString().split('T')[0] } : {}),
+          };
+          const a = api || new AirtableAPI();
+          if (editingLanding) {
+            await a.updateRecord(TABLE_IDS.landings, editingLanding.id, fields);
+            if (onUpdateRecord) onUpdateRecord('landings', editingLanding.id, fields);
+          } else {
+            const created = await a.createRecord(TABLE_IDS.landings, fields);
+            if (onAddRecord) onAddRecord('landings', created?.fields || fields, created?.id);
+          }
+          setShowForm(false);
+          setEditingLanding(null);
+          setForm(emptyForm);
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          console.error('Save landing failed:', e);
+          alert('Error: ' + (e.message || 'unknown'));
+        }
+        setSaving(false);
+      };
+
+      const copyHTML = async () => {
+        try {
+          const blob = new Blob([htmlPreview], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        } catch {
+          navigator.clipboard.writeText(htmlPreview).catch(() => {});
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        }
+      };
+
+      const openInGmail = async () => {
+        try {
+          const blob = new Blob([htmlPreview], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+        } catch {
+          navigator.clipboard.writeText(htmlPreview).catch(() => {});
+        }
+        const s = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
+        const email = s ? F(s, 'Email') || '' : '';
+        const sName = s ? F(s, 'Name') || '' : '';
+        const subject = `Pensé en ${sName ? sName + ' — ' : ''}${F(accounts.find(a => s && linkedIds(s,'Account')[0] === a.id) || {}, 'Account Name') || 'tu empresa'}`;
+        window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}`, '_blank');
+      };
+
+      const openEdit = (landing) => {
+        setEditingLanding(landing);
+        const stkId = linkedIds(landing, 'Stakeholder')[0] || '';
+        const solId = linkedIds(landing, 'Solution')[0] || '';
+        setForm({
+          slug: F(landing, 'Slug') || '',
+          stakeholderId: stkId,
+          solutionId: solId,
+          hook: F(landing, 'Hook') || '',
+          painContext: F(landing, 'Pain Context') || '',
+          valueProposition: F(landing, 'Value Proposition') || '',
+          bullets: F(landing, 'Bullets') || '',
+          socialProof: F(landing, 'Social Proof') || '',
+          ctaText: F(landing, 'CTA Text') || 'Hablemos 20 minutos',
+          ctaLink: F(landing, 'CTA Link') || '',
+          status: F(landing, 'Status') || 'Draft',
+        });
+        setShowForm(true);
+      };
+
+      const openCreate = () => {
+        setEditingLanding(null);
+        setForm(emptyForm);
+        setShowForm(true);
+      };
+
+      const inputSt = { background:'var(--globant-darker)', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-text)', padding:'8px 10px', fontSize:13, width:'100%', fontFamily: 'inherit' };
+
+      // ── FORM VIEW ──
+      if (showForm) {
+        const currentStk = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
+        const stkAcc = currentStk ? accounts.find(a => a.id === linkedIds(currentStk, 'Account')[0]) : null;
+
+        return (
+          <div>
+            <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <button className="action-btn btn-ghost" style={{ fontSize: 11, marginBottom: 8 }} onClick={() => { setShowForm(false); setEditingLanding(null); }}>← Back to Landings</button>
+                <h1>📨 {editingLanding ? 'Edit' : 'New'} Prospect Landing</h1>
+                <p style={{ color: 'var(--globant-muted)', fontSize: 13 }}>Personalized HTML for first-touch outreach. Copy-paste to Gmail or publish.</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: 20, alignItems: 'start' }}>
+              {/* Form panel */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="card">
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Target</div>
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Stakeholder *</label>
+                  <select style={inputSt} value={form.stakeholderId} onChange={e => onPickStakeholder(e.target.value)}>
+                    <option value="">— Pick a stakeholder —</option>
+                    {stakeholders.map(s => {
+                      const accId = linkedIds(s, 'Account')[0];
+                      const acc = accId ? accounts.find(a => a.id === accId) : null;
+                      const accN = acc ? F(acc, 'Account Name') : '';
+                      return <option key={s.id} value={s.id}>{F(s,'Name')||''} {F(s,'Last name')||''} {accN ? `· ${accN}` : ''}</option>;
+                    })}
+                  </select>
+
+                  {stkAcc && (
+                    <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)' }}>
+                      <strong style={{ color: 'var(--globant-text)' }}>{F(stkAcc, 'Account Name')}</strong>
+                      {F(stkAcc, 'Industry') ? ` · ${F(stkAcc, 'Industry')}` : ''}
+                      {F(stkAcc, 'Country') ? ` · ${F(stkAcc, 'Country')}` : ''}
+                    </div>
+                  )}
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Solution (optional)</label>
+                  <select style={inputSt} value={form.solutionId} onChange={e => setForm(f => ({ ...f, solutionId: e.target.value }))}>
+                    <option value="">— No solution attached —</option>
+                    {solutions.map(s => <option key={s.id} value={s.id}>{F(s,'Name')}</option>)}
+                  </select>
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Slug (URL) *</label>
+                  <input style={inputSt} value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} placeholder="juan-nuvocargo" />
+                </div>
+
+                <button className="action-btn btn-primary" style={{ padding: '10px', fontSize: 13, fontWeight: 700 }} onClick={aiAutofill} disabled={generatingAI || !form.stakeholderId}>
+                  {generatingAI ? '⏳ Generating...' : '✨ AI Auto-fill (hook, pain, value, bullets)'}
+                </button>
+
+                <div className="card">
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Content</div>
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Hook (opening line)</label>
+                  <textarea style={{ ...inputSt, minHeight: 60, resize: 'vertical' }} value={form.hook} onChange={e => setForm(f => ({ ...f, hook: e.target.value }))} placeholder="Vi tu post sobre X. Notable que..." />
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Pain Context</label>
+                  <textarea style={{ ...inputSt, minHeight: 70, resize: 'vertical' }} value={form.painContext} onChange={e => setForm(f => ({ ...f, painContext: e.target.value }))} placeholder="Lo que veo que está pasando en su empresa..." />
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Value Proposition</label>
+                  <textarea style={{ ...inputSt, minHeight: 70, resize: 'vertical' }} value={form.valueProposition} onChange={e => setForm(f => ({ ...f, valueProposition: e.target.value }))} placeholder="Cómo puedo ayudarte concretamente..." />
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Bullets (uno por línea)</label>
+                  <textarea style={{ ...inputSt, minHeight: 80, resize: 'vertical' }} value={form.bullets} onChange={e => setForm(f => ({ ...f, bullets: e.target.value }))} placeholder="3-4 puntos específicos" />
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Social Proof (opcional)</label>
+                  <textarea style={{ ...inputSt, minHeight: 50, resize: 'vertical' }} value={form.socialProof} onChange={e => setForm(f => ({ ...f, socialProof: e.target.value }))} placeholder="Casos similares, métricas relevantes" />
+                </div>
+
+                <div className="card">
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>CTA</div>
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Texto del botón</label>
+                  <input style={inputSt} value={form.ctaText} onChange={e => setForm(f => ({ ...f, ctaText: e.target.value }))} />
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Link del CTA</label>
+                  <input style={inputSt} value={form.ctaLink} onChange={e => setForm(f => ({ ...f, ctaLink: e.target.value }))} placeholder="https://calendar.app.google/..." />
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button className="action-btn btn-primary" style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700 }} onClick={() => saveLanding('Draft')} disabled={saving}>
+                    {saving ? '⏳' : '💾 Save Draft'}
+                  </button>
+                  <button className="action-btn" style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, background: '#4ade80', color: '#0D0D1A' }} onClick={() => saveLanding('Sent')} disabled={saving}>
+                    ✉️ Mark as Sent
+                  </button>
+                </div>
+              </div>
+
+              {/* Preview panel */}
+              <div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <button className="action-btn btn-primary" style={{ padding: '10px 18px', fontSize: 13, fontWeight: 700 }} onClick={copyHTML}>
+                    {copied ? '✅ Copied!' : '📋 Copy HTML'}
+                  </button>
+                  <button style={{ padding: '10px 18px', borderRadius: 8, background: 'rgba(66,133,244,0.15)', border: '1px solid rgba(66,133,244,0.4)', color: '#60a5fa', fontWeight: 700, fontSize: 13, cursor: 'pointer' }} onClick={openInGmail}>
+                    ✉️ Open in Gmail
+                  </button>
+                </div>
+                <div style={{ border: '1px solid var(--globant-border)', borderRadius: 12, overflow: 'hidden', background: '#f3f4f6' }}>
+                  <iframe srcDoc={htmlPreview} style={{ width: '100%', height: 700, border: 'none', background: '#f3f4f6' }} sandbox="allow-same-origin" title="Landing Preview" />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ── LIST VIEW ──
+      return (
+        <div>
+          <div className="page-header">
+            <h1>📨 Prospect Landings</h1>
+            <p>Páginas HTML personalizadas por prospect. Copy-paste a Gmail o publicá como link.</p>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <input className="input-field" style={{ fontSize: 12, flex: 1, minWidth: 180 }} placeholder="Buscar por slug o contacto..." value={listSearch} onChange={e => setListSearch(e.target.value)} />
+            <select className="input-field" style={{ fontSize: 12, minWidth: 140 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="Draft">Draft</option>
+              <option value="Sent">Sent</option>
+              <option value="Archived">Archived</option>
+            </select>
+            <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={openCreate}>+ New Landing</button>
+          </div>
+
+          {filteredLandings.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📨</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>No landings {landings.length === 0 ? 'yet' : 'match'}</div>
+              <div style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 16 }}>
+                {landings.length === 0 ? 'Crea tu primera landing personalizada para un prospect' : 'Ajustá los filtros'}
+              </div>
+              {landings.length === 0 && <button className="action-btn btn-primary" onClick={openCreate}>+ New Landing</button>}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
+              {filteredLandings.map(l => {
+                const status = F(l, 'Status') || 'Draft';
+                const stkId = linkedIds(l, 'Stakeholder')[0];
+                const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
+                const accId = stk ? linkedIds(stk, 'Account')[0] : null;
+                const acc = accId ? accounts.find(a => a.id === accId) : null;
+                const sColor = { Draft: '#a78bfa', Sent: '#4ade80', Archived: '#6b7280' }[status] || '#a78bfa';
+                return (
+                  <div key={l.id} className="card" style={{ cursor: 'pointer', borderTop: `3px solid ${sColor}` }} onClick={() => openEdit(l)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, color: 'var(--globant-green)', fontWeight: 700, fontFamily: 'monospace' }}>/{F(l, 'Slug') || '—'}</div>
+                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, background: `${sColor}20`, color: sColor, fontWeight: 700 }}>{status}</span>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
+                      {stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : '—'}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 10 }}>
+                      {stk ? F(stk,'Role') : ''}{acc ? ` · ${F(acc,'Account Name')}` : ''}
+                    </div>
+                    {F(l, 'Hook') && (
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 8, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        "{F(l, 'Hook')}"
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>
+                      {F(l, 'Sent Date') ? `Enviado: ${F(l, 'Sent Date')}` : 'Borrador'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data, api, onAddRecord, onCreateCampaignFromInsight }) {
       const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [] } = data;
@@ -16798,6 +17323,15 @@ Return ONLY valid JSON.`;
         localStorage.setItem('oike_page', p);
         navSetUrl(p, null); // clear ?id when switching pages
       }, []);
+
+      // Listen to global navigation events (e.g. from StakeholderHistoryModal → "Generate Landing")
+      useEffect(() => {
+        const handler = (e) => {
+          if (e.detail?.page) setPageAndSave(e.detail.page);
+        };
+        window.addEventListener('oike:navigate', handler);
+        return () => window.removeEventListener('oike:navigate', handler);
+      }, [setPageAndSave]);
       const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [], campaigns: [], contentLab: [], landings: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
@@ -17038,6 +17572,7 @@ Return ONLY valid JSON.`;
         insights: <InsightsView data={data} />,
         campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} campaignPrefill={campaignPrefill} clearCampaignPrefill={() => setCampaignPrefill(null)} />,
         contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
+        landings: <LandingsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} onCreateCampaignFromInsight={createCampaignFromInsight} />,
         accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
@@ -17054,6 +17589,7 @@ Return ONLY valid JSON.`;
         { icon: '🎪', label: 'Events', key: 'events' },
         { icon: '📣', label: 'Campaigns', key: 'campaigns' },
         { icon: '✍️', label: 'Content Lab', key: 'contentlab' },
+        { icon: '📨', label: 'Prospect Landings', key: 'landings' },
         { icon: '📄', label: 'Proposals', key: 'proposals' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
