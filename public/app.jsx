@@ -14495,17 +14495,65 @@ No markdown, no commentary. JSON only.`;
       const [listSearch, setListSearch] = useState('');
       const [statusFilter, setStatusFilter] = useState('');
 
+      // ── Language strings (ES / EN / PT) ──
+      const LANDING_I18N = {
+        es: {
+          greeting: 'Hola',
+          heroSub: 'armé esto pensando en',
+          painHeading: 'Lo que veo en',
+          yourCompany: 'tu empresa',
+          valueHeading: 'Cómo puedo ayudarte',
+          valueHeadingWithSol: 'Cómo puedo ayudarte con',
+          ctaIntro: 'Si lo que digo hace sentido:',
+          ctaDefault: 'Hablemos 20 minutos',
+          ctaFooter: 'Si no aplica, al menos te quedan estas ideas. No vendo en esta call.',
+          poweredBy: 'Powered by',
+          aiInstruction: 'Write in Spanish (using "vos" if natural — voseo style).',
+          subject: (sName, accName) => `Pensé en ${sName ? sName + ' — ' : ''}${accName || 'tu empresa'}`,
+        },
+        en: {
+          greeting: 'Hi',
+          heroSub: 'I put this together thinking about',
+          painHeading: 'What I see at',
+          yourCompany: 'your company',
+          valueHeading: 'How I can help you',
+          valueHeadingWithSol: 'How I can help you with',
+          ctaIntro: 'If what I\'m saying makes sense:',
+          ctaDefault: 'Let\'s talk 20 minutes',
+          ctaFooter: 'If it doesn\'t apply, at least you keep these ideas. No selling in this call.',
+          poweredBy: 'Powered by',
+          aiInstruction: 'Write in English. Natural, direct, conversational — not formal corporate speak.',
+          subject: (sName, accName) => `Thinking about ${sName ? sName + ' — ' : ''}${accName || 'your company'}`,
+        },
+        pt: {
+          greeting: 'Olá',
+          heroSub: 'preparei isto pensando em',
+          painHeading: 'O que vejo em',
+          yourCompany: 'sua empresa',
+          valueHeading: 'Como posso ajudar você',
+          valueHeadingWithSol: 'Como posso ajudar você com',
+          ctaIntro: 'Se o que estou dizendo faz sentido:',
+          ctaDefault: 'Vamos conversar 20 minutos',
+          ctaFooter: 'Se não se aplica, pelo menos essas ideias ficam. Não vendo nessa call.',
+          poweredBy: 'Powered by',
+          aiInstruction: 'Write in Brazilian Portuguese. Natural, direct, conversational.',
+          subject: (sName, accName) => `Pensei em ${sName ? sName + ' — ' : ''}${accName || 'sua empresa'}`,
+        },
+      };
+
       // Form state
       const emptyForm = {
         slug: '',
         stakeholderId: '',
+        accountId: '',
         solutionId: '',
+        language: 'es',
         hook: '',
         painContext: '',
         valueProposition: '',
         bullets: '',
         socialProof: '',
-        ctaText: 'Hablemos 20 minutos',
+        ctaText: LANDING_I18N.es.ctaDefault,
         ctaLink: COMPANY_PROFILE.calendarLink || 'https://calendar.app.google/',
         status: 'Draft',
       };
@@ -14518,6 +14566,8 @@ No markdown, no commentary. JSON only.`;
       const senderName = branding.senderName || COMPANY_PROFILE.senderName || CURRENT_USER?.name || 'Ale';
       const senderEmail = branding.senderEmail || CURRENT_USER?.email || '';
       const senderLogo = branding.senderLogo || '';
+      const senderPhoto = branding.senderPhoto || '';
+      const senderTitle = branding.senderTitle || '';
       const accentColor = branding.accentColor || '#5BBFB5';
 
       // ── Check for prefill stakeholder from navigation (e.g. from Stakeholder History Modal) ──
@@ -14562,47 +14612,70 @@ No markdown, no commentary. JSON only.`;
         return [n, l, accSlug].filter(Boolean).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '');
       };
 
-      // Pick stakeholder → auto-fill slug + pre-populate form
+      // Pick stakeholder → auto-fill slug + account
       const onPickStakeholder = (stakeholderId) => {
         const s = stakeholders.find(x => x.id === stakeholderId);
+        const accId = s ? linkedIds(s, 'Account')[0] : '';
         setForm(f => ({
           ...f,
           stakeholderId,
+          accountId: accId || f.accountId,
           slug: f.slug || autoSlugFromStakeholder(stakeholderId),
+        }));
+      };
+
+      // Pick account (standalone, no stakeholder)
+      const onPickAccount = (accountId) => {
+        const a = accounts.find(x => x.id === accountId);
+        setForm(f => ({
+          ...f,
+          accountId,
+          slug: f.slug || (a ? (F(a, 'Account Name')||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : ''),
         }));
       };
 
       // AI auto-fill — uses stakeholder + solution + account context
       const aiAutofill = async () => {
-        if (!form.stakeholderId) { alert('Pick a stakeholder first'); return; }
+        if (!form.stakeholderId && !form.accountId) { alert('Pick at least an account or stakeholder first'); return; }
         setGeneratingAI(true);
         try {
-          const s = stakeholders.find(x => x.id === form.stakeholderId);
+          const s = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
           const sol = form.solutionId ? solutions.find(x => x.id === form.solutionId) : null;
-          const accId = linkedIds(s, 'Account')[0];
+          // Account: explicit wins, otherwise from stakeholder
+          const accId = form.accountId || (s ? linkedIds(s, 'Account')[0] : null);
           const acc = accId ? accounts.find(a => a.id === accId) : null;
 
-          const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
-          const sRole = F(s,'Role') || '';
+          const sName = s ? `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() : '';
+          const sRole = s ? F(s,'Role') || '' : '';
           const accName = acc ? F(acc,'Account Name') : '';
           const industry = acc ? F(acc,'Industry') : '';
-          const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 400);
-          const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 300);
+          const pain = s ? (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 400) : '';
+          const linkedinNews = s ? (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 300) : '';
           const accNews = acc ? (F(acc,'Recent News')||'').slice(0, 300) : '';
+          const accIntel = acc ? (F(acc,'Intel Notes')||'').slice(0, 400) : '';
           const solName = sol ? F(sol,'Name') : '';
           const solDetail = sol ? (F(sol,'Service | Solution Detail')||'').slice(0, 300) : '';
           const solKeyMsg = sol ? F(sol,'Stakeholder Key Message') : '';
 
+          const langInstruction = LANDING_I18N[form.language || 'es'].aiInstruction;
+          const targetDescriptor = sName
+            ? `${sName}${sRole ? ` (${sRole})` : ''}${accName ? ` at ${accName}` : ''}`
+            : `${accName || 'the company'}${industry ? ` (${industry})` : ''} — company-level (no specific stakeholder)`;
+
           const prompt = `Generate content for a personalized landing page for a B2B prospect.
 
-PROSPECT: ${sName}${sRole ? ` (${sRole})` : ''}${accName ? ` at ${accName}` : ''}${industry ? ` in ${industry}` : ''}
-${pain ? `Pain points: ${pain}` : ''}
-${linkedinNews ? `LinkedIn news: ${linkedinNews}` : ''}
+LANGUAGE: ${langInstruction}
+
+TARGET: ${targetDescriptor}
+${industry ? `Industry: ${industry}` : ''}
+${pain ? `Stakeholder pain points: ${pain}` : ''}
+${linkedinNews ? `LinkedIn news of contact: ${linkedinNews}` : ''}
 ${accNews ? `Company news: ${accNews}` : ''}
+${accIntel ? `Company intel notes: ${accIntel}` : ''}
 
 ${solName ? `SOLUTION WE OFFER: ${solName}\n${solDetail}\n${solKeyMsg ? `Key message: ${solKeyMsg}` : ''}` : ''}
 
-Generate 4 short sections in JSON format. Each very direct, human, no filler. Use "vos" if Spanish.
+Generate 4 short sections in JSON format. Each very direct, human, no filler.
 
 Return ONLY this JSON:
 {
@@ -14612,7 +14685,7 @@ Return ONLY this JSON:
   "bullets": "3-4 specific value points, one per line (no markdown, just plain text)."
 }
 
-BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic business jargon.`;
+BANNED in any language: "hope this finds you well", "just reaching out", "I wanted to", "espero que estés bien", "te quería escribir", generic business jargon.`;
 
           const raw = await callOpenAI({ prompt, temperature: 0.6, max_tokens: 800 });
           const cleaned = raw.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
@@ -14636,7 +14709,8 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
       const buildLandingHTML = (f) => {
         const s = f.stakeholderId ? stakeholders.find(x => x.id === f.stakeholderId) : null;
         const sol = f.solutionId ? solutions.find(x => x.id === f.solutionId) : null;
-        const accId = s ? linkedIds(s,'Account')[0] : null;
+        // Account: explicit form.accountId wins; else pull from stakeholder's linked account
+        const accId = f.accountId || (s ? linkedIds(s,'Account')[0] : null);
         const acc = accId ? accounts.find(a => a.id === accId) : null;
         const sName = s ? `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() : 'Prospect';
         const sRole = s ? F(s,'Role') || '' : '';
@@ -14644,11 +14718,13 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
         const solName = sol ? F(sol,'Name') : '';
         const bulletsList = (f.bullets||'').split('\n').map(b => b.trim()).filter(Boolean);
         const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const lang = f.language || 'es';
+        const t = LANDING_I18N[lang] || LANDING_I18N.es;
 
         return `<!DOCTYPE html>
-<html lang="es">
+<html lang="${lang}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Para ${escape(sName)}${accName ? ' · ' + escape(accName) : ''}</title></head>
+<title>${escape(sName)}${accName ? ' · ' + escape(accName) : ''}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#1A1A2E;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
 <tr><td align="center">
@@ -14657,8 +14733,8 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
   <!-- Hero -->
   <tr><td style="background:linear-gradient(135deg,#1A1A2E 0%,#0D0D1A 100%);padding:36px 32px;text-align:center;border-bottom:3px solid ${accentColor};">
     ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" style="max-height:50px;margin-bottom:16px;" />` : ''}
-    <h1 style="margin:0;font-size:28px;color:#fff;font-weight:800;line-height:1.2;">Hola ${escape(sName.split(' ')[0])},</h1>
-    <p style="margin:8px 0 0;font-size:15px;color:#9CA3AF;">armé esto pensando en <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
+    <h1 style="margin:0;font-size:28px;color:#fff;font-weight:800;line-height:1.2;">${t.greeting} ${escape(sName.split(' ')[0])},</h1>
+    <p style="margin:8px 0 0;font-size:15px;color:#9CA3AF;">${t.heroSub} <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
   </td></tr>
 
   <!-- Body -->
@@ -14670,11 +14746,11 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
     </div>` : ''}
 
     ${f.painContext ? `
-    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">Lo que veo en ${escape(accName || 'tu empresa')}</h2>
+    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">${t.painHeading} ${escape(accName || t.yourCompany)}</h2>
     <p style="margin:0 0 24px;font-size:14px;color:#374151;white-space:pre-wrap;">${escape(f.painContext)}</p>` : ''}
 
     ${f.valueProposition ? `
-    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">Cómo puedo ayudarte${solName ? ` con ${escape(solName)}` : ''}</h2>
+    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">${solName ? t.valueHeadingWithSol + ' ' + escape(solName) : t.valueHeading}</h2>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;white-space:pre-wrap;">${escape(f.valueProposition)}</p>` : ''}
 
     ${bulletsList.length ? `
@@ -14689,14 +14765,22 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
       ${escape(f.socialProof)}
     </div>` : ''}
 
-    <!-- CTA -->
-    <div style="text-align:center;padding:24px 0;border-top:1px solid #E5E7EB;margin-top:24px;">
-      <p style="margin:0 0 14px;font-size:14px;color:#6B7280;">Si lo que digo hace sentido:</p>
-      <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:14px 32px;background:${accentColor};color:#1A1A2E;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;">
-        ${escape(f.ctaText || 'Hablemos 20 minutos')} →
-      </a>
-      <p style="margin:14px 0 0;font-size:12px;color:#9CA3AF;font-style:italic;">
-        Si no aplica, al menos te quedan estas ideas. No vendo en esta call.
+    <!-- CTA + sender block -->
+    <div style="padding:24px 0;border-top:1px solid #E5E7EB;margin-top:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        ${senderPhoto ? `<td width="80" valign="middle" style="padding-right:16px;">
+          <img src="${escape(senderPhoto)}" alt="${escape(senderName)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid ${accentColor};" />
+        </td>` : ''}
+        <td valign="middle">
+          <p style="margin:0 0 4px;font-size:12px;color:#6B7280;">${t.ctaIntro}</p>
+          <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:12px 26px;background:${accentColor};color:#1A1A2E;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px;margin:6px 0;">
+            ${escape(f.ctaText || t.ctaDefault)} →
+          </a>
+          <p style="margin:6px 0 0;font-size:13px;color:#1A1A2E;font-weight:600;">${escape(senderName)}${senderTitle ? ` · <span style="font-weight:400;color:#6B7280;">${escape(senderTitle)}</span>` : ''}</p>
+        </td>
+      </tr></table>
+      <p style="margin:14px 0 0;font-size:12px;color:#9CA3AF;font-style:italic;text-align:center;">
+        ${t.ctaFooter}
       </p>
     </div>
 
@@ -14708,7 +14792,7 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
       <strong>${escape(senderName)}</strong>${senderEmail ? ` · <a href="mailto:${escape(senderEmail)}" style="color:${accentColor};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
     </p>
     <p style="margin:6px 0 0;font-size:11px;color:#9CA3AF;">
-      Powered by <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:600;">Oike</a> · Sales Intelligence
+      ${t.poweredBy} <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:600;">Oike</a> · Sales Intelligence
     </p>
   </td></tr>
 
@@ -14784,7 +14868,9 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
         const s = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
         const email = s ? F(s, 'Email') || '' : '';
         const sName = s ? F(s, 'Name') || '' : '';
-        const subject = `Pensé en ${sName ? sName + ' — ' : ''}${F(accounts.find(a => s && linkedIds(s,'Account')[0] === a.id) || {}, 'Account Name') || 'tu empresa'}`;
+        const accName = s ? F(accounts.find(a => linkedIds(s,'Account')[0] === a.id) || {}, 'Account Name') : '';
+        const t = LANDING_I18N[form.language || 'es'] || LANDING_I18N.es;
+        const subject = t.subject(sName, accName);
         window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}`, '_blank');
       };
 
@@ -14819,7 +14905,9 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
       // ── FORM VIEW ──
       if (showForm) {
         const currentStk = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
-        const stkAcc = currentStk ? accounts.find(a => a.id === linkedIds(currentStk, 'Account')[0]) : null;
+        const stkAcc = form.accountId
+          ? accounts.find(a => a.id === form.accountId)
+          : (currentStk ? accounts.find(a => a.id === linkedIds(currentStk, 'Account')[0]) : null);
 
         return (
           <div>
@@ -14835,17 +14923,63 @@ BANNED: "hope this finds you well", "just reaching out", "I wanted to", generic 
               {/* Form panel */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div className="card">
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>🌐 Language</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                    {[
+                      { code: 'es', label: '🇪🇸 Español' },
+                      { code: 'en', label: '🇬🇧 English' },
+                      { code: 'pt', label: '🇧🇷 Português' },
+                    ].map(opt => (
+                      <button key={opt.code}
+                        onClick={() => {
+                          // Also update default CTA if it matches the old language's default
+                          setForm(f => ({
+                            ...f,
+                            language: opt.code,
+                            ctaText: (f.ctaText === LANDING_I18N[f.language || 'es'].ctaDefault || !f.ctaText) ? LANDING_I18N[opt.code].ctaDefault : f.ctaText,
+                          }));
+                        }}
+                        style={{
+                          padding: '8px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                          background: form.language === opt.code ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${form.language === opt.code ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
+                          color: form.language === opt.code ? 'var(--globant-green)' : 'var(--globant-text)',
+                        }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 8, fontStyle: 'italic' }}>
+                    El AI genera en este idioma + los textos fijos del HTML también
+                  </div>
+                </div>
+
+                <div className="card">
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Target</div>
-                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Stakeholder *</label>
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Account (company)</label>
+                  <select style={inputSt} value={form.accountId} onChange={e => onPickAccount(e.target.value)}>
+                    <option value="">— Pick an account —</option>
+                    {accounts.map(a => <option key={a.id} value={a.id}>{F(a,'Account Name')}{F(a,'Industry') ? ` · ${F(a,'Industry')}` : ''}</option>)}
+                  </select>
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Stakeholder {form.accountId ? '(opcional si ya tenés account)' : '*'}</label>
                   <select style={inputSt} value={form.stakeholderId} onChange={e => onPickStakeholder(e.target.value)}>
                     <option value="">— Pick a stakeholder —</option>
-                    {stakeholders.map(s => {
-                      const accId = linkedIds(s, 'Account')[0];
-                      const acc = accId ? accounts.find(a => a.id === accId) : null;
-                      const accN = acc ? F(acc, 'Account Name') : '';
-                      return <option key={s.id} value={s.id}>{F(s,'Name')||''} {F(s,'Last name')||''} {accN ? `· ${accN}` : ''}</option>;
-                    })}
+                    {stakeholders
+                      .filter(s => !form.accountId || linkedIds(s, 'Account').includes(form.accountId))
+                      .map(s => {
+                        const accId = linkedIds(s, 'Account')[0];
+                        const acc = accId ? accounts.find(a => a.id === accId) : null;
+                        const accN = acc ? F(acc, 'Account Name') : '';
+                        return <option key={s.id} value={s.id}>{F(s,'Name')||''} {F(s,'Last name')||''} {accN ? `· ${accN}` : ''}</option>;
+                      })}
                   </select>
+                  {form.accountId && (
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                      Filtrado por account seleccionada. Podés cambiar la account para ver otros contactos.
+                    </div>
+                  )}
 
                   {stkAcc && (
                     <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)' }}>
@@ -15536,8 +15670,26 @@ Return ONLY valid JSON:
         <div style="padding:14px 16px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;font-size:13px;color:${GR};line-height:1.7;white-space:pre-wrap;">${reportNotes.trim().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
       </td></tr>` : ''}
 
-      <!-- Footer -->
+      <!-- Sender block + Footer -->
       <tr><td style="padding:24px 0 0;border-top:1px solid #e5e7eb;margin-top:24px;">
+        ${(() => {
+          try {
+            const b = JSON.parse(localStorage.getItem('oike_proposal_branding') || '{}');
+            const photo = b.senderPhoto || '';
+            const sName = b.senderName || COMPANY_PROFILE.senderName || 'Alejandra Cadario';
+            const sTitle = b.senderTitle || '';
+            const sEmail = b.senderEmail || '';
+            if (!photo && !sTitle) return '';
+            return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr>
+              ${photo ? `<td width="64" valign="middle" style="padding-right:12px;"><img src="${photo}" alt="${sName}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid ${G};" /></td>` : ''}
+              <td valign="middle">
+                <div style="font-size:13px;font-weight:700;color:${T};">${sName}</div>
+                ${sTitle ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${sTitle}</div>` : ''}
+                ${sEmail ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${sEmail}</div>` : ''}
+              </td>
+            </tr></table>`;
+          } catch { return ''; }
+        })()}
         <div style="font-size:11px;color:#9ca3af;text-align:center;">
           Generated by <strong style="color:${G};">Oike</strong> · ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
         </div>
@@ -16722,6 +16874,8 @@ Return ONLY valid JSON.`;
           senderName:  b.senderName  || CLIENT_CONFIG.name || '',
           senderEmail: b.senderEmail || CURRENT_USER?.email || '',
           senderLogo:  b.senderLogo  || CLIENT_CONFIG.logo  || '',
+          senderPhoto: b.senderPhoto || '',
+          senderTitle: b.senderTitle || '',
           calendarLink: b.calendarLink || '',
           accentColor: b.accentColor || '#5BBFB5',
           darkColor:   b.darkColor   || '#0D0D1A',
@@ -16879,6 +17033,47 @@ Return ONLY valid JSON.`;
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Sender photo (face) — used in Landings, Proposals & Reports near sender signature */}
+                <div>
+                  <label style={labelStyle}>Your photo (face)</label>
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div style={{ width:72, height:72, borderRadius:'50%', border:'1px solid var(--globant-border)', background:'var(--globant-darker)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, overflow:'hidden' }}>
+                      {branding.senderPhoto
+                        ? <img src={branding.senderPhoto} alt="you" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{e.target.style.display='none';}} />
+                        : <span style={{ fontSize:22 }}>👤</span>
+                      }
+                    </div>
+                    <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
+                      <label style={{ display:'block', cursor:'pointer' }}>
+                        <div style={{ padding:'9px 14px', borderRadius:7, border:'1px dashed var(--globant-border)', background:'var(--globant-darker)', fontSize:12, color:'var(--globant-muted)', textAlign:'center', cursor:'pointer' }}>
+                          📸 Upload your photo (square works best)
+                        </div>
+                        <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => setBranding(p=>({...p, senderPhoto: ev.target.result}));
+                          reader.readAsDataURL(file);
+                        }} />
+                      </label>
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic' }}>Aparece al lado del CTA "Hablemos" en Landings, Proposals y Reports. Foto cuadrada / circular.</div>
+                      {branding.senderPhoto && (
+                        <button onClick={() => setBranding(p=>({...p,senderPhoto:''}))}
+                          style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer', alignSelf:'flex-start' }}>
+                          🗑 Remove photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sender title / tagline */}
+                <div>
+                  <label style={labelStyle}>Your title / tagline</label>
+                  <input style={inputStyle} value={branding.senderTitle || ''} onChange={e=>setBranding(p=>({...p,senderTitle:e.target.value}))} placeholder="e.g. Founder · Oike · Sales Intelligence" />
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>Aparece debajo del nombre, al lado de la foto.</div>
                 </div>
 
                 {/* Color palette */}
