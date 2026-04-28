@@ -7474,6 +7474,65 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       const [evCreating, setEvCreating] = useState(false);
       const [editingEvent, setEditingEvent] = useState(null);
       const [evUploadingFile, setEvUploadingFile] = useState(false);
+      const [evGeneratingSummary, setEvGeneratingSummary] = useState(false);
+
+      // Generate Executive Summary for the event — uses files + context + linked solutions
+      const generateEventExecSummary = async (eventRec) => {
+        if (!eventRec) return;
+        setEvGeneratingSummary(true);
+        try {
+          const evName = F(eventRec, 'Event Name') || '';
+          const evContext = F(eventRec, 'Aditional context') || '';
+          const evStart = eventRec.fields?.['Starting'] ? new Date(eventRec.fields['Starting']).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }) : '';
+          const evUrl = F(eventRec, 'URL') || '';
+          const evAirtableSummary = F(eventRec, 'Attachment Summary') || '';
+          const linkedSolIds = linkedIds(eventRec, 'Solutions');
+          const linkedSols = (data.solutions || []).filter(s => linkedSolIds.includes(s.id));
+          const solInfo = linkedSols.map(s => `- ${F(s,'Name')}: ${F(s,'Stakeholder Key Message') || (F(s,'Service | Solution Detail')||'').slice(0,150)}`).join('\n');
+
+          const prompt = `You are a senior B2B sales strategist. Generate an executive summary of this event that will be used as context for AI-personalized invitations to prospects.
+
+EVENT: ${evName}
+${evStart ? `DATE: ${evStart}` : ''}
+${evUrl ? `URL: ${evUrl}` : ''}
+
+CONTEXT (uploaded files + manual notes):
+${evContext.slice(0, 3000) || 'None'}
+
+${evAirtableSummary ? `AIRTABLE ATTACHMENT SUMMARY:\n${typeof evAirtableSummary === 'string' ? evAirtableSummary.slice(0, 800) : ''}` : ''}
+
+${solInfo ? `LINKED SOLUTIONS WE PROMOTE AT THIS EVENT:\n${solInfo}` : ''}
+
+Generate a structured executive summary with these 5 sections:
+
+### 🎯 What this event is
+2-3 sentences: type of event, format (in-person/online/hybrid), scale, the core promise.
+
+### 👥 Target audience
+Who should attend: roles, seniority, industries, company size. Specific.
+
+### 💡 Why it matters now
+The trigger / timing / context that makes this event relevant TODAY (industry shifts, regulation, technology change).
+
+### 🎁 What attendees take away
+3-4 concrete outcomes (knowledge, network, tools, deals).
+
+### 🪝 Hooks for invitations
+3 angles a BDR could use to invite different prospect personas. Each one specific (not generic).
+
+Return as plain markdown text, NO surrounding JSON. Use the headers exactly as shown above. Keep total under 400 words.`;
+
+          const summary = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 900 });
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.events, eventRec.id, { 'Exec Summary': summary });
+          if (onUpdateRecord) onUpdateRecord('events', eventRec.id, { 'Exec Summary': summary });
+          if (onLogActivity) onLogActivity();
+        } catch (err) {
+          console.error('Generate Exec Summary failed:', err);
+          alert('Failed to generate summary. Try again or check the console.');
+        }
+        setEvGeneratingSummary(false);
+      };
       const now = new Date();
 
       // Handle file upload → AI summary → append to "Aditional context" as FILE: block
@@ -7842,6 +7901,49 @@ Return ONLY the JSON array, nothing else.`;
                   <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 6 }}>📎 Airtable Attachment Summary</div>
                   <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)', whiteSpace: 'pre-wrap' }}>{typeof summary === 'string' ? summary.slice(0, 500) : String(summary).slice(0, 500)}</div>
                 </div>
+              )}
+            </div>
+
+            {/* AI Executive Summary — used by AI when inviting prospects via Landings */}
+            <div className="card" style={{ borderLeft: '3px solid #a78bfa' }}>
+              <div className="card-header">
+                <h3>🧠 AI Executive Summary</h3>
+                <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                  onClick={() => generateEventExecSummary(selectedEvent)}
+                  disabled={evGeneratingSummary || (!context && !F(selectedEvent, 'Attachment Summary'))}>
+                  {evGeneratingSummary ? '⏳ Generating...' : F(selectedEvent, 'Exec Summary') ? '🔄 Regenerate' : '✨ Generate'}
+                </button>
+              </div>
+              {F(selectedEvent, 'Exec Summary') ? (
+                <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {(() => {
+                    const summaryText = F(selectedEvent, 'Exec Summary');
+                    const lines = String(summaryText).split('\n').filter(l => l.trim());
+                    const parseInline = (text) => {
+                      const parts = [];
+                      const regex = /\*\*(.+?)\*\*/g;
+                      let lastIndex = 0, match, key = 0;
+                      while ((match = regex.exec(text)) !== null) {
+                        if (match.index > lastIndex) parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+                        parts.push(<strong key={key++} style={{ fontWeight: 700, color: 'var(--globant-text)' }}>{match[1]}</strong>);
+                        lastIndex = match.index + match[0].length;
+                      }
+                      if (lastIndex < text.length) parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+                      return parts.length ? parts : text;
+                    };
+                    return lines.map((line, i) => {
+                      if (line.startsWith('### ')) return <h4 key={i} style={{ margin: '12px 0 6px', fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>{parseInline(line.replace('### ', '').replace(/\*\*/g, ''))}</h4>;
+                      if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 14, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0 }}>•</span>{parseInline(line.slice(2))}</div>;
+                      return <p key={i} style={{ margin: '3px 0' }}>{parseInline(line)}</p>;
+                    });
+                  })()}
+                </div>
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
+                  {context || F(selectedEvent, 'Attachment Summary')
+                    ? 'Click "✨ Generate" para que AI cree un resumen ejecutivo del evento. Este summary se usa después automático cuando creás Prospect Landings que invitan a este evento — para que la IA escriba mejores invitaciones.'
+                    : 'Subí archivos o agregá contexto al evento primero. Después podés generar el summary.'}
+                </p>
               )}
             </div>
 
@@ -14679,6 +14781,7 @@ No markdown, no commentary. JSON only.`;
           const evName = ev ? F(ev,'Event Name') : '';
           const evDate = ev?.fields?.['Starting'] ? new Date(ev.fields['Starting']).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' }) : '';
           const evContext = ev ? (F(ev,'Aditional context')||'').slice(0, 400) : '';
+          const evExecSummary = ev ? (F(ev,'Exec Summary')||'').slice(0, 1500) : '';
 
           const langInstruction = LANDING_I18N[form.language || 'es'].aiInstruction;
           const targetDescriptor = sName
@@ -14698,7 +14801,7 @@ ${accIntel ? `Company intel notes: ${accIntel}` : ''}
 
 ${solName ? `SOLUTION WE OFFER: ${solName}\n${solDetail}\n${solKeyMsg ? `Key message: ${solKeyMsg}` : ''}` : ''}
 
-${evName ? `EVENT TO INVITE THEM TO: "${evName}"${evDate ? ` on ${evDate}` : ''}${evContext ? `\nEvent context: ${evContext}` : ''}\nIMPORTANT: Reference this event naturally in the content. The hook OR the value proposition should mention WHY this prospect specifically is a great fit for this event. Don't make the whole landing about the event — the event is part of the offer, not the only point.` : ''}
+${evName ? `EVENT TO INVITE THEM TO: "${evName}"${evDate ? ` on ${evDate}` : ''}${evContext ? `\nEvent context: ${evContext}` : ''}${evExecSummary ? `\n\nEVENT EXECUTIVE SUMMARY (use this as ground truth for what the event is, who should attend, and why):\n${evExecSummary}\n\nIMPORTANT: Use the executive summary to:\n1. Match the prospect to one of the "Hooks for invitations" angles in the summary\n2. Reference the "Why it matters now" trigger to anchor urgency\n3. Mention what they'll concretely take away (from "What attendees take away")\nThe hook should connect this prospect's specific context (their pain, role, recent news) with WHY this event is for them specifically. Don't recite the event details — translate them into a personal invitation.` : '\nIMPORTANT: Reference this event naturally in the content. The hook OR the value proposition should mention WHY this prospect specifically is a great fit for this event.'}` : ''}
 
 Generate 4 short sections in JSON format. Each very direct, human, no filler.
 
@@ -15574,12 +15677,26 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       );
       const pipeline = activeOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
 
+      // ── Branding from Settings (used in all 3 report types) ──
+      const reportBranding = (() => {
+        try { return JSON.parse(localStorage.getItem('oike_proposal_branding') || '{}'); } catch { return {}; }
+      })();
+      const RB_NAME    = reportBranding.senderName || COMPANY_PROFILE.senderName || 'Alejandra Cadario';
+      const RB_TITLE   = reportBranding.senderTitle || '';
+      const RB_EMAIL   = reportBranding.senderEmail || CURRENT_USER?.email || '';
+      const RB_PHOTO   = reportBranding.senderPhoto || '';
+      const RB_LOGO    = reportBranding.senderLogo || '';
+      const RB_PRIMARY   = reportBranding.accentColor    || '#5BBFB5';
+      const RB_SECONDARY = reportBranding.secondaryColor || '#A78BFA';
+      const RB_TERTIARY  = reportBranding.tertiaryColor  || '#FBBF24';
+      const RB_DARK    = reportBranding.darkColor      || '#1A1A2E';
+
       // ── HTML generator ──
       const generateHtml = async () => {
         setGenerating(true);
         try {
-        const T  = '#1A1A2E';
-        const G  = '#5BBFB5';
+        const T  = RB_DARK;
+        const G  = RB_PRIMARY;
         const GR = '#4A4A4A';
         const LG = '#F5F5F5';
 
@@ -15876,12 +15993,15 @@ Return ONLY valid JSON:
   <tr><td style="background:${T};padding:24px 28px;border-radius:12px 12px 0 0;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>
+        ${RB_LOGO
+          ? `<img src="${RB_LOGO}" alt="Logo" style="max-height:36px;max-width:140px;margin-bottom:6px;" />`
+          : `<div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>`
+        }
         <div style="font-size:12px;color:#9ca3af;margin-top:2px;">Sales Activity Report</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:13px;color:#e5e7eb;font-weight:600;">${dateLabel}</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Prepared by ${COMPANY_PROFILE.senderName || 'Alejandra Cadario'}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Prepared by ${RB_NAME}</div>
       </div>
     </div>
   </td></tr>
@@ -15944,24 +16064,14 @@ Return ONLY valid JSON:
 
       <!-- Sender block + Footer -->
       <tr><td style="padding:24px 0 0;border-top:1px solid #e5e7eb;margin-top:24px;">
-        ${(() => {
-          try {
-            const b = JSON.parse(localStorage.getItem('oike_proposal_branding') || '{}');
-            const photo = b.senderPhoto || '';
-            const sName = b.senderName || COMPANY_PROFILE.senderName || 'Alejandra Cadario';
-            const sTitle = b.senderTitle || '';
-            const sEmail = b.senderEmail || '';
-            if (!photo && !sTitle) return '';
-            return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr>
-              ${photo ? `<td width="64" valign="middle" style="padding-right:12px;"><img src="${photo}" alt="${sName}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid ${G};" /></td>` : ''}
-              <td valign="middle">
-                <div style="font-size:13px;font-weight:700;color:${T};">${sName}</div>
-                ${sTitle ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${sTitle}</div>` : ''}
-                ${sEmail ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${sEmail}</div>` : ''}
-              </td>
-            </tr></table>`;
-          } catch { return ''; }
-        })()}
+        ${(RB_PHOTO || RB_TITLE || RB_NAME) ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr>
+          ${RB_PHOTO ? `<td width="64" valign="middle" style="padding-right:12px;"><img src="${RB_PHOTO}" alt="${RB_NAME}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid ${G};" /></td>` : ''}
+          <td valign="middle">
+            <div style="font-size:13px;font-weight:700;color:${T};">${RB_NAME}</div>
+            ${RB_TITLE ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${RB_TITLE}</div>` : ''}
+            ${RB_EMAIL ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;"><a href="mailto:${RB_EMAIL}" style="color:${G};text-decoration:none;">${RB_EMAIL}</a></div>` : ''}
+          </td>
+        </tr></table>` : ''}
         <div style="font-size:11px;color:#9ca3af;text-align:center;">
           Generated by <strong style="color:${G};">Oike</strong> · ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
         </div>
@@ -16044,7 +16154,7 @@ Return ONLY valid JSON:
       const generateCompanyIntelHtml = async () => {
         setGenerating(true);
         try {
-          const T = '#1A1A2E', G = '#5BBFB5', GR = '#4A4A4A', LG = '#F5F5F5';
+          const T = RB_DARK, G = RB_PRIMARY, GR = '#4A4A4A', LG = '#F5F5F5';
 
           // Filter accounts
           let poolAccounts = accounts.filter(a => {
@@ -16227,7 +16337,10 @@ Return ONLY valid JSON.`;
   <tr><td style="background:${T};padding:24px 28px;border-radius:12px 12px 0 0;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>
+        ${RB_LOGO
+          ? `<img src="${RB_LOGO}" alt="Logo" style="max-height:36px;max-width:140px;margin-bottom:6px;" />`
+          : `<div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>`
+        }
         <div style="font-size:12px;color:#9ca3af;margin-top:2px;">🏢 Company Intel Report</div>
       </div>
       <div style="text-align:right;">
@@ -16263,7 +16376,7 @@ Return ONLY valid JSON.`;
       const generateStakeholderPainsHtml = async () => {
         setGenerating(true);
         try {
-          const T = '#1A1A2E', G = '#5BBFB5', GR = '#4A4A4A';
+          const T = RB_DARK, G = RB_PRIMARY, GR = '#4A4A4A';
 
           // Filter stakeholders
           let poolStks = stakeholders.filter(s => {
@@ -16459,7 +16572,10 @@ Return ONLY valid JSON.`;
   <tr><td style="background:${T};padding:24px 28px;border-radius:12px 12px 0 0;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>
+        ${RB_LOGO
+          ? `<img src="${RB_LOGO}" alt="Logo" style="max-height:36px;max-width:140px;margin-bottom:6px;" />`
+          : `<div style="font-size:22px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>`
+        }
         <div style="font-size:12px;color:#9ca3af;margin-top:2px;">🎯 Stakeholder Pains & LinkedIn Intel</div>
       </div>
       <div style="text-align:right;">
