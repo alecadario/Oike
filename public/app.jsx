@@ -15559,7 +15559,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       const defaultFrom = fmt(new Date(now - 14 * 86400000));
       const defaultTo   = fmt(now);
 
-      // ── Top-level report mode: 'outreach' | 'company' | 'stakeholder' ──
+      // ── Top-level report mode: 'outreach' | 'company' | 'stakeholder' | 'account-briefing' ──
       const [reportMode, setReportMode] = useState('outreach');
       const [dateFrom, setDateFrom]   = useState(defaultFrom);
       const [dateTo, setDateTo]       = useState(defaultTo);
@@ -16424,6 +16424,337 @@ Return ONLY valid JSON.`;
       // STAKEHOLDER PAINS REPORT — aggregated pains + LinkedIn themes
       // NOT one-by-one, grouped by industry/role/country
       // ══════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════
+      // ACCOUNT BRIEFING REPORT — pre-meeting deep dive on one account
+      // Combines: account intel + stakeholder pains + outreach history + AI talking points
+      // ══════════════════════════════════════════════════════════
+      const generateAccountBriefingHtml = async () => {
+        const targetAccountId = intelFilterAccountIds[0];
+        if (!targetAccountId) {
+          alert('Pick exactly 1 account from "Specific account(s)" filter to generate an Account Briefing.');
+          return;
+        }
+        setGenerating(true);
+        try {
+          const T = RB_DARK, G = RB_PRIMARY, S = RB_SECONDARY, TR = RB_TERTIARY, GR = '#4A4A4A';
+
+          const acc = accounts.find(a => a.id === targetAccountId);
+          if (!acc) { alert('Account not found.'); setGenerating(false); return; }
+
+          const accName = F(acc, 'Account Name') || 'Account';
+          const accIndustry = F(acc, 'Industry') || '';
+          const accCountry = F(acc, 'Country') || '';
+          const accWebsite = F(acc, 'Website') || '';
+          const accNews = F(acc, 'Recent News') || '';
+          const accIntel = F(acc, 'Intel Notes') || '';
+          const accStatus = F(acc, 'Inside Sales Status') || '';
+          const accDescription = F(acc, 'Company Description') || '';
+          const accSize = F(acc, 'Company size') || '';
+
+          // Strip FILE: blocks from intel notes for cleaner display
+          const accIntelClean = accIntel
+            ? String(accIntel).replace(/📎\s*FILE:[\s\S]*?(?=\n📎\s*FILE:|$)/g, '').trim()
+            : '';
+
+          // Stakeholders for this account
+          const accStks = stakeholders.filter(s => linkedIds(s, 'Account').includes(targetAccountId));
+
+          // Outreach history for this account
+          const accOutreach = outreach
+            .filter(o => linkedIds(o, 'Account').includes(targetAccountId))
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+          const totalSent = accOutreach.length;
+          const replies = accOutreach.filter(o => F(o, 'Status') === 'Replied').length;
+          const meetings = accOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status'))).length;
+          const lastTouch = accOutreach[0];
+          const lastTouchDate = lastTouch?.fields?.['Date'] ? new Date(lastTouch.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
+          const daysSinceLastTouch = lastTouch?.fields?.['Date'] ? Math.floor((new Date() - new Date(lastTouch.fields['Date'])) / (1000*60*60*24)) : null;
+
+          // Linked opportunities
+          const accOpps = opportunities.filter(o => linkedIds(o, 'Account').includes(targetAccountId));
+          const openOpps = accOpps.filter(o => !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage')));
+          const pipelineValue = openOpps.reduce((sum, o) => sum + (o.fields?.['Value'] || 0), 0);
+
+          // Linked solutions (via opportunities)
+          const linkedSolIds = new Set(accOpps.flatMap(o => linkedIds(o, 'Solutions')));
+          const linkedSols = solutions.filter(s => linkedSolIds.has(s.id));
+
+          // Build the AI prompt with all the context
+          const stkSummary = accStks.slice(0, 10).map(s => {
+            const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+            const sRole = F(s,'Role') || '';
+            const sInfluence = F(s,'Level of Influence') || '';
+            const sStatus = F(s,'Status') || '';
+            const sPain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 250);
+            const sLinkedin = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 200);
+            return `- ${sName} (${sRole})${sInfluence ? ' · ' + sInfluence : ''}${sStatus ? ' · ' + sStatus : ''}\n${sPain ? `  Pain: ${sPain}\n` : ''}${sLinkedin ? `  LinkedIn: ${sLinkedin}\n` : ''}`;
+          }).join('\n');
+
+          const outreachSummary = accOutreach.slice(0, 8).map(o => {
+            const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
+            const stkId = linkedIds(o, 'Stakeholder')[0];
+            const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
+            const stkName = stk ? `${F(stk,'Name')||''}` : 'Unknown';
+            return `- ${date} | ${F(o,'Channel')||''} | ${F(o,'Status')||''} | ${stkName} | ${(F(o,'Notes') || F(o,'Message') || '').slice(0, 120)}`;
+          }).join('\n');
+
+          const oppsSummary = openOpps.slice(0, 5).map(o => `- ${F(o,'Deal/Opp name')||F(o,'Name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`).join('\n');
+
+          const aiPrompt = `You are a senior B2B sales strategist preparing a pre-meeting briefing for a sales rep about to meet with this account. Generate an executive briefing.
+
+ACCOUNT: ${accName}
+${accIndustry ? `Industry: ${accIndustry}` : ''}${accCountry ? ` · Country: ${accCountry}` : ''}${accSize ? ` · Size: ${accSize}` : ''}
+${accDescription ? `Description: ${accDescription.slice(0, 300)}` : ''}
+${accStatus ? `Inside Sales Status: ${accStatus}` : ''}
+
+RECENT NEWS:
+${typeof accNews === 'string' ? accNews.slice(0, 800) : 'None'}
+
+INTEL NOTES (manual):
+${accIntelClean.slice(0, 800) || 'None'}
+
+STAKEHOLDERS (${accStks.length} total):
+${stkSummary || 'None mapped yet'}
+
+RECENT OUTREACH (last 8, total ${totalSent}, ${replies} replies, ${meetings} meetings):
+${outreachSummary || 'No outreach history'}
+
+OPEN OPPORTUNITIES (${openOpps.length}, total pipeline ${formatCurrency(pipelineValue)}):
+${oppsSummary || 'None'}
+
+LINKED SOLUTIONS WE OFFER:
+${linkedSols.map(s => `- ${F(s,'Name')}: ${F(s,'Stakeholder Key Message') || ''}`).join('\n') || 'None'}
+
+Generate a JSON object with these sections (each direct, specific, actionable — never generic):
+
+{
+  "executive_summary": "3-4 sentences. Where does this account stand right now? What's the main opportunity? What's the risk? Use real numbers and named stakeholders.",
+  "what_changed": "What's new since last contact (or in their company recently). Reference news + LinkedIn signals. 2-3 sentences.",
+  "stakeholder_map": [
+    { "name": "...", "role": "...", "status": "Cold/Engaged/Champion/Blocker", "key_insight": "1 sentence about what they care about and how to approach", "next_action": "specific action" }
+  ],
+  "talking_points": [
+    "3-5 specific talking points based on their pains + recent news. Each one references real data, not platitudes."
+  ],
+  "open_questions": [
+    "3 strategic questions to ask in the meeting that uncover budget, decision-makers, or timing"
+  ],
+  "risk_or_blockers": "Any risk to flag: stale relationship, competitive threat, internal change, budget freeze, etc. Be specific. 1-2 sentences. Or null if none.",
+  "recommended_next_step": "ONE concrete next step after this meeting. Specific. Time-bound."
+}
+
+Return ONLY valid JSON. No fluff in any field.`;
+
+          let aiData = {};
+          try {
+            const raw = await callOpenAI({ prompt: aiPrompt, temperature: 0.5, max_tokens: 1800 });
+            const cleaned = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+            aiData = JSON.parse(cleaned);
+          } catch (e) {
+            console.error('Account briefing AI failed:', e);
+            aiData = { executive_summary: 'AI generation failed. Check OpenAI proxy or try again.' };
+          }
+
+          const escape = (x) => String(x||'').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const dateLabel = `Generated ${new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}`;
+
+          // Build per-stakeholder cards from AI map
+          const stkMap = (aiData.stakeholder_map || []).map(s => {
+            const statusColor = {
+              'Champion': '#10B981', 'Engaged': '#10B981',
+              'Decision Maker': '#3B82F6',
+              'Cold': '#9CA3AF',
+              'Blocker': '#EF4444',
+              'Influencer': '#8B5CF6',
+            }[s.status] || G;
+            return `
+            <div style="padding:16px 18px;background:#F9FAFB;border-left:3px solid ${statusColor};border-radius:0 10px 10px 0;margin-bottom:10px;">
+              <table width="100%" cellpadding="0" cellspacing="0"><tr>
+                <td>
+                  <div style="font-size:13px;font-weight:700;color:${T};">${escape(s.name||'')}</div>
+                  ${s.role ? `<div style="font-size:11px;color:#6B7280;margin-top:1px;">${escape(s.role)}</div>` : ''}
+                </td>
+                <td style="text-align:right;vertical-align:top;">
+                  <span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:${statusColor}22;color:${statusColor};">${escape(s.status||'')}</span>
+                </td>
+              </tr></table>
+              ${s.key_insight ? `<div style="font-size:12px;color:${GR};margin-top:8px;line-height:1.5;">${escape(s.key_insight)}</div>` : ''}
+              ${s.next_action ? `<div style="margin-top:8px;padding:6px 10px;background:${G}10;border-left:2px solid ${G};font-size:11px;color:${T};border-radius:0 4px 4px 0;"><strong style="color:${G};">▸ Action:</strong> ${escape(s.next_action)}</div>` : ''}
+            </div>`;
+          }).join('');
+
+          const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${T};">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 16px;">
+<tr><td align="center">
+<table width="700" cellpadding="0" cellspacing="0" style="max-width:700px;">
+
+  <!-- Header -->
+  <tr><td style="background:${T};padding:28px 32px;border-radius:12px 12px 0 0;">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td>
+        ${RB_LOGO ? `<img src="${RB_LOGO}" alt="Logo" style="max-height:32px;max-width:140px;margin-bottom:10px;" />` : `<div style="font-size:18px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>`}
+        <div style="font-size:20px;color:#fff;font-weight:800;">📋 Account Briefing</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Pre-meeting strategic prep</div>
+      </td>
+      <td style="text-align:right;">
+        <div style="font-size:13px;color:#e5e7eb;font-weight:600;">${dateLabel}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Prepared by ${RB_NAME}</div>
+      </td>
+    </tr></table>
+  </td></tr>
+
+  <!-- Account header -->
+  <tr><td style="background:#fff;padding:24px 32px;border-bottom:3px solid ${G};">
+    <h1 style="margin:0;font-size:30px;font-weight:800;color:${T};letter-spacing:-0.5px;">🏢 ${escape(accName)}</h1>
+    <div style="margin-top:6px;font-size:13px;color:#6B7280;">
+      ${accIndustry ? `<span><strong>${escape(accIndustry)}</strong></span>` : ''}
+      ${accCountry ? `<span style="margin-left:8px;">· ${escape(accCountry)}</span>` : ''}
+      ${accSize ? `<span style="margin-left:8px;">· ${escape(accSize)}</span>` : ''}
+      ${accWebsite ? `<span style="margin-left:8px;">· <a href="${escape(accWebsite)}" style="color:${G};text-decoration:none;">${escape(accWebsite.replace(/^https?:\/\//, ''))}</a></span>` : ''}
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;"><tr>
+      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
+        <div style="font-size:20px;font-weight:800;color:${T};">${accStks.length}</div>
+        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Stakeholders</div>
+      </td>
+      <td width="8"></td>
+      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
+        <div style="font-size:20px;font-weight:800;color:${G};">${totalSent}</div>
+        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Outreach</div>
+      </td>
+      <td width="8"></td>
+      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
+        <div style="font-size:20px;font-weight:800;color:${replies>0?'#10B981':'#9CA3AF'};">${replies}</div>
+        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Replies</div>
+      </td>
+      <td width="8"></td>
+      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
+        <div style="font-size:20px;font-weight:800;color:${pipelineValue>0?'#10B981':'#9CA3AF'};">${pipelineValue>0?formatCurrency(pipelineValue):'$0'}</div>
+        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Pipeline</div>
+      </td>
+    </tr></table>
+    <div style="margin-top:14px;font-size:12px;color:#6B7280;">
+      Last touch: <strong style="color:${T};">${escape(lastTouchDate)}</strong>
+      ${daysSinceLastTouch !== null ? ` · ${daysSinceLastTouch}d ago` : ''}
+      ${accStatus ? ` · Status: <strong style="color:${T};">${escape(accStatus)}</strong>` : ''}
+    </div>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="background:#fff;padding:8px 32px 32px;">
+
+    <!-- Executive Summary -->
+    ${aiData.executive_summary ? `
+    <div style="margin-top:24px;padding:18px 22px;background:linear-gradient(135deg,${S}10 0%,${S}05 100%);border-left:4px solid ${S};border-radius:0 10px 10px 0;">
+      <div style="font-size:11px;font-weight:800;color:${S};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">🧠 Executive Summary</div>
+      <p style="margin:0;font-size:14px;color:${T};line-height:1.65;">${escape(aiData.executive_summary)}</p>
+    </div>` : ''}
+
+    <!-- What changed -->
+    ${aiData.what_changed ? `
+    <div style="margin-top:18px;padding:16px 20px;background:${TR}15;border-left:4px solid ${TR};border-radius:0 10px 10px 0;">
+      <div style="font-size:11px;font-weight:800;color:${TR};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">⚡ What changed recently</div>
+      <p style="margin:0;font-size:13px;color:${T};line-height:1.6;">${escape(aiData.what_changed)}</p>
+    </div>` : ''}
+
+    <!-- Risks/Blockers -->
+    ${aiData.risk_or_blockers ? `
+    <div style="margin-top:14px;padding:14px 18px;background:#FEE2E2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;">
+      <div style="font-size:11px;font-weight:800;color:#B91C1C;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">🚨 Risk / Blocker</div>
+      <p style="margin:0;font-size:13px;color:${T};line-height:1.55;">${escape(aiData.risk_or_blockers)}</p>
+    </div>` : ''}
+
+    <!-- Stakeholder map -->
+    ${stkMap ? `
+    <div style="margin-top:28px;">
+      <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">👥 Stakeholder Map</h2>
+      ${stkMap}
+    </div>` : ''}
+
+    <!-- Talking Points -->
+    ${aiData.talking_points && aiData.talking_points.length ? `
+    <div style="margin-top:28px;">
+      <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">🎤 Talking Points</h2>
+      <ol style="margin:0;padding-left:0;list-style:none;">
+        ${aiData.talking_points.map((tp, i) => `<li style="display:flex;gap:14px;padding:10px 0;border-bottom:1px solid #F3F4F6;">
+          <span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${G}20;color:${G};font-weight:800;font-size:12px;text-align:center;line-height:26px;flex-shrink:0;">${i+1}</span>
+          <span style="font-size:14px;color:${T};line-height:1.55;padding-top:2px;">${escape(tp)}</span>
+        </li>`).join('')}
+      </ol>
+    </div>` : ''}
+
+    <!-- Open questions -->
+    ${aiData.open_questions && aiData.open_questions.length ? `
+    <div style="margin-top:24px;padding:18px 20px;background:#F9FAFB;border-radius:10px;">
+      <div style="font-size:11px;font-weight:800;color:${T};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">❓ Strategic questions to ask</div>
+      ${aiData.open_questions.map(q => `<div style="padding:6px 0 6px 18px;position:relative;font-size:13px;color:${T};line-height:1.55;">
+        <span style="position:absolute;left:0;color:${G};font-weight:700;">→</span>${escape(q)}
+      </div>`).join('')}
+    </div>` : ''}
+
+    <!-- Recent Outreach -->
+    ${accOutreach.length > 0 ? `
+    <div style="margin-top:28px;">
+      <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">📬 Recent Outreach (${accOutreach.length})</h2>
+      ${accOutreach.slice(0, 5).map(o => {
+        const stkId = linkedIds(o, 'Stakeholder')[0];
+        const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
+        const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : 'Unknown';
+        const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '?';
+        const status = F(o,'Status') || '';
+        const statusColor = status === 'Replied' ? '#10B981' : status === 'Meeting Scheduled' || status === 'Meeting Booked' ? '#3B82F6' : '#9CA3AF';
+        return `<div style="padding:10px 14px;background:#F9FAFB;border-radius:6px;margin-bottom:6px;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="font-size:12px;color:${T};">
+              <strong>${escape(stkName)}</strong> · ${escape(F(o,'Channel')||'')} · ${escape(date)}
+            </td>
+            <td style="text-align:right;">
+              <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${statusColor}20;color:${statusColor};">${escape(status)}</span>
+            </td>
+          </tr></table>
+          ${F(o,'Notes') ? `<div style="font-size:11px;color:${GR};margin-top:4px;">${escape(String(F(o,'Notes')).slice(0,180))}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <!-- Recommended next step -->
+    ${aiData.recommended_next_step ? `
+    <div style="margin-top:28px;padding:22px 24px;background:${G};color:${T};border-radius:12px;">
+      <div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">🎯 Recommended Next Step</div>
+      <p style="margin:0;font-size:15px;font-weight:700;line-height:1.5;">${escape(aiData.recommended_next_step)}</p>
+    </div>` : ''}
+
+    <!-- Sender block + Footer -->
+    <div style="margin-top:28px;padding-top:20px;border-top:1px solid #E5E7EB;">
+      ${(RB_PHOTO || RB_TITLE) ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;"><tr>
+        ${RB_PHOTO ? `<td width="64" valign="middle" style="padding-right:12px;"><img src="${RB_PHOTO}" alt="${RB_NAME}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid ${G};" /></td>` : ''}
+        <td valign="middle">
+          <div style="font-size:13px;font-weight:700;color:${T};">${RB_NAME}</div>
+          ${RB_TITLE ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${RB_TITLE}</div>` : ''}
+          ${RB_EMAIL ? `<div style="font-size:11px;margin-top:2px;"><a href="mailto:${RB_EMAIL}" style="color:${G};text-decoration:none;">${RB_EMAIL}</a></div>` : ''}
+        </td>
+      </tr></table>` : ''}
+      <div style="font-size:10px;color:#9ca3af;text-align:center;letter-spacing:0.5px;">
+        Generated by <strong style="color:${G};">Oike</strong> · Account Briefing · ${dateLabel}
+      </div>
+    </div>
+
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+
+          setReportHtml(html);
+          setIntelInsights([]);
+        } catch (e) {
+          console.error('Account briefing failed:', e);
+          alert(`Failed to generate Account Briefing: ${e?.message || String(e)}`);
+        } finally {
+          setGenerating(false);
+        }
+      };
+
       const generateStakeholderPainsHtml = async () => {
         setGenerating(true);
         try {
@@ -16701,17 +17032,18 @@ Return ONLY valid JSON.`;
         <div>
           <div className="page-header">
             <h1>📧 Report Builder</h1>
-            <p>Outreach activity, company intel, or stakeholder pains — ready to email, or turn into a campaign</p>
+            <p>Outreach activity, company intel, stakeholder pains, or full account briefing — ready to email, or turn into a campaign</p>
           </div>
 
           {/* ── Top-level mode selector ── */}
           <div className="card" style={{ marginBottom: 16, padding: '12px 14px' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Report Type</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               {[
-                { k: 'outreach',    icon: '📊', label: 'Outreach Activity',     sub: 'Messages sent, replies, meetings, posts' },
-                { k: 'company',     icon: '🏢', label: 'Company Intel',         sub: 'News, intel notes, grouped insights' },
-                { k: 'stakeholder', icon: '🎯', label: 'Stakeholder Pains',     sub: 'Pains + LinkedIn, aggregated by cluster' },
+                { k: 'outreach',         icon: '📊', label: 'Outreach Activity',  sub: 'Messages sent, replies, meetings, posts' },
+                { k: 'company',          icon: '🏢', label: 'Company Intel',      sub: 'News, intel notes, grouped insights' },
+                { k: 'stakeholder',      icon: '🎯', label: 'Stakeholder Pains',  sub: 'Pains + LinkedIn, aggregated by cluster' },
+                { k: 'account-briefing', icon: '📋', label: 'Account Briefing',   sub: 'Full prep: intel + outreach + pains for 1 account' },
               ].map(opt => (
                 <button key={opt.k}
                   onClick={() => { setReportMode(opt.k); setReportHtml(''); setIntelInsights([]); setTasksCreatedCount(0); }}
@@ -16763,9 +17095,16 @@ Return ONLY valid JSON.`;
               </div>
               )}
 
-              {/* Intel mode controls (Company / Stakeholder) */}
+              {/* Intel mode controls (Company / Stakeholder / Account Briefing) */}
               {reportMode !== 'outreach' && (
               <div className="card">
+                {reportMode === 'account-briefing' && (
+                  <div style={{ marginBottom:10, padding:'8px 10px', background:'rgba(91,191,181,0.08)', border:'1px solid rgba(91,191,181,0.25)', borderRadius:6, fontSize:11, color:'var(--globant-text)', lineHeight:1.5 }}>
+                    📋 <strong>Account Briefing</strong> — Pick exactly <strong>1 account</strong> below. AI will combine intel, outreach history, stakeholder pains, and pipeline into one pre-meeting prep doc.
+                  </div>
+                )}
+                {reportMode !== 'account-briefing' && (
+                <>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>🗂️ Group by</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
                   {(reportMode === 'company'
@@ -16784,9 +17123,11 @@ Return ONLY valid JSON.`;
                     </button>
                   ))}
                 </div>
+                </>
+                )}
 
                 {/* Filters */}
-                <div style={{ marginTop:12 }}>
+                <div style={{ marginTop: reportMode === 'account-briefing' ? 0 : 12 }}>
                   {/* Specific account picker (overrides other filters) */}
                   <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <span>🏢 SPECIFIC ACCOUNT(S)</span>
@@ -16794,7 +17135,9 @@ Return ONLY valid JSON.`;
                       <span style={{ color:'var(--globant-green)', fontWeight:400 }}>{intelFilterAccountIds.length} selected</span>
                     )}
                     {intelFilterAccountIds.length === 0 && (
-                      <span style={{ color:'var(--globant-muted)', fontWeight:400, fontStyle:'italic' }}>empty = use other filters</span>
+                      <span style={{ color: reportMode === 'account-briefing' ? '#ffc850' : 'var(--globant-muted)', fontWeight:400, fontStyle:'italic' }}>
+                        {reportMode === 'account-briefing' ? 'pick 1 account ↓' : 'empty = use other filters'}
+                      </span>
                     )}
                   </div>
                   <input
@@ -16844,16 +17187,20 @@ Return ONLY valid JSON.`;
                     );
                   })()}
 
-                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, marginTop: 8, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }}>INDUSTRY FILTER</div>
-                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }} value={intelFilterIndustry} onChange={e => setIntelFilterIndustry(e.target.value)} disabled={intelFilterAccountIds.length > 0}>
-                    <option value="">All industries</option>
-                    {industryOptions.map(i => <option key={i} value={i}>{i}</option>)}
-                  </select>
-                  <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }}>COUNTRY FILTER</div>
-                  <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }} value={intelFilterCountry} onChange={e => setIntelFilterCountry(e.target.value)} disabled={intelFilterAccountIds.length > 0}>
-                    <option value="">All countries</option>
-                    {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  {reportMode !== 'account-briefing' && (
+                    <>
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, marginTop: 8, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }}>INDUSTRY FILTER</div>
+                      <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }} value={intelFilterIndustry} onChange={e => setIntelFilterIndustry(e.target.value)} disabled={intelFilterAccountIds.length > 0}>
+                        <option value="">All industries</option>
+                        {industryOptions.map(i => <option key={i} value={i}>{i}</option>)}
+                      </select>
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }}>COUNTRY FILTER</div>
+                      <select className="input-field" style={{ width:'100%', fontSize:12, marginBottom:6, opacity: intelFilterAccountIds.length > 0 ? 0.4 : 1 }} value={intelFilterCountry} onChange={e => setIntelFilterCountry(e.target.value)} disabled={intelFilterAccountIds.length > 0}>
+                        <option value="">All countries</option>
+                        {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </>
+                  )}
                   {reportMode === 'stakeholder' && (
                     <>
                       <div style={{ fontSize:10, color:'var(--globant-muted)', fontWeight:600, marginBottom:4 }}>INFLUENCE FILTER</div>
@@ -16863,23 +17210,30 @@ Return ONLY valid JSON.`;
                       </select>
                     </>
                   )}
+                  {reportMode === 'account-briefing' && intelFilterAccountIds.length > 1 && (
+                    <div style={{ marginTop:8, padding:'6px 10px', background:'rgba(255,200,80,0.08)', border:'1px solid rgba(255,200,80,0.3)', borderRadius:6, fontSize:11, color:'#ffc850' }}>
+                      ⚠️ Pick only <strong>1 account</strong> for Account Briefing. The first selected will be used.
+                    </div>
+                  )}
                 </div>
 
-                {/* Toggles */}
-                <div style={{ marginTop:10, padding:8, borderTop:'1px solid rgba(255,255,255,0.06)' }}>
-                  {reportMode === 'company' && (
-                    <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, cursor:'pointer' }}>
-                      <input type="checkbox" checked={intelIncludeOutreach} onChange={e => setIntelIncludeOutreach(e.target.checked)} />
-                      <span>Include outreach overlay (sent / replies / meetings per group)</span>
-                    </label>
-                  )}
-                  {reportMode === 'stakeholder' && (
-                    <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, cursor:'pointer' }}>
-                      <input type="checkbox" checked={intelIncludeOpps} onChange={e => setIntelIncludeOpps(e.target.checked)} />
-                      <span>Include open pipeline value per group</span>
-                    </label>
-                  )}
-                </div>
+                {/* Toggles — not shown for account-briefing */}
+                {reportMode !== 'account-briefing' && (reportMode === 'company' || reportMode === 'stakeholder') && (
+                  <div style={{ marginTop:10, padding:8, borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+                    {reportMode === 'company' && (
+                      <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, cursor:'pointer' }}>
+                        <input type="checkbox" checked={intelIncludeOutreach} onChange={e => setIntelIncludeOutreach(e.target.checked)} />
+                        <span>Include outreach overlay (sent / replies / meetings per group)</span>
+                      </label>
+                    )}
+                    {reportMode === 'stakeholder' && (
+                      <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, cursor:'pointer' }}>
+                        <input type="checkbox" checked={intelIncludeOpps} onChange={e => setIntelIncludeOpps(e.target.checked)} />
+                        <span>Include open pipeline value per group</span>
+                      </label>
+                    )}
+                  </div>
+                )}
               </div>
               )}
 
@@ -17028,8 +17382,9 @@ Return ONLY valid JSON.`;
                   if (reportMode === 'outreach') generateHtml();
                   else if (reportMode === 'company') generateCompanyIntelHtml();
                   else if (reportMode === 'stakeholder') generateStakeholderPainsHtml();
+                  else if (reportMode === 'account-briefing') generateAccountBriefingHtml();
                 }} disabled={generating}>
-                {generating ? '⏳ Generating...' : `✨ Generate ${reportMode === 'outreach' ? 'Activity' : reportMode === 'company' ? 'Company Intel' : 'Stakeholder Pains'} Report`}
+                {generating ? '⏳ Generating...' : `✨ Generate ${reportMode === 'outreach' ? 'Activity' : reportMode === 'company' ? 'Company Intel' : reportMode === 'stakeholder' ? 'Stakeholder Pains' : 'Account Briefing'} Report`}
               </button>
             </div>
 
@@ -17037,9 +17392,16 @@ Return ONLY valid JSON.`;
             <div>
               {!reportHtml ? (
                 <div className="card" style={{ textAlign:'center', padding:'60px 24px', color:'var(--globant-muted)' }}>
-                  <div style={{ fontSize:40, marginBottom:12 }}>📧</div>
+                  <div style={{ fontSize:40, marginBottom:12 }}>
+                    {reportMode === 'outreach' ? '📊' : reportMode === 'company' ? '🏢' : reportMode === 'stakeholder' ? '🎯' : '📋'}
+                  </div>
                   <div style={{ fontSize:15, marginBottom:6 }}>Configure your report on the left</div>
-                  <div style={{ fontSize:12 }}>Select period, solutions and accounts, then click Generate</div>
+                  <div style={{ fontSize:12 }}>
+                    {reportMode === 'outreach' && 'Select period, solutions and accounts, then click Generate'}
+                    {reportMode === 'company' && 'Pick group-by + filters, then click Generate'}
+                    {reportMode === 'stakeholder' && 'Pick group-by + filters, then click Generate'}
+                    {reportMode === 'account-briefing' && 'Pick 1 account, then click Generate — perfect for pre-meeting prep'}
+                  </div>
                 </div>
               ) : (
                 <div>
