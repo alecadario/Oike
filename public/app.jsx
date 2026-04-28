@@ -16456,6 +16456,54 @@ Return ONLY valid JSON.`;
             ? String(accIntel).replace(/📎\s*FILE:[\s\S]*?(?=\n📎\s*FILE:|$)/g, '').trim()
             : '';
 
+          // ── Parse Recent News into structured items (same logic as in-app newsItems) ──
+          const parseNewsLocal = (sourceText) => {
+            if (!sourceText || typeof sourceText !== 'string') return [];
+            const raw = sourceText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 3);
+            const items = [];
+            let current = null;
+            const cleanMd = (s) => s.replace(/^\.\s*/, '').replace(/\*\*/g, '').replace(/^[-•*\d.]+\s*/, '').trim();
+            const isLink = (s) => /^\[Read more\]|^\[Source\]|^\[Link\]|^https?:\/\//i.test(s.trim());
+            const extractUrl = (s) => { const m = s.match(/\((https?:\/\/[^)]+)\)/); return m ? m[1] : (s.match(/(https?:\/\/\S+)/)?.[1] || ''); };
+            const isTitle = (s) => { const c = cleanMd(s); return c.length > 10 && c.length < 200 && (/\*\*/.test(s) || /^[A-Z]/.test(c)); };
+            for (const line of raw) {
+              if (isLink(cleanMd(line))) { if (current) current.source = extractUrl(line); continue; }
+              const cleaned = cleanMd(line);
+              if (!cleaned || cleaned.length < 5) continue;
+              if (isTitle(line) && cleaned.length < 120) {
+                if (current) items.push(current);
+                current = { title: cleaned, body: '', source: '' };
+              } else if (current && !current.body) { current.body = cleaned; }
+              else if (!current) { current = { title: cleaned, body: '', source: '' }; }
+            }
+            if (current) items.push(current);
+            const seen = new Set();
+            return items.filter(item => {
+              const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+              if (seen.has(key)) return false; seen.add(key); return true;
+            }).slice(0, 5);
+          };
+          const newsItemsLocal = parseNewsLocal(accNews);
+          const tagFor = (title, body) => {
+            const lc = ((title||'') + ' ' + (body||'')).toLowerCase();
+            if (lc.includes('ai') || lc.includes('artificial')) return { label:'AI', color:'#bfd730' };
+            if (lc.includes('digital')) return { label:'Digital', color:'#60a5fa' };
+            if (lc.includes('partner') || lc.includes('deal') || lc.includes('agreement')) return { label:'Partnership', color:'#a78bfa' };
+            if (lc.includes('financ') || lc.includes('revenue') || lc.includes('invest') || lc.includes('dividend') || lc.includes('earning') || lc.includes('billion')) return { label:'Finance', color:'#4ade80' };
+            if (lc.includes('hire') || lc.includes('appoint') || lc.includes('ceo') || lc.includes('cto') || lc.includes('leader')) return { label:'Leadership', color:'#fb923c' };
+            if (lc.includes('customer') || lc.includes('cx') || lc.includes('experience')) return { label:'CX', color:'#f472b6' };
+            if (lc.includes('expand') || lc.includes('launch') || lc.includes('open') || lc.includes('new office')) return { label:'Expansion', color:'#38bdf8' };
+            if (lc.includes('incident') || lc.includes('fire') || lc.includes('shutdown') || lc.includes('crisis')) return { label:'Incident', color:'#ef4444' };
+            return { label:'News', color:'#94a3b8' };
+          };
+
+          // ── Read MEDDPICC from localStorage if available for this account ──
+          let savedMeddpicc = {};
+          try {
+            const all = JSON.parse(localStorage.getItem('oike_meddpicc') || '{}');
+            savedMeddpicc = all[targetAccountId]?.fields || {};
+          } catch {}
+
           // Stakeholders for this account
           const accStks = stakeholders.filter(s => linkedIds(s, 'Account').includes(targetAccountId));
 
@@ -16500,7 +16548,10 @@ Return ONLY valid JSON.`;
 
           const oppsSummary = openOpps.slice(0, 5).map(o => `- ${F(o,'Deal/Opp name')||F(o,'Name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`).join('\n');
 
-          const aiPrompt = `You are a senior B2B sales strategist preparing a pre-meeting briefing for a sales rep about to meet with this account. Generate an executive briefing.
+          // Existing MEDDPICC context for AI to enrich (don't overwrite, just fill gaps)
+          const meddpiccCtx = Object.entries(savedMeddpicc).filter(([_,v]) => v && String(v).trim()).map(([k,v]) => `${k}: ${v}`).join('\n') || 'None saved yet';
+
+          const aiPrompt = `You are a senior B2B sales strategist preparing a pre-meeting briefing for a sales rep about to meet with this account. Generate an executive briefing dashboard.
 
 ACCOUNT: ${accName}
 ${accIndustry ? `Industry: ${accIndustry}` : ''}${accCountry ? ` · Country: ${accCountry}` : ''}${accSize ? ` · Size: ${accSize}` : ''}
@@ -16508,7 +16559,7 @@ ${accDescription ? `Description: ${accDescription.slice(0, 300)}` : ''}
 ${accStatus ? `Inside Sales Status: ${accStatus}` : ''}
 
 RECENT NEWS:
-${typeof accNews === 'string' ? accNews.slice(0, 800) : 'None'}
+${typeof accNews === 'string' ? accNews.slice(0, 1200) : 'None'}
 
 INTEL NOTES (manual):
 ${accIntelClean.slice(0, 800) || 'None'}
@@ -16525,21 +16576,34 @@ ${oppsSummary || 'None'}
 LINKED SOLUTIONS WE OFFER:
 ${linkedSols.map(s => `- ${F(s,'Name')}: ${F(s,'Stakeholder Key Message') || ''}`).join('\n') || 'None'}
 
-Generate a JSON object with these sections (each direct, specific, actionable — never generic):
+EXISTING MEDDPICC (if any):
+${meddpiccCtx}
+
+Return a JSON object with these EXACT keys. Be specific, use real names and numbers. Never write generic platitudes. If info is unknown, write "Unknown — needs discovery" (do NOT skip the field).
 
 {
-  "executive_summary": "3-4 sentences. Where does this account stand right now? What's the main opportunity? What's the risk? Use real numbers and named stakeholders.",
-  "what_changed": "What's new since last contact (or in their company recently). Reference news + LinkedIn signals. 2-3 sentences.",
+  "account_snapshot": "2-3 sentences describing where this account is right now — sector, size, recent context, current standing in our pipeline. Mention named stakeholders if any.",
+  "strategic_angle": "2-3 sentences on the strategic angle: what we should pitch and why now, based on their pains/news/signals. Reference 1+ of our linked solutions if relevant.",
+  "pipeline_status": "2-3 sentences on the pipeline reality: outreach volume, reply rate, open opportunities, stage, stuck points, last touch.",
+  "relationship_map_summary": "2-3 sentences mapping who we know, who we don't, who's the champion (if any), and the gap to close to reach the economic buyer.",
+  "executive_summary": "3-4 sentences executive-level. The single biggest opportunity, the single biggest risk, named stakeholder, and what's next. This is the TL;DR.",
+  "what_changed": "What's new since last contact or in the company recently. Reference news + LinkedIn signals. 2-3 sentences.",
   "stakeholder_map": [
-    { "name": "...", "role": "...", "status": "Cold/Engaged/Champion/Blocker", "key_insight": "1 sentence about what they care about and how to approach", "next_action": "specific action" }
+    { "name": "...", "role": "...", "status": "Cold/Engaged/Champion/Blocker/Decision Maker/Influencer", "influence": "High/Medium/Low/Unknown", "key_insight": "1 sentence about what they care about and how to approach", "next_action": "specific action" }
   ],
-  "talking_points": [
-    "3-5 specific talking points based on their pains + recent news. Each one references real data, not platitudes."
-  ],
-  "open_questions": [
-    "3 strategic questions to ask in the meeting that uncover budget, decision-makers, or timing"
-  ],
-  "risk_or_blockers": "Any risk to flag: stale relationship, competitive threat, internal change, budget freeze, etc. Be specific. 1-2 sentences. Or null if none.",
+  "meddpicc": {
+    "metrics": "What measurable value will we deliver? (or 'Unknown — needs discovery')",
+    "economicBuyer": "Named person with budget authority (or 'Unknown — needs discovery')",
+    "decisionCriteria": "How they'll evaluate options",
+    "decisionProcess": "Internal approval process and timeline",
+    "paperProcess": "Contracting, legal, procurement",
+    "identifyPain": "Core problem they urgently need to solve",
+    "champion": "Named internal advocate (or 'Unknown — needs discovery')",
+    "competition": "Who else they're evaluating + our differentiator"
+  },
+  "talking_points": ["3-5 specific points based on real pains + news. Each one references real data, not platitudes."],
+  "open_questions": ["3-4 strategic questions to ask in the meeting that uncover budget, decision-makers, or timing"],
+  "risk_or_blockers": "Specific risk (stale relationship, competitive threat, internal change, budget freeze, etc.) — 1-2 sentences. Or null if none.",
   "recommended_next_step": "ONE concrete next step after this meeting. Specific. Time-bound."
 }
 
@@ -16547,7 +16611,7 @@ Return ONLY valid JSON. No fluff in any field.`;
 
           let aiData = {};
           try {
-            const raw = await callOpenAI({ prompt: aiPrompt, temperature: 0.5, max_tokens: 1800 });
+            const raw = await callOpenAI({ prompt: aiPrompt, temperature: 0.5, max_tokens: 2600 });
             const cleaned = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
             aiData = JSON.parse(cleaned);
           } catch (e) {
@@ -16558,37 +16622,147 @@ Return ONLY valid JSON. No fluff in any field.`;
           const escape = (x) => String(x||'').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           const dateLabel = `Generated ${new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}`;
 
-          // Build per-stakeholder cards from AI map
-          const stkMap = (aiData.stakeholder_map || []).map(s => {
-            const statusColor = {
-              'Champion': '#10B981', 'Engaged': '#10B981',
-              'Decision Maker': '#3B82F6',
-              'Cold': '#9CA3AF',
-              'Blocker': '#EF4444',
-              'Influencer': '#8B5CF6',
-            }[s.status] || G;
-            return `
-            <div style="padding:16px 18px;background:#F9FAFB;border-left:3px solid ${statusColor};border-radius:0 10px 10px 0;margin-bottom:10px;">
-              <table width="100%" cellpadding="0" cellspacing="0"><tr>
-                <td>
-                  <div style="font-size:13px;font-weight:700;color:${T};">${escape(s.name||'')}</div>
-                  ${s.role ? `<div style="font-size:11px;color:#6B7280;margin-top:1px;">${escape(s.role)}</div>` : ''}
-                </td>
-                <td style="text-align:right;vertical-align:top;">
-                  <span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:${statusColor}22;color:${statusColor};">${escape(s.status||'')}</span>
-                </td>
-              </tr></table>
-              ${s.key_insight ? `<div style="font-size:12px;color:${GR};margin-top:8px;line-height:1.5;">${escape(s.key_insight)}</div>` : ''}
-              ${s.next_action ? `<div style="margin-top:8px;padding:6px 10px;background:${G}10;border-left:2px solid ${G};font-size:11px;color:${T};border-radius:0 4px 4px 0;"><strong style="color:${G};">▸ Action:</strong> ${escape(s.next_action)}</div>` : ''}
+          // ── Recent News cards HTML (2-col grid, colored tags) ──
+          const newsCardsHtml = newsItemsLocal.length ? `
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
+              ${(() => {
+                const rows = [];
+                for (let i = 0; i < newsItemsLocal.length; i += 2) {
+                  const a = newsItemsLocal[i], b = newsItemsLocal[i+1];
+                  const card = (it) => {
+                    if (!it) return '<td style="width:50%;padding:5px;"></td>';
+                    const tag = tagFor(it.title, it.body);
+                    return `<td valign="top" style="width:50%;padding:5px;">
+                      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-left:3px solid ${tag.color};border-radius:8px;padding:12px 14px;">
+                        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+                          <td style="font-size:13px;font-weight:700;color:${T};line-height:1.35;padding-right:6px;">${escape(it.title)}</td>
+                          <td style="text-align:right;vertical-align:top;width:80px;">
+                            <span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:5px;background:${tag.color}22;color:${tag.color};">${escape(tag.label)}</span>
+                          </td>
+                        </tr></table>
+                        ${it.body ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-top:6px;">${escape(it.body.slice(0, 220))}${it.body.length>220?'…':''}</div>` : ''}
+                        ${it.source ? `<div style="margin-top:6px;"><a href="${escape(it.source)}" style="font-size:10px;color:${G};text-decoration:none;">🔗 Source</a></div>` : ''}
+                      </div>
+                    </td>`;
+                  };
+                  rows.push(`<tr>${card(a)}${card(b)}</tr>`);
+                }
+                return rows.join('');
+              })()}
+            </table>` : '';
+
+          // ── Stakeholders Identified — merge real account stakeholders + AI insights ──
+          const aiStkByName = {};
+          (aiData.stakeholder_map || []).forEach(m => {
+            const key = (m.name || '').toLowerCase().trim();
+            if (key) aiStkByName[key] = m;
+          });
+          const statusColorFor = (st) => ({
+            'Champion':'#10B981','Engaged':'#10B981','Engaging':'#10B981',
+            'Decision Maker':'#3B82F6','Decision-Maker':'#3B82F6',
+            'Cold':'#9CA3AF','Unknown':'#9CA3AF',
+            'Blocker':'#EF4444',
+            'Influencer':'#8B5CF6',
+          }[st] || G);
+          const initials = (s) => `${(F(s,'Name')||'').charAt(0)}${(F(s,'Last name')||'').charAt(0)}`.toUpperCase() || '?';
+
+          let stakeholdersHtml = '';
+          if (accStks.length > 0) {
+            stakeholdersHtml = accStks.slice(0, 12).map(s => {
+              const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() || 'Unnamed';
+              const sRole = F(s,'Role') || '';
+              const sStatus = F(s,'Status') || 'Unknown';
+              const sInfluence = F(s,'Level of Influence') || '';
+              const sLinkedin = F(s,'LinkedIn URL') || F(s,'LinkedIn') || '';
+              const sEmail = F(s,'Email') || '';
+              const sPain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 240);
+              const sLNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 220);
+              const ai = aiStkByName[sName.toLowerCase()] || {};
+              const finalStatus = ai.status || sStatus;
+              const sc = statusColorFor(finalStatus);
+              return `
+              <div style="background:#FFF;border:1px solid #E5E7EB;border-left:4px solid ${sc};border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:10px;">
+                <table width="100%" cellpadding="0" cellspacing="0"><tr>
+                  <td valign="top" width="44" style="padding-right:10px;">
+                    <div style="width:36px;height:36px;border-radius:50%;background:${sc}22;color:${sc};font-weight:800;font-size:13px;text-align:center;line-height:36px;">${initials(s)}</div>
+                  </td>
+                  <td valign="top">
+                    <div style="font-size:14px;font-weight:700;color:${T};">${escape(sName)}</div>
+                    ${sRole ? `<div style="font-size:11px;color:#6B7280;margin-top:2px;">${escape(sRole)}</div>` : ''}
+                  </td>
+                  <td valign="top" style="text-align:right;width:auto;">
+                    <span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:${sc}22;color:${sc};margin-bottom:3px;">${escape(finalStatus)}</span>
+                    ${sInfluence ? `<div style="font-size:9px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Inf: ${escape(sInfluence)}</div>` : ''}
+                  </td>
+                </tr></table>
+                ${sPain ? `<div style="margin-top:10px;padding:8px 10px;background:#FEF3C7;border-left:2px solid #F59E0B;border-radius:0 4px 4px 0;font-size:11px;color:${T};line-height:1.5;"><strong style="color:#B45309;">Pain:</strong> ${escape(sPain)}</div>` : ''}
+                ${sLNews ? `<div style="margin-top:6px;padding:8px 10px;background:#DBEAFE;border-left:2px solid #3B82F6;border-radius:0 4px 4px 0;font-size:11px;color:${T};line-height:1.5;"><strong style="color:#1E40AF;">LinkedIn signal:</strong> ${escape(sLNews)}</div>` : ''}
+                ${ai.key_insight ? `<div style="margin-top:6px;font-size:12px;color:${GR};line-height:1.5;"><strong style="color:${T};">Approach:</strong> ${escape(ai.key_insight)}</div>` : ''}
+                ${ai.next_action ? `<div style="margin-top:8px;padding:7px 10px;background:${G}15;border-left:2px solid ${G};border-radius:0 4px 4px 0;font-size:11px;color:${T};"><strong style="color:${G};">▸ Next action:</strong> ${escape(ai.next_action)}</div>` : ''}
+                ${(sEmail || sLinkedin) ? `<div style="margin-top:8px;font-size:10px;color:#6B7280;">${sEmail ? `<a href="mailto:${escape(sEmail)}" style="color:${G};text-decoration:none;">✉ ${escape(sEmail)}</a>` : ''}${sEmail && sLinkedin ? ' · ' : ''}${sLinkedin ? `<a href="${escape(sLinkedin)}" style="color:${G};text-decoration:none;">in/${escape(sName)}</a>` : ''}</div>` : ''}
+              </div>`;
+            }).join('');
+          } else {
+            stakeholdersHtml = `<div style="padding:18px;background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:0 10px 10px 0;font-size:13px;color:${T};">
+              <strong style="color:#B45309;">⚠️ No stakeholders mapped yet.</strong> Discovery needed — run prospecting before the meeting.
             </div>`;
-          }).join('');
+          }
+
+          // ── MEDDPICC HTML — merge saved + AI ──
+          const meddpiccLabels = {
+            metrics: 'M — Metrics',
+            economicBuyer: 'E — Economic Buyer',
+            decisionCriteria: 'D — Decision Criteria',
+            decisionProcess: 'D — Decision Process',
+            paperProcess: 'P — Paper Process',
+            identifyPain: 'I — Identify Pain',
+            champion: 'C — Champion',
+            competition: 'C — Competition',
+          };
+          const aiMedd = aiData.meddpicc || {};
+          const meddpiccFinal = {};
+          Object.keys(meddpiccLabels).forEach(k => {
+            meddpiccFinal[k] = (savedMeddpicc[k] && String(savedMeddpicc[k]).trim()) || aiMedd[k] || 'Unknown — needs discovery';
+          });
+          const meddpiccCardsHtml = `
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
+              ${(() => {
+                const keys = Object.keys(meddpiccLabels);
+                const rows = [];
+                for (let i = 0; i < keys.length; i += 2) {
+                  const a = keys[i], b = keys[i+1];
+                  const cell = (k) => {
+                    if (!k) return '<td style="width:50%;padding:5px;"></td>';
+                    const v = meddpiccFinal[k];
+                    const isUnknown = /unknown|needs discovery|not defined/i.test(v);
+                    const accent = isUnknown ? '#9CA3AF' : '#EC4899';
+                    return `<td valign="top" style="width:50%;padding:5px;">
+                      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:12px 14px;min-height:64px;">
+                        <div style="font-size:10px;font-weight:800;color:${accent};letter-spacing:0.5px;margin-bottom:5px;">${escape(meddpiccLabels[k])}</div>
+                        <div style="font-size:12px;color:${isUnknown ? '#9CA3AF' : T};line-height:1.5;${isUnknown ? 'font-style:italic;' : ''}">${escape(v)}</div>
+                      </div>
+                    </td>`;
+                  };
+                  rows.push(`<tr>${cell(a)}${cell(b)}</tr>`);
+                }
+                return rows.join('');
+              })()}
+            </table>`;
+
+          // ── Helper: section header ──
+          const sectionH = (icon, title, color = T) => `<h2 style="margin:0 0 10px;font-size:16px;font-weight:800;color:${color};border-bottom:2px solid ${G};padding-bottom:8px;">${icon} ${title}</h2>`;
+          const subSection = (icon, title, body, color) => body ? `
+            <div style="margin-top:16px;">
+              <div style="font-size:11px;font-weight:800;color:${color};letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">${icon} ${title}</div>
+              <div style="font-size:13px;color:${T};line-height:1.6;">${escape(body)}</div>
+            </div>` : '';
 
           const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${T};">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 16px;">
 <tr><td align="center">
-<table width="700" cellpadding="0" cellspacing="0" style="max-width:700px;">
+<table width="780" cellpadding="0" cellspacing="0" style="max-width:780px;">
 
   <!-- Header -->
   <tr><td style="background:${T};padding:28px 32px;border-radius:12px 12px 0 0;">
@@ -16645,38 +16819,53 @@ Return ONLY valid JSON. No fluff in any field.`;
   <!-- Body -->
   <tr><td style="background:#fff;padding:8px 32px 32px;">
 
-    <!-- Executive Summary -->
-    ${aiData.executive_summary ? `
-    <div style="margin-top:24px;padding:18px 22px;background:linear-gradient(135deg,${S}10 0%,${S}05 100%);border-left:4px solid ${S};border-radius:0 10px 10px 0;">
-      <div style="font-size:11px;font-weight:800;color:${S};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">🧠 Executive Summary</div>
-      <p style="margin:0;font-size:14px;color:${T};line-height:1.65;">${escape(aiData.executive_summary)}</p>
+    <!-- 📰 RECENT NEWS -->
+    ${newsItemsLocal.length ? `
+    <div style="margin-top:22px;">
+      ${sectionH('📰', `Recent News (${newsItemsLocal.length})`)}
+      ${newsCardsHtml}
     </div>` : ''}
 
-    <!-- What changed -->
+    <!-- 🧠 EXECUTIVE SUMMARY (with 4 sub-sections) -->
+    <div style="margin-top:28px;padding:20px 22px;background:linear-gradient(135deg,${S}10 0%,${S}05 100%);border-left:4px solid ${S};border-radius:0 12px 12px 0;">
+      <div style="font-size:13px;font-weight:800;color:${S};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">🧠 Executive Summary</div>
+      ${aiData.executive_summary ? `<p style="margin:8px 0 0;font-size:14px;color:${T};line-height:1.65;">${escape(aiData.executive_summary)}</p>` : ''}
+      ${subSection('📌','Account Snapshot', aiData.account_snapshot, '#60a5fa')}
+      ${subSection('🎯','Strategic Angle', aiData.strategic_angle, G)}
+      ${subSection('📊','Pipeline Status', aiData.pipeline_status, '#a78bfa')}
+      ${subSection('👥','Relationship Map', aiData.relationship_map_summary, '#fb923c')}
+    </div>
+
+    <!-- ⚡ What changed -->
     ${aiData.what_changed ? `
     <div style="margin-top:18px;padding:16px 20px;background:${TR}15;border-left:4px solid ${TR};border-radius:0 10px 10px 0;">
       <div style="font-size:11px;font-weight:800;color:${TR};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">⚡ What changed recently</div>
       <p style="margin:0;font-size:13px;color:${T};line-height:1.6;">${escape(aiData.what_changed)}</p>
     </div>` : ''}
 
-    <!-- Risks/Blockers -->
+    <!-- 🚨 Risks/Blockers -->
     ${aiData.risk_or_blockers ? `
     <div style="margin-top:14px;padding:14px 18px;background:#FEE2E2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;">
       <div style="font-size:11px;font-weight:800;color:#B91C1C;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">🚨 Risk / Blocker</div>
       <p style="margin:0;font-size:13px;color:${T};line-height:1.55;">${escape(aiData.risk_or_blockers)}</p>
     </div>` : ''}
 
-    <!-- Stakeholder map -->
-    ${stkMap ? `
+    <!-- 👥 STAKEHOLDERS IDENTIFIED -->
     <div style="margin-top:28px;">
-      <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">👥 Stakeholder Map</h2>
-      ${stkMap}
-    </div>` : ''}
+      ${sectionH('👥', `Stakeholders Identified (${accStks.length})`)}
+      ${stakeholdersHtml}
+    </div>
 
-    <!-- Talking Points -->
+    <!-- 🎯 MEDDPICC -->
+    <div style="margin-top:28px;">
+      ${sectionH('🎯', 'MEDDPICC Qualification', '#EC4899')}
+      ${meddpiccCardsHtml}
+    </div>
+
+    <!-- 🎤 TALKING POINTS -->
     ${aiData.talking_points && aiData.talking_points.length ? `
     <div style="margin-top:28px;">
-      <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">🎤 Talking Points</h2>
+      ${sectionH('🎤', 'Talking Points')}
       <ol style="margin:0;padding-left:0;list-style:none;">
         ${aiData.talking_points.map((tp, i) => `<li style="display:flex;gap:14px;padding:10px 0;border-bottom:1px solid #F3F4F6;">
           <span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${G}20;color:${G};font-weight:800;font-size:12px;text-align:center;line-height:26px;flex-shrink:0;">${i+1}</span>
@@ -16685,7 +16874,7 @@ Return ONLY valid JSON. No fluff in any field.`;
       </ol>
     </div>` : ''}
 
-    <!-- Open questions -->
+    <!-- ❓ STRATEGIC QUESTIONS -->
     ${aiData.open_questions && aiData.open_questions.length ? `
     <div style="margin-top:24px;padding:18px 20px;background:#F9FAFB;border-radius:10px;">
       <div style="font-size:11px;font-weight:800;color:${T};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">❓ Strategic questions to ask</div>
@@ -16694,10 +16883,10 @@ Return ONLY valid JSON. No fluff in any field.`;
       </div>`).join('')}
     </div>` : ''}
 
-    <!-- Recent Outreach -->
+    <!-- 📬 RECENT OUTREACH -->
     ${accOutreach.length > 0 ? `
     <div style="margin-top:28px;">
-      <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">📬 Recent Outreach (${accOutreach.length})</h2>
+      ${sectionH('📬', `Recent Outreach (${accOutreach.length})`)}
       ${accOutreach.slice(0, 5).map(o => {
         const stkId = linkedIds(o, 'Stakeholder')[0];
         const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
@@ -16719,7 +16908,7 @@ Return ONLY valid JSON. No fluff in any field.`;
       }).join('')}
     </div>` : ''}
 
-    <!-- Recommended next step -->
+    <!-- 🎯 RECOMMENDED NEXT STEP -->
     ${aiData.recommended_next_step ? `
     <div style="margin-top:28px;padding:22px 24px;background:${G};color:${T};border-radius:12px;">
       <div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">🎯 Recommended Next Step</div>
