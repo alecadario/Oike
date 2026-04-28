@@ -15330,6 +15330,46 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             }
           }
 
+          // ── Auto-log as outreach when status = Sent (so it appears in stakeholder history) ──
+          // Only on FIRST transition to Sent (avoid duplicates if re-saving an already-Sent landing)
+          const wasAlreadySent = editingLanding && F(editingLanding, 'Status') === 'Sent';
+          if (sendStatus === 'Sent' && form.stakeholderId && !wasAlreadySent) {
+            try {
+              const stkRec = stakeholders.find(x => x.id === form.stakeholderId);
+              const sNameForLog = stkRec ? `${F(stkRec,'Name')||''} ${F(stkRec,'Last name')||''}`.trim() : 'Prospect';
+              const accIdForLog = form.accountId || (stkRec ? linkedIds(stkRec, 'Account')[0] : null);
+              const todayLabel = new Date().toLocaleDateString('en-US');
+              const landingHook = (form.hook || '').slice(0, 200);
+              const landingValue = (form.valueProposition || '').slice(0, 300);
+              const landingMessage = [landingHook, landingValue].filter(Boolean).join('\n\n') || `Landing sent: /p/${form.slug}`;
+
+              const outreachFields = {
+                'Activity Name': `📨 Landing to ${sNameForLog} — ${todayLabel}`,
+                ...(accIdForLog ? { 'Account': [accIdForLog] } : {}),
+                'Stakeholder': [form.stakeholderId],
+                ...(form.solutionId ? { 'Solutions': [form.solutionId] } : {}),
+                ...(form.eventId ? { 'Event': [form.eventId] } : {}),
+                'Channel': 'Email',
+                'Date': new Date().toISOString(),
+                'Status': 'Sent',
+                'Message': landingMessage,
+                'Notes': `Prospect Landing — slug: ${form.slug}${form.eventId ? ' · with event invite' : ''}`,
+                'Logged By': CURRENT_USER?.name || '',
+                ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+                ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
+              };
+              // Optimistic update so it shows up immediately
+              if (onAddRecord) onAddRecord('outreach', outreachFields);
+              // Background API call
+              a.createRecord(TABLE_IDS.outreach, outreachFields).catch(err => {
+                console.error('Auto-log landing as outreach failed:', err);
+              });
+            } catch (logErr) {
+              console.error('Outreach log build failed:', logErr);
+              // Non-blocking
+            }
+          }
+
           setShowForm(false);
           setEditingLanding(null);
           setForm(emptyForm);
