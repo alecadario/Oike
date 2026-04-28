@@ -14903,115 +14903,142 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         const evDescription = getEventDescription();
         const bulletsList = (f.bullets||'').split('\n').map(b => b.trim()).filter(Boolean);
         const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        // Gmail-safe: escape + convert newlines to <br> (avoids white-space:pre-wrap which breaks in Outlook)
+        const nl2br = (x) => escape(x).replace(/\r?\n/g, '<br>');
         const lang = f.language || 'es';
         const t = LANDING_I18N[lang] || LANDING_I18N.es;
 
-        // Shared event block (same in all templates)
+        // Shared event block — Gmail-safe (solid bg, no gradient, no flex)
         const eventBlock = ev ? `
-    <div style="padding:20px 22px;background:linear-gradient(135deg,${secondaryColor}15 0%,${tertiaryColor}10 100%);border:2px solid ${secondaryColor};border-radius:12px;margin-bottom:24px;">
-      <div style="font-size:11px;font-weight:800;color:${secondaryColor};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">🎟️ ${t.eventHeading}</div>
-      <h3 style="margin:0 0 8px;font-size:20px;font-weight:800;color:${darkColor};line-height:1.2;">${escape(evName)}</h3>
-      ${evDateStr ? `<div style="font-size:13px;color:#6B7280;margin-bottom:10px;"><strong style="color:${darkColor};">${t.eventDate}:</strong> ${escape(evDateStr)}</div>` : ''}
-      ${evDescription ? `<p style="margin:0 0 14px;font-size:13px;color:#374151;line-height:1.55;white-space:pre-wrap;">${escape(evDescription)}</p>` : ''}
-      ${evRegisterLink ? `<a href="${escape(evRegisterLink)}" style="display:inline-block;padding:11px 22px;background:${secondaryColor};color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">${t.eventRegisterCta} →</a>` : ''}
-    </div>` : '';
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;">
+      <tr><td bgcolor="${secondaryColor}11" style="background:${secondaryColor}11;padding:20px 22px;border:2px solid ${secondaryColor};border-radius:12px;">
+        <div style="font-size:11px;font-weight:800;color:${secondaryColor};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;font-family:Arial,Helvetica,sans-serif;">🎟️ ${t.eventHeading}</div>
+        <div style="font-size:20px;font-weight:800;color:${darkColor};line-height:1.2;margin-bottom:8px;font-family:Arial,Helvetica,sans-serif;">${escape(evName)}</div>
+        ${evDateStr ? `<div style="font-size:13px;color:#6B7280;margin-bottom:10px;font-family:Arial,Helvetica,sans-serif;"><strong style="color:${darkColor};">${t.eventDate}:</strong> ${escape(evDateStr)}</div>` : ''}
+        ${evDescription ? `<div style="font-size:13px;color:#374151;line-height:1.55;margin-bottom:14px;font-family:Arial,Helvetica,sans-serif;">${nl2br(evDescription)}</div>` : ''}
+        ${evRegisterLink ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${secondaryColor}" style="background:${secondaryColor};border-radius:8px;"><a href="${escape(evRegisterLink)}" style="display:inline-block;padding:11px 22px;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;font-family:Arial,Helvetica,sans-serif;">${t.eventRegisterCta} &rarr;</a></td></tr></table>` : ''}
+      </td></tr>
+    </table>` : '';
 
         // ─────────────────────────────────────────────────────
         // TEMPLATE: MODERN — clean, sophisticated, balanced
         // ─────────────────────────────────────────────────────
-        const renderModern = () => `<!DOCTYPE html>
-<html lang="${lang}">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>${escape(sName)}${accName ? ' · ' + escape(accName) : ''}</title></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6;color:${darkColor};">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
-<tr><td align="center">
-<table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.08);">
+        const renderModern = () => `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="${lang}">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<meta name="x-apple-disable-message-reformatting" />
+<title>${escape(sName)}${accName ? ' &middot; ' + escape(accName) : ''}</title>
+<!--[if mso]><style type="text/css">table,td,div,h1,h2,h3,p,a{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${darkColor};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6" style="background:#f3f4f6;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:620px;background:#ffffff;border-radius:16px;border-collapse:separate;">
 
-  <!-- Hero with gradient + decorative accent -->
-  <tr><td style="background:linear-gradient(135deg,${darkColor} 0%,${darkColor}EE 60%,${accentColor}33 100%);padding:48px 36px 40px;text-align:center;position:relative;border-bottom:4px solid ${accentColor};">
-    ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" style="max-height:48px;margin-bottom:24px;filter:brightness(0) invert(1);opacity:0.95;" />` : ''}
-    <div style="display:inline-block;padding:5px 14px;background:${accentColor}25;border:1px solid ${accentColor}66;border-radius:20px;color:${accentColor};font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;">
-      ${escape(sRole || 'For')} ${sName ? '· ' + escape(sName.split(' ')[0]) : ''}
-    </div>
-    <h1 style="margin:0;font-size:32px;color:#fff;font-weight:800;line-height:1.15;letter-spacing:-0.5px;">${t.greeting} ${escape(sName.split(' ')[0])} —</h1>
-    <p style="margin:14px 0 0;font-size:15px;color:#D1D5DB;line-height:1.5;">${t.heroSub} <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
+  <!-- Hero — solid color (Gmail-safe), no gradient -->
+  <tr><td bgcolor="${darkColor}" align="center" style="background:${darkColor};padding:48px 36px 40px;text-align:center;border-bottom:4px solid ${accentColor};border-radius:16px 16px 0 0;">
+    ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" width="auto" height="48" style="display:block;max-height:48px;max-width:180px;margin:0 auto 24px;border:0;outline:none;" />` : ''}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 16px;">
+      <tr><td bgcolor="${accentColor}25" style="background:${accentColor}25;border:1px solid ${accentColor}66;border-radius:20px;padding:5px 14px;color:${accentColor};font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">
+        ${escape(sRole || 'For')} ${sName ? '&middot; ' + escape(sName.split(' ')[0]) : ''}
+      </td></tr>
+    </table>
+    <h1 style="margin:0;font-size:32px;color:#ffffff;font-weight:800;line-height:1.15;letter-spacing:-0.5px;font-family:Arial,Helvetica,sans-serif;">${t.greeting} ${escape(sName.split(' ')[0])} &mdash;</h1>
+    <p style="margin:14px 0 0;font-size:15px;color:#D1D5DB;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${t.heroSub} <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
   </td></tr>
 
   <!-- Body -->
   <tr><td style="padding:40px 36px 32px;">
 
     ${f.hook ? `
-    <div style="position:relative;padding:20px 24px;background:linear-gradient(135deg,${accentColor}10 0%,${accentColor}05 100%);border-left:4px solid ${accentColor};border-radius:0 12px 12px 0;margin-bottom:32px;font-size:16px;line-height:1.55;color:${darkColor};font-weight:500;">
-      ${escape(f.hook).replace(/\n/g, '<br>')}
-    </div>` : ''}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px;border-collapse:separate;">
+      <tr><td bgcolor="${accentColor}10" style="background:${accentColor}10;padding:20px 24px;border-left:4px solid ${accentColor};border-radius:0 12px 12px 0;font-size:16px;line-height:1.55;color:${darkColor};font-weight:500;font-family:Arial,Helvetica,sans-serif;">
+        ${nl2br(f.hook)}
+      </td></tr>
+    </table>` : ''}
 
     ${f.painContext ? `
     <div style="margin-bottom:32px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <div style="width:6px;height:24px;background:${tertiaryColor};border-radius:3px;"></div>
-        <h2 style="margin:0;font-size:20px;font-weight:800;color:${darkColor};letter-spacing:-0.3px;">${t.painHeading} ${escape(accName || t.yourCompany)}</h2>
-      </div>
-      <p style="margin:0;font-size:15px;color:#374151;white-space:pre-wrap;line-height:1.65;">${escape(f.painContext)}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:14px;"><tr>
+        <td valign="middle" width="6" style="background:${tertiaryColor};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>
+        <td valign="middle" style="padding-left:10px;font-size:20px;font-weight:800;color:${darkColor};letter-spacing:-0.3px;font-family:Arial,Helvetica,sans-serif;">${t.painHeading} ${escape(accName || t.yourCompany)}</td>
+      </tr></table>
+      <div style="font-size:15px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.painContext)}</div>
     </div>` : ''}
 
     ${f.valueProposition ? `
     <div style="margin-bottom:28px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <div style="width:6px;height:24px;background:${accentColor};border-radius:3px;"></div>
-        <h2 style="margin:0;font-size:20px;font-weight:800;color:${darkColor};letter-spacing:-0.3px;">${solName ? t.valueHeadingWithSol + ' ' + escape(solName) : t.valueHeading}</h2>
-      </div>
-      <p style="margin:0;font-size:15px;color:#374151;white-space:pre-wrap;line-height:1.65;">${escape(f.valueProposition)}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:14px;"><tr>
+        <td valign="middle" width="6" style="background:${accentColor};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>
+        <td valign="middle" style="padding-left:10px;font-size:20px;font-weight:800;color:${darkColor};letter-spacing:-0.3px;font-family:Arial,Helvetica,sans-serif;">${solName ? t.valueHeadingWithSol + ' ' + escape(solName) : t.valueHeading}</td>
+      </tr></table>
+      <div style="font-size:15px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.valueProposition)}</div>
     </div>` : ''}
 
     ${bulletsList.length ? `
-    <div style="margin:0 0 32px;padding:24px 26px;background:linear-gradient(135deg,${darkColor}03 0%,${accentColor}05 100%);border-radius:12px;border:1px solid ${accentColor}22;">
-      ${bulletsList.map((b, i) => {
-        const colors = [accentColor, secondaryColor, tertiaryColor, accentColor];
-        const c = colors[i % colors.length];
-        return `<div style="display:flex;align-items:flex-start;gap:14px;padding:8px 0;${i < bulletsList.length - 1 ? `border-bottom:1px solid ${c}15;` : ''}">
-          <span style="display:inline-block;width:28px;height:28px;border-radius:50%;background:${c}20;color:${c};font-weight:800;font-size:13px;text-align:center;line-height:28px;flex-shrink:0;">${i + 1}</span>
-          <span style="font-size:14px;color:${darkColor};line-height:1.55;padding-top:3px;">${escape(b)}</span>
-        </div>`;
-      }).join('')}
-    </div>` : ''}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px;border-collapse:separate;">
+      <tr><td bgcolor="#FAFAFA" style="background:#FAFAFA;padding:20px 22px;border-radius:12px;border:1px solid ${accentColor}22;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          ${bulletsList.map((b, i) => {
+            const colors = [accentColor, secondaryColor, tertiaryColor, accentColor];
+            const c = colors[i % colors.length];
+            const isLast = i === bulletsList.length - 1;
+            return `<tr>
+              <td valign="top" width="42" style="padding:8px 14px 8px 0;${isLast ? '' : `border-bottom:1px solid ${c}15;`}">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                  <td bgcolor="${c}20" align="center" valign="middle" width="28" height="28" style="background:${c}20;color:${c};font-weight:800;font-size:13px;border-radius:14px;width:28px;height:28px;line-height:28px;text-align:center;font-family:Arial,Helvetica,sans-serif;">${i + 1}</td>
+                </tr></table>
+              </td>
+              <td valign="top" style="padding:11px 0 8px;${isLast ? '' : `border-bottom:1px solid ${c}15;`}font-size:14px;color:${darkColor};line-height:1.55;font-family:Arial,Helvetica,sans-serif;">${escape(b)}</td>
+            </tr>`;
+          }).join('')}
+        </table>
+      </td></tr>
+    </table>` : ''}
 
     ${f.socialProof ? `
-    <div style="padding:18px 22px;background:${tertiaryColor}10;border-left:4px solid ${tertiaryColor};border-radius:0 12px 12px 0;margin-bottom:28px;font-size:14px;color:#4B5563;font-style:italic;line-height:1.6;white-space:pre-wrap;">
-      <span style="font-size:24px;color:${tertiaryColor};line-height:0;font-style:normal;font-weight:800;vertical-align:-6px;margin-right:6px;">"</span>${escape(f.socialProof)}
-    </div>` : ''}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;">
+      <tr><td bgcolor="${tertiaryColor}10" style="background:${tertiaryColor}10;padding:18px 22px;border-left:4px solid ${tertiaryColor};border-radius:0 12px 12px 0;font-size:14px;color:#4B5563;font-style:italic;line-height:1.6;font-family:Georgia,'Times New Roman',serif;">
+        <span style="font-size:24px;color:${tertiaryColor};font-style:normal;font-weight:800;font-family:Georgia,serif;">&ldquo;</span>${nl2br(f.socialProof)}
+      </td></tr>
+    </table>` : ''}
 
     ${eventBlock}
 
     <!-- CTA + sender block -->
-    <div style="padding:28px 0 4px;border-top:2px solid ${accentColor}15;margin-top:8px;">
-      <table width="100%" cellpadding="0" cellspacing="0"><tr>
-        ${senderPhoto ? `<td width="84" valign="middle" style="padding-right:18px;">
-          <img src="${escape(senderPhoto)}" alt="${escape(senderName)}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid ${accentColor};box-shadow:0 4px 12px ${accentColor}33;" />
-        </td>` : ''}
-        <td valign="middle">
-          <p style="margin:0 0 6px;font-size:12px;color:#6B7280;font-weight:500;">${ev ? t.eventOr : t.ctaIntro}</p>
-          <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:14px 30px;background:${accentColor};color:${darkColor};text-decoration:none;border-radius:10px;font-weight:800;font-size:14px;margin:4px 0 8px;letter-spacing:0.2px;box-shadow:0 4px 14px ${accentColor}44;">
-            ${escape(f.ctaText || t.ctaDefault)} →
-          </a>
-          <p style="margin:4px 0 0;font-size:13px;color:${darkColor};font-weight:700;">${escape(senderName)}${senderTitle ? `<span style="display:block;font-size:11px;font-weight:500;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</span>` : ''}</p>
-        </td>
-      </tr></table>
-      <p style="margin:18px 0 0;font-size:11px;color:#9CA3AF;font-style:italic;text-align:center;">
-        ${t.ctaFooter}
-      </p>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border-top:2px solid ${accentColor}15;">
+      <tr><td style="padding:28px 0 4px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          ${senderPhoto ? `<td width="94" valign="middle" style="padding-right:18px;">
+            <img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="76" height="76" style="display:block;width:76px;height:76px;border-radius:50%;border:3px solid ${accentColor};outline:none;" />
+          </td>` : ''}
+          <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;">
+            <div style="font-size:12px;color:#6B7280;font-weight:500;margin-bottom:6px;">${ev ? t.eventOr : t.ctaIntro}</div>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 8px;"><tr>
+              <td bgcolor="${accentColor}" style="background:${accentColor};border-radius:10px;">
+                <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:14px 30px;color:${darkColor};text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.2px;font-family:Arial,Helvetica,sans-serif;">${escape(f.ctaText || t.ctaDefault)} &rarr;</a>
+              </td>
+            </tr></table>
+            <div style="font-size:13px;color:${darkColor};font-weight:700;margin-top:4px;">${escape(senderName)}</div>
+            ${senderTitle ? `<div style="font-size:11px;font-weight:500;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</div>` : ''}
+          </td>
+        </tr></table>
+        <div style="margin:18px 0 0;font-size:11px;color:#9CA3AF;font-style:italic;text-align:center;font-family:Arial,Helvetica,sans-serif;">${t.ctaFooter}</div>
+      </td></tr>
+    </table>
 
   </td></tr>
 
   <!-- Footer -->
-  <tr><td style="padding:22px 36px;background:${darkColor};text-align:center;">
-    <p style="margin:0;font-size:12px;color:#D1D5DB;">
-      <strong style="color:#fff;">${escape(senderName)}</strong>${senderEmail ? ` · <a href="mailto:${escape(senderEmail)}" style="color:${accentColor};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
-    </p>
-    <p style="margin:6px 0 0;font-size:10px;color:#9CA3AF;letter-spacing:1px;">
-      ${t.poweredBy} <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:700;">OIKE</a> · SALES INTELLIGENCE
-    </p>
+  <tr><td bgcolor="${darkColor}" align="center" style="background:${darkColor};padding:22px 36px;text-align:center;border-radius:0 0 16px 16px;">
+    <div style="font-size:12px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;">
+      <strong style="color:#ffffff;">${escape(senderName)}</strong>${senderEmail ? ` &middot; <a href="mailto:${escape(senderEmail)}" style="color:${accentColor};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:#9CA3AF;letter-spacing:1px;font-family:Arial,Helvetica,sans-serif;">
+      ${t.poweredBy} <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:700;">OIKE</a> &middot; SALES INTELLIGENCE
+    </div>
   </td></tr>
 
 </table>
@@ -15022,70 +15049,83 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         // ─────────────────────────────────────────────────────
         // TEMPLATE: BOLD — editorial, magazine-style, asymmetric
         // ─────────────────────────────────────────────────────
-        const renderBold = () => `<!DOCTYPE html>
-<html lang="${lang}">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>${escape(sName)}${accName ? ' · ' + escape(accName) : ''}</title></head>
-<body style="margin:0;padding:0;background:${darkColor};font-family:Georgia,'Times New Roman',serif;line-height:1.6;color:#fff;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:${darkColor};padding:0;">
-<tr><td align="center">
-<table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;background:#fff;color:${darkColor};">
+        const renderBold = () => `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="${lang}">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<meta name="x-apple-disable-message-reformatting" />
+<title>${escape(sName)}${accName ? ' &middot; ' + escape(accName) : ''}</title>
+<!--[if mso]><style type="text/css">table,td,div,h1,h2,h3,p,a{font-family:Arial,Helvetica,sans-serif !important;}.bold-serif{font-family:Georgia,'Times New Roman',serif !important;}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background:${darkColor};font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#ffffff;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${darkColor}" style="background:${darkColor};">
+<tr><td align="center" style="padding:0;">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:680px;background:#ffffff;color:${darkColor};border-collapse:separate;">
 
-  <!-- Hero: massive type, no gradient, bold colorblocking -->
+  <!-- Hero: side-by-side colorblocks via 2-col table (Gmail-safe) -->
   <tr><td style="padding:0;">
-    <table width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td style="background:${accentColor};padding:48px 36px;width:55%;vertical-align:top;">
-        ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" style="max-height:36px;margin-bottom:32px;" />` : ''}
-        <div style="font-size:11px;font-weight:800;color:${darkColor};letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;">${t.heroSub}</div>
-        <h1 style="margin:0;font-size:42px;font-weight:900;line-height:1;color:${darkColor};letter-spacing:-1.5px;font-family:Georgia,serif;">${escape(accName || sName)}</h1>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td bgcolor="${accentColor}" valign="top" width="55%" style="background:${accentColor};padding:48px 36px;width:55%;">
+        ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" height="36" style="display:block;max-height:36px;max-width:160px;margin:0 0 32px;border:0;outline:none;" />` : ''}
+        <div style="font-size:11px;font-weight:800;color:${darkColor};letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;font-family:Arial,Helvetica,sans-serif;">${t.heroSub}</div>
+        <div class="bold-serif" style="font-size:42px;font-weight:900;line-height:1;color:${darkColor};letter-spacing:-1.5px;font-family:Georgia,'Times New Roman',serif;">${escape(accName || sName)}</div>
       </td>
-      <td style="background:${darkColor};padding:48px 32px;width:45%;vertical-align:top;text-align:left;">
-        ${senderPhoto ? `<img src="${escape(senderPhoto)}" alt="${escape(senderName)}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:4px solid ${tertiaryColor};margin-bottom:16px;" />` : ''}
-        <div style="font-size:13px;color:${tertiaryColor};font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">${t.greeting} ${escape(sName.split(' ')[0])}</div>
-        <div style="font-size:15px;color:#fff;font-weight:600;line-height:1.4;">${escape(senderName)}</div>
-        ${senderTitle ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">${escape(senderTitle)}</div>` : ''}
+      <td bgcolor="${darkColor}" valign="top" width="45%" style="background:${darkColor};padding:48px 32px;width:45%;text-align:left;">
+        ${senderPhoto ? `<img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="90" height="90" style="display:block;width:90px;height:90px;border-radius:50%;border:4px solid ${tertiaryColor};margin:0 0 16px;outline:none;" />` : ''}
+        <div style="font-size:13px;color:${tertiaryColor};font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;font-family:Arial,Helvetica,sans-serif;">${t.greeting} ${escape(sName.split(' ')[0])}</div>
+        <div style="font-size:15px;color:#ffffff;font-weight:600;line-height:1.4;font-family:Arial,Helvetica,sans-serif;">${escape(senderName)}</div>
+        ${senderTitle ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;font-family:Arial,Helvetica,sans-serif;">${escape(senderTitle)}</div>` : ''}
       </td>
     </tr></table>
   </td></tr>
 
   <!-- Hook as pull-quote -->
   ${f.hook ? `
-  <tr><td style="padding:48px 48px 32px;background:#fff;">
-    <div style="border-left:6px solid ${accentColor};padding:8px 0 8px 24px;">
-      <p style="margin:0;font-size:22px;line-height:1.4;color:${darkColor};font-style:italic;font-family:Georgia,serif;font-weight:500;">${escape(f.hook).replace(/\n/g, '<br>')}</p>
-    </div>
+  <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:48px 48px 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td valign="top" width="6" style="background:${accentColor};font-size:0;line-height:0;">&nbsp;</td>
+      <td valign="top" style="padding:8px 0 8px 24px;">
+        <div class="bold-serif" style="font-size:22px;line-height:1.4;color:${darkColor};font-style:italic;font-family:Georgia,'Times New Roman',serif;font-weight:500;">${nl2br(f.hook)}</div>
+      </td>
+    </tr></table>
   </td></tr>` : ''}
 
   <!-- Body sections with alternating colorblocks -->
   ${f.painContext ? `
-  <tr><td style="padding:32px 48px;background:#fff;">
-    <div style="display:inline-block;padding:4px 12px;background:${tertiaryColor};color:${darkColor};font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;font-family:-apple-system,sans-serif;">01 · ${t.painHeading}</div>
-    <h2 style="margin:0 0 16px;font-size:30px;font-weight:900;line-height:1.1;color:${darkColor};letter-spacing:-0.8px;font-family:Georgia,serif;">${escape(accName || t.yourCompany)}</h2>
-    <p style="margin:0;font-size:16px;color:#374151;line-height:1.7;white-space:pre-wrap;font-family:-apple-system,sans-serif;">${escape(f.painContext)}</p>
+  <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:32px 48px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;"><tr>
+      <td bgcolor="${tertiaryColor}" style="background:${tertiaryColor};padding:4px 12px;color:${darkColor};font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">01 &middot; ${t.painHeading}</td>
+    </tr></table>
+    <h2 class="bold-serif" style="margin:0 0 16px;font-size:30px;font-weight:900;line-height:1.1;color:${darkColor};letter-spacing:-0.8px;font-family:Georgia,'Times New Roman',serif;">${escape(accName || t.yourCompany)}</h2>
+    <div style="font-size:16px;color:#374151;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.painContext)}</div>
   </td></tr>` : ''}
 
   ${f.valueProposition ? `
-  <tr><td style="padding:32px 48px;background:${darkColor};color:#fff;">
-    <div style="display:inline-block;padding:4px 12px;background:${accentColor};color:${darkColor};font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;font-family:-apple-system,sans-serif;">02 · ${solName ? t.valueHeadingWithSol : t.valueHeading}</div>
-    ${solName ? `<h2 style="margin:0 0 16px;font-size:30px;font-weight:900;line-height:1.1;color:#fff;letter-spacing:-0.8px;font-family:Georgia,serif;">${escape(solName)}</h2>` : ''}
-    <p style="margin:0;font-size:16px;color:#D1D5DB;line-height:1.7;white-space:pre-wrap;font-family:-apple-system,sans-serif;">${escape(f.valueProposition)}</p>
+  <tr><td bgcolor="${darkColor}" style="background:${darkColor};padding:32px 48px;color:#ffffff;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;"><tr>
+      <td bgcolor="${accentColor}" style="background:${accentColor};padding:4px 12px;color:${darkColor};font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">02 &middot; ${solName ? t.valueHeadingWithSol : t.valueHeading}</td>
+    </tr></table>
+    ${solName ? `<h2 class="bold-serif" style="margin:0 0 16px;font-size:30px;font-weight:900;line-height:1.1;color:#ffffff;letter-spacing:-0.8px;font-family:Georgia,'Times New Roman',serif;">${escape(solName)}</h2>` : ''}
+    <div style="font-size:16px;color:#D1D5DB;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.valueProposition)}</div>
   </td></tr>` : ''}
 
   ${bulletsList.length ? `
-  <tr><td style="padding:40px 48px;background:#fff;">
-    <div style="display:inline-block;padding:4px 12px;background:${secondaryColor};color:#fff;font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;margin-bottom:24px;font-family:-apple-system,sans-serif;">03 · WHAT YOU GET</div>
-    <table width="100%" cellpadding="0" cellspacing="0" style="font-family:-apple-system,sans-serif;">
+  <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:40px 48px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;"><tr>
+      <td bgcolor="${secondaryColor}" style="background:${secondaryColor};padding:4px 12px;color:#ffffff;font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">03 &middot; WHAT YOU GET</td>
+    </tr></table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       ${bulletsList.map((b, i) => {
         const colors = [accentColor, secondaryColor, tertiaryColor, accentColor];
         const c = colors[i % colors.length];
-        return `<tr><td style="padding:14px 0;${i < bulletsList.length - 1 ? `border-bottom:2px solid ${c}30;` : ''}">
-          <table width="100%"><tr>
+        const isLast = i === bulletsList.length - 1;
+        return `<tr><td valign="top" style="padding:14px 0;${isLast ? '' : `border-bottom:2px solid ${c}30;`}">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
             <td width="64" valign="top" style="padding-right:20px;">
-              <span style="display:block;font-family:Georgia,serif;font-size:42px;font-weight:900;color:${c};line-height:1;letter-spacing:-2px;">${String(i + 1).padStart(2, '0')}</span>
+              <span class="bold-serif" style="display:block;font-family:Georgia,'Times New Roman',serif;font-size:42px;font-weight:900;color:${c};line-height:1;letter-spacing:-2px;">${String(i + 1).padStart(2, '0')}</span>
             </td>
-            <td valign="top" style="padding-top:6px;">
-              <span style="font-size:16px;color:${darkColor};line-height:1.55;font-weight:500;">${escape(b)}</span>
-            </td>
+            <td valign="top" style="padding-top:6px;font-size:16px;color:${darkColor};line-height:1.55;font-weight:500;font-family:Arial,Helvetica,sans-serif;">${escape(b)}</td>
           </tr></table>
         </td></tr>`;
       }).join('')}
@@ -15093,33 +15133,33 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
   </td></tr>` : ''}
 
   ${f.socialProof ? `
-  <tr><td style="padding:32px 48px;background:${tertiaryColor};color:${darkColor};">
-    <p style="margin:0;font-size:18px;line-height:1.5;font-style:italic;font-family:Georgia,serif;font-weight:500;white-space:pre-wrap;">
-      <span style="font-size:32px;color:${darkColor};line-height:0;font-weight:900;vertical-align:-8px;margin-right:4px;">"</span>${escape(f.socialProof)}
-    </p>
+  <tr><td bgcolor="${tertiaryColor}" style="background:${tertiaryColor};padding:32px 48px;color:${darkColor};">
+    <div class="bold-serif" style="font-size:18px;line-height:1.5;font-style:italic;font-family:Georgia,'Times New Roman',serif;font-weight:500;">
+      <span style="font-size:32px;color:${darkColor};font-weight:900;font-family:Georgia,serif;">&ldquo;</span>${nl2br(f.socialProof)}
+    </div>
   </td></tr>` : ''}
 
-  ${ev ? `<tr><td style="padding:32px 48px;background:#fff;">${eventBlock}</td></tr>` : ''}
+  ${ev ? `<tr><td bgcolor="#ffffff" style="background:#ffffff;padding:32px 48px;">${eventBlock}</td></tr>` : ''}
 
-  <!-- Big CTA -->
-  <tr><td style="padding:48px 48px 56px;background:linear-gradient(135deg,${accentColor} 0%,${secondaryColor} 100%);text-align:center;color:${darkColor};">
-    <p style="margin:0 0 18px;font-size:13px;color:${darkColor};font-weight:700;letter-spacing:2px;text-transform:uppercase;font-family:-apple-system,sans-serif;">${ev ? t.eventOr : t.ctaIntro}</p>
-    <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:18px 40px;background:${darkColor};color:#fff;text-decoration:none;border-radius:50px;font-weight:800;font-size:17px;letter-spacing:0.3px;font-family:-apple-system,sans-serif;">
-      ${escape(f.ctaText || t.ctaDefault)} →
-    </a>
-    <p style="margin:20px 0 0;font-size:12px;color:${darkColor}AA;font-style:italic;font-family:-apple-system,sans-serif;">
-      ${t.ctaFooter}
-    </p>
+  <!-- Big CTA — solid color (Gmail-safe), no gradient -->
+  <tr><td bgcolor="${accentColor}" align="center" style="background:${accentColor};padding:48px 48px 56px;text-align:center;color:${darkColor};">
+    <div style="margin:0 0 18px;font-size:13px;color:${darkColor};font-weight:700;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${ev ? t.eventOr : t.ctaIntro}</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr>
+      <td bgcolor="${darkColor}" style="background:${darkColor};border-radius:50px;">
+        <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:18px 40px;color:#ffffff;text-decoration:none;font-weight:800;font-size:17px;letter-spacing:0.3px;font-family:Arial,Helvetica,sans-serif;">${escape(f.ctaText || t.ctaDefault)} &rarr;</a>
+      </td>
+    </tr></table>
+    <div style="margin:20px 0 0;font-size:12px;color:${darkColor};opacity:0.7;font-style:italic;font-family:Arial,Helvetica,sans-serif;">${t.ctaFooter}</div>
   </td></tr>
 
   <!-- Footer -->
-  <tr><td style="padding:22px 36px;background:${darkColor};text-align:center;font-family:-apple-system,sans-serif;">
-    <p style="margin:0;font-size:12px;color:#D1D5DB;">
-      <strong style="color:#fff;">${escape(senderName)}</strong>${senderEmail ? ` · <a href="mailto:${escape(senderEmail)}" style="color:${accentColor};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
-    </p>
-    <p style="margin:6px 0 0;font-size:10px;color:#9CA3AF;letter-spacing:1.5px;">
-      ${t.poweredBy} <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:700;">OIKE</a> · SALES INTELLIGENCE
-    </p>
+  <tr><td bgcolor="${darkColor}" align="center" style="background:${darkColor};padding:22px 36px;text-align:center;">
+    <div style="font-size:12px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;">
+      <strong style="color:#ffffff;">${escape(senderName)}</strong>${senderEmail ? ` &middot; <a href="mailto:${escape(senderEmail)}" style="color:${accentColor};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:#9CA3AF;letter-spacing:1.5px;font-family:Arial,Helvetica,sans-serif;">
+      ${t.poweredBy} <a href="https://oike.app" style="color:${accentColor};text-decoration:none;font-weight:700;">OIKE</a> &middot; SALES INTELLIGENCE
+    </div>
   </td></tr>
 
 </table>
@@ -15201,10 +15241,26 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         setSaving(false);
       };
 
+      // Build a plain-text fallback for the clipboard so non-HTML targets still work
+      const buildPlainText = (html) => {
+        return String(html||'')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/(p|div|tr|h\d|li)>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&middot;/g, '·').replace(/&mdash;/g, '—').replace(/&rarr;/g, '→').replace(/&ldquo;/g, '"').replace(/&rdquo;/g, '"')
+          .replace(/\n{3,}/g, '\n\n').trim();
+      };
+
       const copyHTML = async () => {
         try {
-          const blob = new Blob([htmlPreview], { type: 'text/html' });
-          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          const htmlBlob = new Blob([htmlPreview], { type: 'text/html' });
+          const textBlob = new Blob([buildPlainText(htmlPreview)], { type: 'text/plain' });
+          // Both formats — Gmail picks text/html, simpler clients pick text/plain
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]);
           setCopied(true);
           setTimeout(() => setCopied(false), 2500);
         } catch {
@@ -15216,8 +15272,9 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
       const openInGmail = async () => {
         try {
-          const blob = new Blob([htmlPreview], { type: 'text/html' });
-          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          const htmlBlob = new Blob([htmlPreview], { type: 'text/html' });
+          const textBlob = new Blob([buildPlainText(htmlPreview)], { type: 'text/plain' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]);
         } catch {
           navigator.clipboard.writeText(htmlPreview).catch(() => {});
         }
