@@ -15289,7 +15289,14 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             'CTA Text': form.ctaText,
             ...(form.ctaLink ? { 'CTA Link': form.ctaLink } : {}),
             'Status': sendStatus,
-            'Saved HTML': htmlPreview,
+            // Strip base64 data: URIs (sender photo, logo) — they bloat the HTML way past Airtable's
+            // 100K-char limit for long text. The preview/copy in the app keep the real images;
+            // this saved version is for re-editing only (we recover via the meta comment).
+            'Saved HTML': (() => {
+              const compact = htmlPreview.replace(/src="data:[^"]{500,}"/g, 'src=""');
+              const MAX_LEN = 95000; // Airtable safety limit
+              return compact.length > MAX_LEN ? compact.slice(0, MAX_LEN - 50) + '\n<!-- truncated -->' : compact;
+            })(),
             'Created By': CURRENT_USER?.name || '',
             ...(sendStatus === 'Sent' ? { 'Sent Date': new Date().toISOString().split('T')[0] } : {}),
           };
