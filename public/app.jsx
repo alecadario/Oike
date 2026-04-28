@@ -14598,7 +14598,7 @@ No markdown, no commentary. JSON only.`;
       const [listSearch, setListSearch] = useState('');
       const [statusFilter, setStatusFilter] = useState('');
 
-      // ── Language strings (ES / EN / PT) ──
+      // ── Language strings (EN default · ES · PT · FR · DE · IT · AR) ──
       const LANDING_I18N = {
         es: {
           greeting: 'Hola',
@@ -14654,9 +14654,81 @@ No markdown, no commentary. JSON only.`;
           aiInstruction: 'Write in Brazilian Portuguese. Natural, direct, conversational.',
           subject: (sName, accName) => `Pensei em ${sName ? sName + ' — ' : ''}${accName || 'sua empresa'}`,
         },
+        fr: {
+          greeting: 'Bonjour',
+          heroSub: 'j\'ai préparé ceci en pensant à',
+          painHeading: 'Ce que je vois chez',
+          yourCompany: 'votre entreprise',
+          valueHeading: 'Comment je peux vous aider',
+          valueHeadingWithSol: 'Comment je peux vous aider avec',
+          ctaIntro: 'Si ce que je dis a du sens :',
+          ctaDefault: 'Parlons 20 minutes',
+          ctaFooter: 'Si ça ne s\'applique pas, vous gardez au moins ces idées. Pas de vente sur cet appel.',
+          poweredBy: 'Powered by',
+          eventHeading: 'Vous êtes invité(e) à',
+          eventDate: 'Date',
+          eventRegisterCta: 'M\'inscrire à l\'événement',
+          eventOr: 'ou si vous préférez parler avant :',
+          aiInstruction: 'Write in French. Natural, direct, conversational — not formal corporate speak.',
+          subject: (sName, accName) => `Pensé à ${sName ? sName + ' — ' : ''}${accName || 'votre entreprise'}`,
+        },
+        de: {
+          greeting: 'Hallo',
+          heroSub: 'das hier habe ich mit Blick auf',
+          painHeading: 'Was ich bei',
+          yourCompany: 'Ihrem Unternehmen',
+          valueHeading: 'Wie ich Ihnen helfen kann',
+          valueHeadingWithSol: 'Wie ich Ihnen helfen kann mit',
+          ctaIntro: 'Wenn das Sinn ergibt:',
+          ctaDefault: 'Lassen Sie uns 20 Minuten reden',
+          ctaFooter: 'Falls nicht passend, bleiben Ihnen zumindest die Ideen. Kein Verkauf in diesem Call.',
+          poweredBy: 'Powered by',
+          eventHeading: 'Sie sind eingeladen zu',
+          eventDate: 'Datum',
+          eventRegisterCta: 'Zum Event anmelden',
+          eventOr: 'oder wenn Sie lieber vorher sprechen:',
+          aiInstruction: 'Write in German. Use formal "Sie" form. Natural and direct, not stiff corporate German.',
+          subject: (sName, accName) => `Gedanken zu ${sName ? sName + ' — ' : ''}${accName || 'Ihrem Unternehmen'}`,
+        },
+        it: {
+          greeting: 'Ciao',
+          heroSub: 'ho preparato questo pensando a',
+          painHeading: 'Quello che vedo in',
+          yourCompany: 'la vostra azienda',
+          valueHeading: 'Come posso aiutarvi',
+          valueHeadingWithSol: 'Come posso aiutarvi con',
+          ctaIntro: 'Se quello che dico ha senso:',
+          ctaDefault: 'Parliamo 20 minuti',
+          ctaFooter: 'Se non si applica, almeno vi restano queste idee. Niente vendita in questa call.',
+          poweredBy: 'Powered by',
+          eventHeading: 'Siete invitati a',
+          eventDate: 'Data',
+          eventRegisterCta: 'Iscrivermi all\'evento',
+          eventOr: 'o se preferite parlare prima:',
+          aiInstruction: 'Write in Italian. Natural, direct, conversational — formal "voi" or "Lei" depending on context.',
+          subject: (sName, accName) => `Pensato a ${sName ? sName + ' — ' : ''}${accName || 'la vostra azienda'}`,
+        },
+        ar: {
+          greeting: 'مرحباً',
+          heroSub: 'أعددت هذا وأنا أفكر في',
+          painHeading: 'ما أراه في',
+          yourCompany: 'شركتكم',
+          valueHeading: 'كيف يمكنني مساعدتكم',
+          valueHeadingWithSol: 'كيف يمكنني مساعدتكم مع',
+          ctaIntro: 'إذا كان ما أقوله منطقياً:',
+          ctaDefault: 'لنتحدث 20 دقيقة',
+          ctaFooter: 'إذا لم يكن مناسباً، تبقى لكم هذه الأفكار على الأقل. لا بيع في هذه المكالمة.',
+          poweredBy: 'Powered by',
+          eventHeading: 'أنتم مدعوون إلى',
+          eventDate: 'التاريخ',
+          eventRegisterCta: 'التسجيل في الفعالية',
+          eventOr: 'أو إذا كنتم تفضلون الحديث أولاً:',
+          aiInstruction: 'Write in Modern Standard Arabic (formal but conversational). Use plural "you" form (أنتم) for respect. The HTML supports RTL.',
+          subject: (sName, accName) => `أفكر في ${sName ? sName + ' — ' : ''}${accName || 'شركتكم'}`,
+        },
       };
 
-      // Form state
+      // Form state — English by default
       const emptyForm = {
         slug: '',
         stakeholderId: '',
@@ -14664,16 +14736,18 @@ No markdown, no commentary. JSON only.`;
         solutionId: '',
         eventId: '',
         eventRegisterLink: '', // custom override; if empty, uses event's URL field
-        language: 'es',
+        language: 'en',
         visualStyle: 'modern', // 'modern' | 'bold' | 'minimal'
         hook: '',
         painContext: '',
         valueProposition: '',
         bullets: '',
         socialProof: '',
-        ctaText: LANDING_I18N.es.ctaDefault,
+        ctaText: LANDING_I18N.en.ctaDefault,
         ctaLink: COMPANY_PROFILE.calendarLink || 'https://calendar.app.google/',
         status: 'Draft',
+        // Section toggles — control which blocks appear in the rendered landing
+        sections: { hook: true, pain: true, value: true, bullets: true, socialProof: true, event: true, cta: true },
       };
       const [form, setForm] = useState(emptyForm);
 
@@ -14742,7 +14816,18 @@ No markdown, no commentary. JSON only.`;
         // Spanish (LatAm + España)
         const esCountries = ['spain','españa','espana','mexico','méxico','argentina','colombia','chile','peru','perú','venezuela','ecuador','bolivia','paraguay','uruguay','guatemala','honduras','costa rica','panama','panamá','el salvador','nicaragua','dominican','cuba','puerto rico'];
         if (esCountries.some(k => c.includes(k))) return 'es';
-        // English (default for everything else: USA, UK, MENA, Europe non-Spanish, Asia, Africa)
+        // French
+        const frCountries = ['france','belgium','belgique','luxembourg','monaco','senegal','sénégal','ivory coast',"côte d'ivoire",'morocco','maroc','tunisia','tunisie','algeria','algérie','quebec','québec'];
+        if (frCountries.some(k => c.includes(k))) return 'fr';
+        // German
+        const deCountries = ['germany','deutschland','austria','österreich','switzerland','schweiz','liechtenstein'];
+        if (deCountries.some(k => c.includes(k))) return 'de';
+        // Italian
+        if (c.includes('italy') || c.includes('italia') || c.includes('vatican') || c.includes('san marino')) return 'it';
+        // Arabic (MENA — Saudi, UAE, Qatar, Kuwait, Bahrain, Oman, Egypt, Jordan, Iraq, Lebanon, Yemen, Syria, Libya)
+        const arCountries = ['saudi','uae','united arab emirates','emirates','qatar','kuwait','bahrain','oman','egypt','egipto','jordan','iraq','lebanon','líbano','yemen','syria','siria','libya','libia','sudan','sudán','palestine','palestina'];
+        if (arCountries.some(k => c.includes(k))) return 'ar';
+        // English (default for everything else: USA, UK, Europe non-listed, Asia, Africa)
         if (c) return 'en';
         return null; // unknown country, don't override
       };
@@ -14760,7 +14845,7 @@ No markdown, no commentary. JSON only.`;
           slug: f.slug || autoSlugFromStakeholder(stakeholderId),
           // Override language if we can detect from country (and only if user hasn't manually picked yet)
           language: detectedLang || f.language,
-          ctaText: detectedLang && (f.ctaText === LANDING_I18N[f.language || 'es'].ctaDefault || !f.ctaText)
+          ctaText: detectedLang && (f.ctaText === LANDING_I18N[f.language || 'en'].ctaDefault || !f.ctaText)
             ? LANDING_I18N[detectedLang].ctaDefault
             : f.ctaText,
         }));
@@ -14775,7 +14860,7 @@ No markdown, no commentary. JSON only.`;
           accountId,
           slug: f.slug || (a ? (F(a, 'Account Name')||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : ''),
           language: detectedLang || f.language,
-          ctaText: detectedLang && (f.ctaText === LANDING_I18N[f.language || 'es'].ctaDefault || !f.ctaText)
+          ctaText: detectedLang && (f.ctaText === LANDING_I18N[f.language || 'en'].ctaDefault || !f.ctaText)
             ? LANDING_I18N[detectedLang].ctaDefault
             : f.ctaText,
         }));
@@ -14810,7 +14895,7 @@ No markdown, no commentary. JSON only.`;
           const evContext = ev ? (F(ev,'Aditional context')||'').slice(0, 400) : '';
           const evExecSummary = ev ? (F(ev,'Exec Summary')||'').slice(0, 1500) : '';
 
-          const langInstruction = LANDING_I18N[form.language || 'es'].aiInstruction;
+          const langInstruction = LANDING_I18N[form.language || 'en'].aiInstruction;
           const targetDescriptor = sName
             ? `${sName}${sRole ? ` (${sRole})` : ''}${accName ? ` at ${accName}` : ''}`
             : `${accName || 'the company'}${industry ? ` (${industry})` : ''} — company-level (no specific stakeholder)`;
@@ -14905,11 +14990,14 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         // Gmail-safe: escape + convert newlines to <br> (avoids white-space:pre-wrap which breaks in Outlook)
         const nl2br = (x) => escape(x).replace(/\r?\n/g, '<br>');
-        const lang = f.language || 'es';
-        const t = LANDING_I18N[lang] || LANDING_I18N.es;
+        const lang = f.language || 'en';
+        const t = LANDING_I18N[lang] || LANDING_I18N.en;
+        const isRTL = lang === 'ar';
+        // Section toggles — defaults to ON, respect user's off switches
+        const S = { hook: true, pain: true, value: true, bullets: true, socialProof: true, event: true, cta: true, ...(f.sections || {}) };
 
         // Shared event block — Gmail-safe (solid bg, no gradient, no flex)
-        const eventBlock = ev ? `
+        const eventBlock = (ev && S.event) ? `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;">
       <tr><td bgcolor="${secondaryColor}11" style="background:${secondaryColor}11;padding:20px 22px;border:2px solid ${secondaryColor};border-radius:12px;">
         <div style="font-size:11px;font-weight:800;color:${secondaryColor};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;font-family:Arial,Helvetica,sans-serif;">🎟️ ${t.eventHeading}</div>
@@ -14924,7 +15012,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         // TEMPLATE: MODERN — clean, sophisticated, balanced
         // ─────────────────────────────────────────────────────
         const renderModern = () => `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="${lang}">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="${lang}"${isRTL ? ' dir="rtl"' : ''}>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
@@ -14932,7 +15020,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 <title>${escape(sName)}${accName ? ' &middot; ' + escape(accName) : ''}</title>
 <!--[if mso]><style type="text/css">table,td,div,h1,h2,h3,p,a{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
 </head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${darkColor};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<body${isRTL ? ' dir="rtl"' : ''} style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${darkColor};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6" style="background:#f3f4f6;">
 <tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:620px;background:#ffffff;border-radius:16px;border-collapse:separate;">
@@ -14950,16 +15038,16 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
   </td></tr>
 
   <!-- Body -->
-  <tr><td style="padding:40px 36px 32px;">
+  <tr><td style="padding:40px 36px 32px;"${isRTL ? ' dir="rtl"' : ''}>
 
-    ${f.hook ? `
+    ${(f.hook && S.hook) ? `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px;border-collapse:separate;">
       <tr><td bgcolor="${accentColor}10" style="background:${accentColor}10;padding:20px 24px;border-left:4px solid ${accentColor};border-radius:0 12px 12px 0;font-size:16px;line-height:1.55;color:${darkColor};font-weight:500;font-family:Arial,Helvetica,sans-serif;">
         ${nl2br(f.hook)}
       </td></tr>
     </table>` : ''}
 
-    ${f.painContext ? `
+    ${(f.painContext && S.pain) ? `
     <div style="margin-bottom:32px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:14px;"><tr>
         <td valign="middle" width="6" style="background:${tertiaryColor};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>
@@ -14968,7 +15056,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       <div style="font-size:15px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.painContext)}</div>
     </div>` : ''}
 
-    ${f.valueProposition ? `
+    ${(f.valueProposition && S.value) ? `
     <div style="margin-bottom:28px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:14px;"><tr>
         <td valign="middle" width="6" style="background:${accentColor};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>
@@ -14977,7 +15065,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       <div style="font-size:15px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.valueProposition)}</div>
     </div>` : ''}
 
-    ${bulletsList.length ? `
+    ${(bulletsList.length && S.bullets) ? `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px;border-collapse:separate;">
       <tr><td bgcolor="#FAFAFA" style="background:#FAFAFA;padding:20px 22px;border-radius:12px;border:1px solid ${accentColor}22;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -14998,7 +15086,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       </td></tr>
     </table>` : ''}
 
-    ${f.socialProof ? `
+    ${(f.socialProof && S.socialProof) ? `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;">
       <tr><td bgcolor="${tertiaryColor}10" style="background:${tertiaryColor}10;padding:18px 22px;border-left:4px solid ${tertiaryColor};border-radius:0 12px 12px 0;font-size:14px;color:#4B5563;font-style:italic;line-height:1.6;font-family:Georgia,'Times New Roman',serif;">
         <span style="font-size:24px;color:${tertiaryColor};font-style:normal;font-weight:800;font-family:Georgia,serif;">&ldquo;</span>${nl2br(f.socialProof)}
@@ -15015,17 +15103,18 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             <img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="76" height="76" style="display:block;width:76px;height:76px;border-radius:50%;border:3px solid ${accentColor};outline:none;" />
           </td>` : ''}
           <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;">
-            <div style="font-size:12px;color:#6B7280;font-weight:500;margin-bottom:6px;">${ev ? t.eventOr : t.ctaIntro}</div>
+            ${S.cta ? `
+            <div style="font-size:12px;color:#6B7280;font-weight:500;margin-bottom:6px;">${ev && S.event ? t.eventOr : t.ctaIntro}</div>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 8px;"><tr>
               <td bgcolor="${accentColor}" style="background:${accentColor};border-radius:10px;">
                 <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:14px 30px;color:${darkColor};text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.2px;font-family:Arial,Helvetica,sans-serif;">${escape(f.ctaText || t.ctaDefault)} &rarr;</a>
               </td>
-            </tr></table>
+            </tr></table>` : ''}
             <div style="font-size:13px;color:${darkColor};font-weight:700;margin-top:4px;">${escape(senderName)}</div>
             ${senderTitle ? `<div style="font-size:11px;font-weight:500;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</div>` : ''}
           </td>
         </tr></table>
-        <div style="margin:18px 0 0;font-size:11px;color:#9CA3AF;font-style:italic;text-align:center;font-family:Arial,Helvetica,sans-serif;">${t.ctaFooter}</div>
+        ${S.cta ? `<div style="margin:18px 0 0;font-size:11px;color:#9CA3AF;font-style:italic;text-align:center;font-family:Arial,Helvetica,sans-serif;">${t.ctaFooter}</div>` : ''}
       </td></tr>
     </table>
 
@@ -15050,7 +15139,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         // TEMPLATE: BOLD — editorial, magazine-style, asymmetric
         // ─────────────────────────────────────────────────────
         const renderBold = () => `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="${lang}">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="${lang}"${isRTL ? ' dir="rtl"' : ''}>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
@@ -15058,7 +15147,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 <title>${escape(sName)}${accName ? ' &middot; ' + escape(accName) : ''}</title>
 <!--[if mso]><style type="text/css">table,td,div,h1,h2,h3,p,a{font-family:Arial,Helvetica,sans-serif !important;}.bold-serif{font-family:Georgia,'Times New Roman',serif !important;}</style><![endif]-->
 </head>
-<body style="margin:0;padding:0;background:${darkColor};font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#ffffff;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<body${isRTL ? ' dir="rtl"' : ''} style="margin:0;padding:0;background:${darkColor};font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#ffffff;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${darkColor}" style="background:${darkColor};">
 <tr><td align="center" style="padding:0;">
 <table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:680px;background:#ffffff;color:${darkColor};border-collapse:separate;">
@@ -15081,7 +15170,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
   </td></tr>
 
   <!-- Hook as pull-quote -->
-  ${f.hook ? `
+  ${(f.hook && S.hook) ? `
   <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:48px 48px 32px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td valign="top" width="6" style="background:${accentColor};font-size:0;line-height:0;">&nbsp;</td>
@@ -15092,7 +15181,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
   </td></tr>` : ''}
 
   <!-- Body sections with alternating colorblocks -->
-  ${f.painContext ? `
+  ${(f.painContext && S.pain) ? `
   <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:32px 48px;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;"><tr>
       <td bgcolor="${tertiaryColor}" style="background:${tertiaryColor};padding:4px 12px;color:${darkColor};font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">01 &middot; ${t.painHeading}</td>
@@ -15101,7 +15190,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
     <div style="font-size:16px;color:#374151;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.painContext)}</div>
   </td></tr>` : ''}
 
-  ${f.valueProposition ? `
+  ${(f.valueProposition && S.value) ? `
   <tr><td bgcolor="${darkColor}" style="background:${darkColor};padding:32px 48px;color:#ffffff;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;"><tr>
       <td bgcolor="${accentColor}" style="background:${accentColor};padding:4px 12px;color:${darkColor};font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">02 &middot; ${solName ? t.valueHeadingWithSol : t.valueHeading}</td>
@@ -15110,7 +15199,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
     <div style="font-size:16px;color:#D1D5DB;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">${nl2br(f.valueProposition)}</div>
   </td></tr>` : ''}
 
-  ${bulletsList.length ? `
+  ${(bulletsList.length && S.bullets) ? `
   <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:40px 48px;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;"><tr>
       <td bgcolor="${secondaryColor}" style="background:${secondaryColor};padding:4px 12px;color:#ffffff;font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">03 &middot; WHAT YOU GET</td>
@@ -15132,25 +15221,26 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
     </table>
   </td></tr>` : ''}
 
-  ${f.socialProof ? `
+  ${(f.socialProof && S.socialProof) ? `
   <tr><td bgcolor="${tertiaryColor}" style="background:${tertiaryColor};padding:32px 48px;color:${darkColor};">
     <div class="bold-serif" style="font-size:18px;line-height:1.5;font-style:italic;font-family:Georgia,'Times New Roman',serif;font-weight:500;">
       <span style="font-size:32px;color:${darkColor};font-weight:900;font-family:Georgia,serif;">&ldquo;</span>${nl2br(f.socialProof)}
     </div>
   </td></tr>` : ''}
 
-  ${ev ? `<tr><td bgcolor="#ffffff" style="background:#ffffff;padding:32px 48px;">${eventBlock}</td></tr>` : ''}
+  ${(ev && S.event) ? `<tr><td bgcolor="#ffffff" style="background:#ffffff;padding:32px 48px;">${eventBlock}</td></tr>` : ''}
 
   <!-- Big CTA — solid color (Gmail-safe), no gradient -->
+  ${S.cta ? `
   <tr><td bgcolor="${accentColor}" align="center" style="background:${accentColor};padding:48px 48px 56px;text-align:center;color:${darkColor};">
-    <div style="margin:0 0 18px;font-size:13px;color:${darkColor};font-weight:700;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${ev ? t.eventOr : t.ctaIntro}</div>
+    <div style="margin:0 0 18px;font-size:13px;color:${darkColor};font-weight:700;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${(ev && S.event) ? t.eventOr : t.ctaIntro}</div>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr>
       <td bgcolor="${darkColor}" style="background:${darkColor};border-radius:50px;">
         <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:18px 40px;color:#ffffff;text-decoration:none;font-weight:800;font-size:17px;letter-spacing:0.3px;font-family:Arial,Helvetica,sans-serif;">${escape(f.ctaText || t.ctaDefault)} &rarr;</a>
       </td>
     </tr></table>
     <div style="margin:20px 0 0;font-size:12px;color:${darkColor};opacity:0.7;font-style:italic;font-family:Arial,Helvetica,sans-serif;">${t.ctaFooter}</div>
-  </td></tr>
+  </td></tr>` : ''}
 
   <!-- Footer -->
   <tr><td bgcolor="${darkColor}" align="center" style="background:${darkColor};padding:22px 36px;text-align:center;">
@@ -15169,8 +15259,10 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
         // ── Dispatch by visualStyle ──
         const style = f.visualStyle || 'modern';
-        if (style === 'bold') return renderBold();
-        return renderModern();
+        const rendered = (style === 'bold') ? renderBold() : renderModern();
+        // Embed section toggles as a meta comment so openEdit can recover them
+        const meta = `<!-- oike-meta:${JSON.stringify({ sections: S, language: lang, visualStyle: style })} -->`;
+        return rendered.replace('<body', `${meta}\n<body`);
       };
 
       const htmlPreview = useMemo(() => buildLandingHTML(form), [form, stakeholders, accounts, solutions]);
@@ -15282,7 +15374,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         const email = s ? F(s, 'Email') || '' : '';
         const sName = s ? F(s, 'Name') || '' : '';
         const accName = s ? F(accounts.find(a => linkedIds(s,'Account')[0] === a.id) || {}, 'Account Name') : '';
-        const t = LANDING_I18N[form.language || 'es'] || LANDING_I18N.es;
+        const t = LANDING_I18N[form.language || 'en'] || LANDING_I18N.en;
         const subject = t.subject(sName, accName);
         window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}`, '_blank');
       };
@@ -15295,6 +15387,12 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         // Derive accountId from stakeholder if available
         const stk = stkId ? stakeholders.find(x => x.id === stkId) : null;
         const accId = stk ? linkedIds(stk, 'Account')[0] || '' : '';
+        // Recover section toggles + lang/style from the meta comment we embed in saved HTML
+        const savedHtml = F(landing, 'Saved HTML') || '';
+        let savedMeta = {};
+        const metaMatch = savedHtml.match(/<!--\s*oike-meta:(\{[\s\S]*?\})\s*-->/);
+        if (metaMatch) { try { savedMeta = JSON.parse(metaMatch[1]); } catch {} }
+        const defaultSections = { hook: true, pain: true, value: true, bullets: true, socialProof: true, event: true, cta: true };
         setForm({
           slug: F(landing, 'Slug') || '',
           stakeholderId: stkId,
@@ -15302,16 +15400,17 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           solutionId: solId,
           eventId: evId,
           eventRegisterLink: F(landing, 'Event Register Link') || '',
-          language: F(landing, 'Language') || 'es',
-          visualStyle: F(landing, 'Visual Style') || 'modern',
+          language: F(landing, 'Language') || savedMeta.language || 'en',
+          visualStyle: F(landing, 'Visual Style') || savedMeta.visualStyle || 'modern',
           hook: F(landing, 'Hook') || '',
           painContext: F(landing, 'Pain Context') || '',
           valueProposition: F(landing, 'Value Proposition') || '',
           bullets: F(landing, 'Bullets') || '',
           socialProof: F(landing, 'Social Proof') || '',
-          ctaText: F(landing, 'CTA Text') || 'Hablemos 20 minutos',
+          ctaText: F(landing, 'CTA Text') || (LANDING_I18N[F(landing,'Language') || savedMeta.language || 'en']?.ctaDefault) || 'Let\'s talk 20 minutes',
           ctaLink: F(landing, 'CTA Link') || '',
           status: F(landing, 'Status') || 'Draft',
+          sections: { ...defaultSections, ...(savedMeta.sections || {}) },
         });
         setShowForm(true);
       };
@@ -15346,11 +15445,15 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div className="card">
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>🌐 Language</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
                     {[
-                      { code: 'es', label: '🇪🇸 Español' },
                       { code: 'en', label: '🇬🇧 English' },
+                      { code: 'es', label: '🇪🇸 Español' },
                       { code: 'pt', label: '🇧🇷 Português' },
+                      { code: 'fr', label: '🇫🇷 Français' },
+                      { code: 'de', label: '🇩🇪 Deutsch' },
+                      { code: 'it', label: '🇮🇹 Italiano' },
+                      { code: 'ar', label: '🇸🇦 العربية' },
                     ].map(opt => (
                       <button key={opt.code}
                         onClick={() => {
@@ -15358,11 +15461,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                           setForm(f => ({
                             ...f,
                             language: opt.code,
-                            ctaText: (f.ctaText === LANDING_I18N[f.language || 'es'].ctaDefault || !f.ctaText) ? LANDING_I18N[opt.code].ctaDefault : f.ctaText,
+                            ctaText: (f.ctaText === LANDING_I18N[f.language || 'en'].ctaDefault || !f.ctaText) ? LANDING_I18N[opt.code].ctaDefault : f.ctaText,
                           }));
                         }}
                         style={{
-                          padding: '8px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                          padding: '8px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600,
                           background: form.language === opt.code ? 'rgba(91,191,181,0.18)' : 'rgba(255,255,255,0.04)',
                           border: `1px solid ${form.language === opt.code ? 'var(--globant-green)' : 'rgba(255,255,255,0.08)'}`,
                           color: form.language === opt.code ? 'var(--globant-green)' : 'var(--globant-text)',
@@ -15372,7 +15475,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                     ))}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 8, fontStyle: 'italic' }}>
-                    AI generates in this language + the HTML's fixed labels also adapt.
+                    English by default. AI generates in this language + the HTML's fixed labels also adapt. Arabic auto-switches to RTL layout.
                   </div>
                 </div>
 
@@ -15398,6 +15501,43 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 8, fontStyle: 'italic' }}>
                     Modern: clean, serious B2B. Bold: magazine-style, creative brands & agencies.
+                  </div>
+                </div>
+
+                {/* ── Sections toggles — define what blocks appear in the landing ── */}
+                <div className="card">
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>📋 Sections</div>
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 10, fontStyle: 'italic' }}>
+                    Toggle on/off the blocks you want in this landing.
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {[
+                      { k: 'hook',        icon: '💬', label: 'Hook' },
+                      { k: 'pain',        icon: '🎯', label: 'Pain Context' },
+                      { k: 'value',       icon: '⚡', label: 'Value Proposition' },
+                      { k: 'bullets',     icon: '📌', label: 'Bullets' },
+                      { k: 'socialProof', icon: '⭐', label: 'Social Proof' },
+                      { k: 'event',       icon: '🎟️', label: 'Event Block' },
+                      { k: 'cta',         icon: '🔘', label: 'CTA Button' },
+                    ].map(opt => {
+                      const on = form.sections?.[opt.k] !== false;
+                      return (
+                        <button key={opt.k}
+                          onClick={() => setForm(f => ({ ...f, sections: { ...(f.sections||{}), [opt.k]: !on } }))}
+                          style={{
+                            padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                            background: on ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${on ? 'rgba(74,222,128,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                            color: on ? '#4ade80' : 'var(--globant-muted)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          }}>
+                          <span>{opt.icon} {opt.label}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 8, background: on ? '#4ade80' : 'rgba(255,255,255,0.08)', color: on ? '#0D0D1A' : 'var(--globant-muted)' }}>
+                            {on ? 'ON' : 'OFF'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
