@@ -14738,6 +14738,7 @@ No markdown, no commentary. JSON only.`;
         eventRegisterLink: '', // custom override; if empty, uses event's URL field
         language: 'en',
         visualStyle: 'modern', // 'modern' | 'bold' | 'minimal'
+        heroTagline: '', // Custom hero subtitle ("I put this together thinking about" by default). Empty = use i18n default
         hook: '',
         painContext: '',
         valueProposition: '',
@@ -15034,7 +15035,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       </td></tr>
     </table>
     <h1 style="margin:0;font-size:32px;color:#ffffff;font-weight:800;line-height:1.15;letter-spacing:-0.5px;font-family:Arial,Helvetica,sans-serif;">${t.greeting} ${escape(sName.split(' ')[0])} &mdash;</h1>
-    <p style="margin:14px 0 0;font-size:15px;color:#D1D5DB;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${t.heroSub} <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
+    <p style="margin:14px 0 0;font-size:15px;color:#D1D5DB;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${escape(f.heroTagline || t.heroSub)} <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
   </td></tr>
 
   <!-- Body -->
@@ -15157,7 +15158,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td bgcolor="${accentColor}" valign="top" width="55%" style="background:${accentColor};padding:48px 36px;width:55%;">
         ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" height="36" style="display:block;max-height:36px;max-width:160px;margin:0 0 32px;border:0;outline:none;" />` : ''}
-        <div style="font-size:11px;font-weight:800;color:${darkColor};letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;font-family:Arial,Helvetica,sans-serif;">${t.heroSub}</div>
+        <div style="font-size:11px;font-weight:800;color:${darkColor};letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;font-family:Arial,Helvetica,sans-serif;">${escape(f.heroTagline || t.heroSub)}</div>
         <div class="bold-serif" style="font-size:42px;font-weight:900;line-height:1;color:${darkColor};letter-spacing:-1.5px;font-family:Georgia,'Times New Roman',serif;">${escape(accName || sName)}</div>
       </td>
       <td bgcolor="${darkColor}" valign="top" width="45%" style="background:${darkColor};padding:48px 32px;width:45%;text-align:left;">
@@ -15260,8 +15261,8 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         // ── Dispatch by visualStyle ──
         const style = f.visualStyle || 'modern';
         const rendered = (style === 'bold') ? renderBold() : renderModern();
-        // Embed section toggles as a meta comment so openEdit can recover them
-        const meta = `<!-- oike-meta:${JSON.stringify({ sections: S, language: lang, visualStyle: style })} -->`;
+        // Embed section toggles + custom strings as a meta comment so openEdit can recover them
+        const meta = `<!-- oike-meta:${JSON.stringify({ sections: S, language: lang, visualStyle: style, heroTagline: f.heroTagline || '' })} -->`;
         return rendered.replace('<body', `${meta}\n<body`);
       };
 
@@ -15402,6 +15403,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           eventRegisterLink: F(landing, 'Event Register Link') || '',
           language: F(landing, 'Language') || savedMeta.language || 'en',
           visualStyle: F(landing, 'Visual Style') || savedMeta.visualStyle || 'modern',
+          heroTagline: savedMeta.heroTagline || '',
           hook: F(landing, 'Hook') || '',
           painContext: F(landing, 'Pain Context') || '',
           valueProposition: F(landing, 'Value Proposition') || '',
@@ -15623,6 +15625,16 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
                 <div className="card">
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Content</div>
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>
+                    ✨ Hero tagline <span style={{ fontStyle: 'italic', fontWeight: 400 }}>(small text above the company name)</span>
+                  </label>
+                  <input style={inputSt} value={form.heroTagline}
+                    onChange={e => setForm(f => ({ ...f, heroTagline: e.target.value }))}
+                    placeholder={(LANDING_I18N[form.language || 'en']?.heroSub) || 'I put this together thinking about'} />
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3, marginBottom: 10, fontStyle: 'italic' }}>
+                    Empty = use default for {form.language || 'en'}. Replaces "{(LANDING_I18N[form.language || 'en']?.heroSub) || ''}" in the hero.
+                  </div>
 
                   <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Hook (opening line)</label>
                   <textarea style={{ ...inputSt, minHeight: 60, resize: 'vertical' }} value={form.hook} onChange={e => setForm(f => ({ ...f, hook: e.target.value }))} placeholder="Vi tu post sobre X. Notable que..." />
