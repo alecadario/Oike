@@ -15014,6 +15014,28 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             const created = await a.createRecord(TABLE_IDS.landings, fields);
             if (onAddRecord) onAddRecord('landings', created?.fields || fields, created?.id);
           }
+
+          // ── Auto-invite to event when status = Sent ──
+          // If there's an event + stakeholder, add the stakeholder to event.Stakeholders invited
+          if (sendStatus === 'Sent' && form.eventId && form.stakeholderId) {
+            try {
+              const eventRec = events.find(e => e.id === form.eventId);
+              const currentInvited = eventRec ? linkedIds(eventRec, 'Stakeholders invited') : [];
+              if (!currentInvited.includes(form.stakeholderId)) {
+                const newInvited = [...currentInvited, form.stakeholderId];
+                await a.updateRecord(TABLE_IDS.events, form.eventId, {
+                  'Stakeholders invited': newInvited,
+                });
+                if (onUpdateRecord) onUpdateRecord('events', form.eventId, {
+                  'Stakeholders invited': newInvited,
+                });
+              }
+            } catch (eventErr) {
+              console.error('Auto-invite to event failed:', eventErr);
+              // Non-blocking — landing was saved, just the invite update failed
+            }
+          }
+
           setShowForm(false);
           setEditingLanding(null);
           setForm(emptyForm);
@@ -15283,6 +15305,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                     ✉️ Mark as Sent
                   </button>
                 </div>
+                {form.eventId && form.stakeholderId && (
+                  <div style={{ marginTop: 6, padding: '8px 12px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)' }}>
+                    🎟️ Al marcar como Sent, este stakeholder se agrega automático como invitado al evento en Oike
+                  </div>
+                )}
               </div>
 
               {/* Preview panel */}
