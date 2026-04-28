@@ -14484,7 +14484,7 @@ No markdown, no commentary. JSON only.`;
     // Prospect landings — generate personalized HTML for first-touch prospecting
     // Output: copy HTML for Gmail OR public URL oike.app/p/{slug}
     function LandingsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord }) {
-      const { landings = [], stakeholders = [], accounts = [], solutions = [] } = data;
+      const { landings = [], stakeholders = [], accounts = [], solutions = [], events = [] } = data;
 
       const [selectedId, setSelectedId] = useState(null);
       const [showForm, setShowForm] = useState(false);
@@ -14547,6 +14547,8 @@ No markdown, no commentary. JSON only.`;
         stakeholderId: '',
         accountId: '',
         solutionId: '',
+        eventId: '',
+        eventRegisterLink: '', // custom override; if empty, uses event's URL field
         language: 'es',
         hook: '',
         painContext: '',
@@ -14568,7 +14570,10 @@ No markdown, no commentary. JSON only.`;
       const senderLogo = branding.senderLogo || '';
       const senderPhoto = branding.senderPhoto || '';
       const senderTitle = branding.senderTitle || '';
-      const accentColor = branding.accentColor || '#5BBFB5';
+      const accentColor = branding.accentColor || '#5BBFB5';        // Primary
+      const secondaryColor = branding.secondaryColor || '#A78BFA';  // Secondary
+      const tertiaryColor = branding.tertiaryColor || '#FBBF24';    // Tertiary / highlight
+      const darkColor = branding.darkColor || '#0D0D1A';
 
       // ── Check for prefill stakeholder from navigation (e.g. from Stakeholder History Modal) ──
       useEffect(() => {
@@ -14731,7 +14736,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 <table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);">
 
   <!-- Hero -->
-  <tr><td style="background:linear-gradient(135deg,#1A1A2E 0%,#0D0D1A 100%);padding:36px 32px;text-align:center;border-bottom:3px solid ${accentColor};">
+  <tr><td style="background:linear-gradient(135deg,${darkColor} 0%,#000 100%);padding:36px 32px;text-align:center;border-bottom:3px solid ${accentColor};">
     ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" style="max-height:50px;margin-bottom:16px;" />` : ''}
     <h1 style="margin:0;font-size:28px;color:#fff;font-weight:800;line-height:1.2;">${t.greeting} ${escape(sName.split(' ')[0])},</h1>
     <p style="margin:8px 0 0;font-size:15px;color:#9CA3AF;">${t.heroSub} <strong style="color:${accentColor};">${escape(accName || sName)}</strong></p>
@@ -14746,22 +14751,22 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
     </div>` : ''}
 
     ${f.painContext ? `
-    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">${t.painHeading} ${escape(accName || t.yourCompany)}</h2>
+    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:${darkColor};">${t.painHeading} ${escape(accName || t.yourCompany)}</h2>
     <p style="margin:0 0 24px;font-size:14px;color:#374151;white-space:pre-wrap;">${escape(f.painContext)}</p>` : ''}
 
     ${f.valueProposition ? `
-    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1A1A2E;">${solName ? t.valueHeadingWithSol + ' ' + escape(solName) : t.valueHeading}</h2>
+    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:${darkColor};">${solName ? t.valueHeadingWithSol + ' ' + escape(solName) : t.valueHeading}</h2>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;white-space:pre-wrap;">${escape(f.valueProposition)}</p>` : ''}
 
     ${bulletsList.length ? `
     <ul style="margin:0 0 24px;padding:0;list-style:none;">
-      ${bulletsList.map(b => `<li style="padding:8px 0 8px 28px;position:relative;font-size:14px;color:#1A1A2E;">
-        <span style="position:absolute;left:0;top:8px;color:${accentColor};font-weight:800;">▸</span>${escape(b)}
+      ${bulletsList.map((b, i) => `<li style="padding:8px 0 8px 28px;position:relative;font-size:14px;color:#1A1A2E;">
+        <span style="position:absolute;left:0;top:8px;color:${i % 2 === 0 ? accentColor : secondaryColor};font-weight:800;">▸</span>${escape(b)}
       </li>`).join('')}
     </ul>` : ''}
 
     ${f.socialProof ? `
-    <div style="padding:14px 18px;background:#EFF6FF;border-radius:8px;margin-bottom:24px;font-size:13px;color:#374151;font-style:italic;white-space:pre-wrap;">
+    <div style="padding:14px 18px;background:#FEF3C7;border-left:3px solid ${tertiaryColor};border-radius:0 8px 8px 0;margin-bottom:24px;font-size:13px;color:#374151;font-style:italic;white-space:pre-wrap;">
       ${escape(f.socialProof)}
     </div>` : ''}
 
@@ -16877,8 +16882,10 @@ Return ONLY valid JSON.`;
           senderPhoto: b.senderPhoto || '',
           senderTitle: b.senderTitle || '',
           calendarLink: b.calendarLink || '',
-          accentColor: b.accentColor || '#5BBFB5',
-          darkColor:   b.darkColor   || '#0D0D1A',
+          accentColor:    b.accentColor    || '#5BBFB5', // Primary
+          secondaryColor: b.secondaryColor || '#A78BFA', // Secondary
+          tertiaryColor:  b.tertiaryColor  || '#FBBF24', // Tertiary / highlight
+          darkColor:      b.darkColor      || '#0D0D1A', // Dark background
         };
       });
       const [brandingSaved, setBrandingSaved] = useState(false);
@@ -17076,71 +17083,86 @@ Return ONLY valid JSON.`;
                   <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>Aparece debajo del nombre, al lado de la foto.</div>
                 </div>
 
-                {/* Color palette */}
+                {/* Color palette — 4 colors */}
                 <div>
-                  <label style={labelStyle}>Proposal color palette</label>
+                  <label style={labelStyle}>Color palette (4 colores)</label>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:10, fontStyle:'italic' }}>
+                    Primary = CTA + headers. Secondary = soporte / accents. Tertiary = highlights / badges. Dark = fondos oscuros.
+                  </div>
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    {/* Presets */}
+                    {/* Presets — 4 colors each */}
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       {[
-                        { label:'Teal',   accent:'#5BBFB5', dark:'#0D0D1A' },
-                        { label:'Indigo', accent:'#6366F1', dark:'#0D0D1A' },
-                        { label:'Violet', accent:'#8B5CF6', dark:'#0D0D1A' },
-                        { label:'Blue',   accent:'#3B82F6', dark:'#0D0D1A' },
-                        { label:'Cyan',   accent:'#06B6D4', dark:'#0D0D1A' },
-                        { label:'Emerald',accent:'#10B981', dark:'#0D0D1A' },
-                        { label:'Orange', accent:'#F97316', dark:'#0D0D1A' },
-                        { label:'Rose',   accent:'#F43F5E', dark:'#0D0D1A' },
-                        { label:'Slate',  accent:'#94A3B8', dark:'#0F172A' },
+                        { label:'Oike',     primary:'#5BBFB5', secondary:'#A78BFA', tertiary:'#FBBF24', dark:'#0D0D1A' },
+                        { label:'Sunset',   primary:'#F97316', secondary:'#F43F5E', tertiary:'#FBBF24', dark:'#1F1B2E' },
+                        { label:'Ocean',    primary:'#06B6D4', secondary:'#3B82F6', tertiary:'#10B981', dark:'#0F172A' },
+                        { label:'Forest',   primary:'#10B981', secondary:'#059669', tertiary:'#84CC16', dark:'#0F1F1A' },
+                        { label:'Royal',    primary:'#6366F1', secondary:'#8B5CF6', tertiary:'#EC4899', dark:'#0D0D1A' },
+                        { label:'Mocha',    primary:'#A16207', secondary:'#C2410C', tertiary:'#FBBF24', dark:'#1C1917' },
+                        { label:'Slate',    primary:'#475569', secondary:'#94A3B8', tertiary:'#06B6D4', dark:'#0F172A' },
+                        { label:'Mono',     primary:'#1F2937', secondary:'#6B7280', tertiary:'#9CA3AF', dark:'#000000' },
                       ].map(preset => {
-                        const isActive = branding.accentColor === preset.accent && branding.darkColor === preset.dark;
+                        const isActive = branding.accentColor === preset.primary && branding.darkColor === preset.dark
+                          && branding.secondaryColor === preset.secondary && branding.tertiaryColor === preset.tertiary;
                         return (
-                          <button key={preset.label} onClick={() => setBranding(p=>({...p, accentColor: preset.accent, darkColor: preset.dark}))}
+                          <button key={preset.label} onClick={() => setBranding(p=>({...p,
+                            accentColor: preset.primary,
+                            secondaryColor: preset.secondary,
+                            tertiaryColor: preset.tertiary,
+                            darkColor: preset.dark
+                          }))}
                             title={preset.label}
-                            style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'6px 8px', borderRadius:8, border:'1px solid', cursor:'pointer',
-                              borderColor: isActive ? preset.accent : 'var(--globant-border)',
+                            style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, padding:'8px 10px', borderRadius:8, border:'1px solid', cursor:'pointer',
+                              borderColor: isActive ? preset.primary : 'var(--globant-border)',
                               background: isActive ? 'rgba(255,255,255,0.06)' : 'var(--globant-darker)',
                             }}>
-                            <div style={{ width:28, height:28, borderRadius:6, background:preset.accent }} />
-                            <span style={{ fontSize:9, color: isActive ? preset.accent : 'var(--globant-muted)', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.3px' }}>{preset.label}</span>
+                            <div style={{ display:'flex', gap:2 }}>
+                              <div style={{ width:14, height:24, borderRadius:'4px 0 0 4px', background:preset.primary }} />
+                              <div style={{ width:14, height:24, background:preset.secondary }} />
+                              <div style={{ width:14, height:24, background:preset.tertiary }} />
+                              <div style={{ width:14, height:24, borderRadius:'0 4px 4px 0', background:preset.dark }} />
+                            </div>
+                            <span style={{ fontSize:9, color: isActive ? preset.primary : 'var(--globant-muted)', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.3px' }}>{preset.label}</span>
                           </button>
                         );
                       })}
                     </div>
-                    {/* Custom pickers */}
-                    <div style={{ display:'flex', gap:10 }}>
-                      <div style={{ flex:1 }}>
-                        <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>ACCENT COLOR</label>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                          <input type="color" value={branding.accentColor || '#5BBFB5'}
-                            onChange={e => setBranding(p=>({...p, accentColor: e.target.value}))}
-                            style={{ width:36, height:36, borderRadius:6, border:'none', cursor:'pointer', padding:2, background:'var(--globant-darker)' }} />
-                          <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:12, flex:1 }}
-                            value={branding.accentColor || '#5BBFB5'}
-                            onChange={e => setBranding(p=>({...p, accentColor: e.target.value}))}
-                            placeholder="#5BBFB5" />
+                    {/* 4 Custom pickers in 2x2 grid */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                      {[
+                        { key:'accentColor',    label:'PRIMARY',   default:'#5BBFB5', sub:'CTAs · Headers · Borders' },
+                        { key:'secondaryColor', label:'SECONDARY', default:'#A78BFA', sub:'Accents · Sub-buttons' },
+                        { key:'tertiaryColor',  label:'TERTIARY',  default:'#FBBF24', sub:'Highlights · Badges' },
+                        { key:'darkColor',      label:'DARK',      default:'#0D0D1A', sub:'Backgrounds · Hero' },
+                      ].map(c => (
+                        <div key={c.key}>
+                          <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:4, fontWeight:700 }}>{c.label}</label>
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <input type="color" value={branding[c.key] || c.default}
+                              onChange={e => setBranding(p=>({...p, [c.key]: e.target.value}))}
+                              style={{ width:36, height:36, borderRadius:6, border:'none', cursor:'pointer', padding:2, background:'var(--globant-darker)', flexShrink:0 }} />
+                            <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:11, flex:1, padding:'8px 8px' }}
+                              value={branding[c.key] || c.default}
+                              onChange={e => setBranding(p=>({...p, [c.key]: e.target.value}))}
+                              placeholder={c.default} />
+                          </div>
+                          <div style={{ fontSize:9, color:'var(--globant-muted)', marginTop:3, fontStyle:'italic' }}>{c.sub}</div>
                         </div>
-                      </div>
-                      <div style={{ flex:1 }}>
-                        <label style={{ fontSize:10, color:'var(--globant-muted)', display:'block', marginBottom:4 }}>DARK / BACKGROUND</label>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                          <input type="color" value={branding.darkColor || '#0D0D1A'}
-                            onChange={e => setBranding(p=>({...p, darkColor: e.target.value}))}
-                            style={{ width:36, height:36, borderRadius:6, border:'none', cursor:'pointer', padding:2, background:'var(--globant-darker)' }} />
-                          <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:12, flex:1 }}
-                            value={branding.darkColor || '#0D0D1A'}
-                            onChange={e => setBranding(p=>({...p, darkColor: e.target.value}))}
-                            placeholder="#0D0D1A" />
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                    {/* Live preview strip */}
-                    <div style={{ borderRadius:8, overflow:'hidden', border:'1px solid var(--globant-border)', display:'flex', height:36 }}>
+                    {/* Live preview strip with all 4 colors */}
+                    <div style={{ borderRadius:8, overflow:'hidden', border:'1px solid var(--globant-border)', display:'flex', height:48 }}>
                       <div style={{ flex:2, background: branding.darkColor || '#0D0D1A', display:'flex', alignItems:'center', paddingLeft:14 }}>
-                        <span style={{ fontSize:12, fontWeight:800, color: branding.accentColor || '#5BBFB5' }}>Preview</span>
+                        <span style={{ fontSize:12, fontWeight:800, color: branding.accentColor || '#5BBFB5' }}>Hero</span>
                       </div>
                       <div style={{ flex:1, background: branding.accentColor || '#5BBFB5', display:'flex', alignItems:'center', justifyContent:'center' }}>
                         <span style={{ fontSize:11, fontWeight:800, color: branding.darkColor || '#0D0D1A' }}>CTA</span>
+                      </div>
+                      <div style={{ flex:1, background: branding.secondaryColor || '#A78BFA', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <span style={{ fontSize:11, fontWeight:800, color: '#fff' }}>2nd</span>
+                      </div>
+                      <div style={{ flex:1, background: branding.tertiaryColor || '#FBBF24', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <span style={{ fontSize:11, fontWeight:800, color: branding.darkColor || '#0D0D1A' }}>★</span>
                       </div>
                     </div>
                   </div>
