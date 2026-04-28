@@ -7530,7 +7530,7 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
         } catch (err) {
           console.error('Generate Exec Summary failed:', err);
           const msg = err?.message || String(err) || 'unknown error';
-          alert(`Failed to generate summary: ${msg}\n\nPosibles causas:\n• OpenAI rate limit / timeout\n• Sesión expirada (refrescá la página)\n• Campo Airtable no existe en tu base\n\nMirá la consola del browser para más detalle.`);
+          alert(`Failed to generate summary: ${msg}\n\nPossible causes:\n• OpenAI rate limit / timeout\n• Session expired (refresh the page)\n• Airtable field doesn't exist in your base\n\nCheck the browser console for more details.`);
         }
         setEvGeneratingSummary(false);
       };
@@ -7942,8 +7942,8 @@ Return ONLY the JSON array, nothing else.`;
               ) : (
                 <p style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
                   {context || F(selectedEvent, 'Attachment Summary')
-                    ? 'Click "✨ Generate" para que AI cree un resumen ejecutivo del evento. Este summary se usa después automático cuando creás Prospect Landings que invitan a este evento — para que la IA escriba mejores invitaciones.'
-                    : 'Subí archivos o agregá contexto al evento primero. Después podés generar el summary.'}
+                    ? 'Click "✨ Generate" to have AI create an executive summary of this event. This summary will be used automatically when creating Prospect Landings that invite to this event — so the AI writes better personalized invitations.'
+                    : 'Upload files or add context to the event first. Then you can generate the summary.'}
                 </p>
               )}
             </div>
@@ -14876,7 +14876,31 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         const evStart = ev?.fields?.['Starting'] ? new Date(ev.fields['Starting']) : null;
         const evDateStr = evStart ? evStart.toLocaleDateString(f.language === 'en' ? 'en-US' : (f.language === 'pt' ? 'pt-BR' : 'es-ES'), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
         const evRegisterLink = (f.eventRegisterLink || '').trim() || (ev ? F(ev,'URL') || '' : '');
-        const evContext = ev ? (F(ev,'Aditional context') || '') : '';
+
+        // Get clean event description for the landing — prefers Exec Summary's intro,
+        // strips raw FILE: blocks from Aditional context, never shows raw file dumps.
+        const getEventDescription = () => {
+          if (!ev) return '';
+          const execSummary = F(ev, 'Exec Summary') || '';
+          if (execSummary) {
+            // Try to extract "What this event is" section from the structured summary
+            const sectionMatch = execSummary.match(/###[^\n]*?(What this event is|Qué es|O que é)[^\n]*\n([\s\S]+?)(?=\n###|$)/i);
+            if (sectionMatch && sectionMatch[2]) {
+              return sectionMatch[2].trim().replace(/\*\*/g, '').slice(0, 380);
+            }
+            // Fallback: first paragraph after the first heading
+            const firstPara = execSummary.replace(/###[^\n]+\n/, '').split('\n###')[0].replace(/\*\*/g, '').trim();
+            if (firstPara.length > 20) return firstPara.slice(0, 380);
+          }
+          // No exec summary → strip FILE: blocks from manual context
+          const context = F(ev, 'Aditional context') || '';
+          if (!context) return '';
+          // Remove "📎 FILE: ..." headers AND their following bullet content (until next FILE: or end)
+          const stripped = context.replace(/📎\s*FILE:[\s\S]*?(?=\n📎\s*FILE:|$)/g, '').trim();
+          if (stripped.length > 20) return stripped.slice(0, 380);
+          return '';
+        };
+        const evDescription = getEventDescription();
         const bulletsList = (f.bullets||'').split('\n').map(b => b.trim()).filter(Boolean);
         const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         const lang = f.language || 'es';
@@ -14888,7 +14912,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       <div style="font-size:11px;font-weight:800;color:${secondaryColor};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">🎟️ ${t.eventHeading}</div>
       <h3 style="margin:0 0 8px;font-size:20px;font-weight:800;color:${darkColor};line-height:1.2;">${escape(evName)}</h3>
       ${evDateStr ? `<div style="font-size:13px;color:#6B7280;margin-bottom:10px;"><strong style="color:${darkColor};">${t.eventDate}:</strong> ${escape(evDateStr)}</div>` : ''}
-      ${evContext ? `<p style="margin:0 0 14px;font-size:13px;color:#374151;line-height:1.5;white-space:pre-wrap;">${escape(evContext.slice(0, 300))}${evContext.length > 300 ? '...' : ''}</p>` : ''}
+      ${evDescription ? `<p style="margin:0 0 14px;font-size:13px;color:#374151;line-height:1.55;white-space:pre-wrap;">${escape(evDescription)}</p>` : ''}
       ${evRegisterLink ? `<a href="${escape(evRegisterLink)}" style="display:inline-block;padding:11px 22px;background:${secondaryColor};color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">${t.eventRegisterCta} →</a>` : ''}
     </div>` : '';
 
@@ -15291,7 +15315,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                     ))}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 8, fontStyle: 'italic' }}>
-                    El AI genera en este idioma + los textos fijos del HTML también
+                    AI generates in this language + the HTML's fixed labels also adapt.
                   </div>
                 </div>
 
@@ -15316,7 +15340,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                     ))}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 8, fontStyle: 'italic' }}>
-                    Modern: clean, B2B serio. Bold: estilo magazine, agencias creativas.
+                    Modern: clean, serious B2B. Bold: magazine-style, creative brands & agencies.
                   </div>
                 </div>
 
@@ -15329,7 +15353,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                     {accounts.map(a => <option key={a.id} value={a.id}>{F(a,'Account Name')}{F(a,'Industry') ? ` · ${F(a,'Industry')}` : ''}</option>)}
                   </select>
 
-                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Stakeholder {form.accountId ? '(opcional si ya tenés account)' : '*'}</label>
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Stakeholder {form.accountId ? '(optional if you already picked an account)' : '*'}</label>
                   <select style={inputSt} value={form.stakeholderId} onChange={e => onPickStakeholder(e.target.value)}>
                     <option value="">— Pick a stakeholder —</option>
                     {stakeholders
@@ -15343,7 +15367,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                   </select>
                   {form.accountId && (
                     <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4, fontStyle: 'italic' }}>
-                      Filtrado por account seleccionada. Podés cambiar la account para ver otros contactos.
+                      Filtered by selected account. Change the account to see other contacts.
                     </div>
                   )}
 
@@ -15384,10 +15408,10 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
                   {form.eventId && (
                     <div style={{ marginTop: 8 }}>
-                      <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>🔗 Registration link (override del URL del evento)</label>
-                      <input style={inputSt} value={form.eventRegisterLink} onChange={e => setForm(f => ({ ...f, eventRegisterLink: e.target.value }))} placeholder="https://eventbrite.com/... o link interno" />
+                      <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>🔗 Registration link (override the event's URL)</label>
+                      <input style={inputSt} value={form.eventRegisterLink} onChange={e => setForm(f => ({ ...f, eventRegisterLink: e.target.value }))} placeholder="https://eventbrite.com/... or internal link" />
                       <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3, fontStyle: 'italic' }}>
-                        Si está vacío, usa el URL del evento. Sirve para landings con link de inscripción específico.
+                        If empty, uses the event's URL. Use this for landings with a specific registration link.
                       </div>
                     </div>
                   )}
@@ -15407,23 +15431,23 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                   <textarea style={{ ...inputSt, minHeight: 60, resize: 'vertical' }} value={form.hook} onChange={e => setForm(f => ({ ...f, hook: e.target.value }))} placeholder="Vi tu post sobre X. Notable que..." />
 
                   <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Pain Context</label>
-                  <textarea style={{ ...inputSt, minHeight: 70, resize: 'vertical' }} value={form.painContext} onChange={e => setForm(f => ({ ...f, painContext: e.target.value }))} placeholder="Lo que veo que está pasando en su empresa..." />
+                  <textarea style={{ ...inputSt, minHeight: 70, resize: 'vertical' }} value={form.painContext} onChange={e => setForm(f => ({ ...f, painContext: e.target.value }))} placeholder="What I see happening at their company..." />
 
                   <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Value Proposition</label>
-                  <textarea style={{ ...inputSt, minHeight: 70, resize: 'vertical' }} value={form.valueProposition} onChange={e => setForm(f => ({ ...f, valueProposition: e.target.value }))} placeholder="Cómo puedo ayudarte concretamente..." />
+                  <textarea style={{ ...inputSt, minHeight: 70, resize: 'vertical' }} value={form.valueProposition} onChange={e => setForm(f => ({ ...f, valueProposition: e.target.value }))} placeholder="How I can specifically help..." />
 
                   <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Bullets (uno por línea)</label>
-                  <textarea style={{ ...inputSt, minHeight: 80, resize: 'vertical' }} value={form.bullets} onChange={e => setForm(f => ({ ...f, bullets: e.target.value }))} placeholder="3-4 puntos específicos" />
+                  <textarea style={{ ...inputSt, minHeight: 80, resize: 'vertical' }} value={form.bullets} onChange={e => setForm(f => ({ ...f, bullets: e.target.value }))} placeholder="3-4 specific value points" />
 
                   <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Social Proof (opcional)</label>
-                  <textarea style={{ ...inputSt, minHeight: 50, resize: 'vertical' }} value={form.socialProof} onChange={e => setForm(f => ({ ...f, socialProof: e.target.value }))} placeholder="Casos similares, métricas relevantes" />
+                  <textarea style={{ ...inputSt, minHeight: 50, resize: 'vertical' }} value={form.socialProof} onChange={e => setForm(f => ({ ...f, socialProof: e.target.value }))} placeholder="Similar cases, relevant metrics" />
                 </div>
 
                 <div className="card">
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>CTA</div>
-                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>Texto del botón</label>
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>CTA button text</label>
                   <input style={inputSt} value={form.ctaText} onChange={e => setForm(f => ({ ...f, ctaText: e.target.value }))} />
-                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Link del CTA</label>
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>CTA link</label>
                   <input style={inputSt} value={form.ctaLink} onChange={e => setForm(f => ({ ...f, ctaLink: e.target.value }))} placeholder="https://calendar.app.google/..." />
                 </div>
 
@@ -15437,7 +15461,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                 </div>
                 {form.eventId && form.stakeholderId && (
                   <div style={{ marginTop: 6, padding: '8px 12px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)' }}>
-                    🎟️ Al marcar como Sent, este stakeholder se agrega automático como invitado al evento en Oike
+                    🎟️ On Mark as Sent, this stakeholder will be auto-added as an invitee to the event in Oike.
                   </div>
                 )}
               </div>
@@ -15466,11 +15490,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         <div>
           <div className="page-header">
             <h1>📨 Prospect Landings</h1>
-            <p>Páginas HTML personalizadas por prospect. Copy-paste a Gmail o publicá como link.</p>
+            <p>Personalized HTML pages per prospect. Copy-paste to Gmail or publish as a link.</p>
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-            <input className="input-field" style={{ fontSize: 12, flex: 1, minWidth: 180 }} placeholder="Buscar por slug o contacto..." value={listSearch} onChange={e => setListSearch(e.target.value)} />
+            <input className="input-field" style={{ fontSize: 12, flex: 1, minWidth: 180 }} placeholder="Search by slug or contact..." value={listSearch} onChange={e => setListSearch(e.target.value)} />
             <select className="input-field" style={{ fontSize: 12, minWidth: 140 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="">All statuses</option>
               <option value="Draft">Draft</option>
@@ -15485,7 +15509,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
               <div style={{ fontSize: 32, marginBottom: 12 }}>📨</div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>No landings {landings.length === 0 ? 'yet' : 'match'}</div>
               <div style={{ fontSize: 13, color: 'var(--globant-muted)', marginBottom: 16 }}>
-                {landings.length === 0 ? 'Crea tu primera landing personalizada para un prospect' : 'Ajustá los filtros'}
+                {landings.length === 0 ? 'Create your first personalized landing for a prospect' : 'Adjust your filters'}
               </div>
               {landings.length === 0 && <button className="action-btn btn-primary" onClick={openCreate}>+ New Landing</button>}
             </div>
@@ -15516,7 +15540,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                       </div>
                     )}
                     <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>
-                      {F(l, 'Sent Date') ? `Enviado: ${F(l, 'Sent Date')}` : 'Borrador'}
+                      {F(l, 'Sent Date') ? `Sent: ${F(l, 'Sent Date')}` : 'Draft'}
                     </div>
                   </div>
                 );
@@ -17475,7 +17499,7 @@ Return ONLY valid JSON.`;
                           reader.readAsDataURL(file);
                         }} />
                       </label>
-                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic' }}>Aparece al lado del CTA "Hablemos" en Landings, Proposals y Reports. Foto cuadrada / circular.</div>
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic' }}>Shown next to the CTA in Landings, Proposals and Reports. Square photo works best (rendered as circle).</div>
                       {branding.senderPhoto && (
                         <button onClick={() => setBranding(p=>({...p,senderPhoto:''}))}
                           style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer', alignSelf:'flex-start' }}>
@@ -17490,7 +17514,7 @@ Return ONLY valid JSON.`;
                 <div>
                   <label style={labelStyle}>Your title / tagline</label>
                   <input style={inputStyle} value={branding.senderTitle || ''} onChange={e=>setBranding(p=>({...p,senderTitle:e.target.value}))} placeholder="e.g. Founder · Oike · Sales Intelligence" />
-                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>Aparece debajo del nombre, al lado de la foto.</div>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>Shown below your name, next to your photo.</div>
                 </div>
 
                 {/* Color palette — 4 colors */}
