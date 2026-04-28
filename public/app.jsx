@@ -14508,6 +14508,10 @@ No markdown, no commentary. JSON only.`;
           ctaDefault: 'Hablemos 20 minutos',
           ctaFooter: 'Si no aplica, al menos te quedan estas ideas. No vendo en esta call.',
           poweredBy: 'Powered by',
+          eventHeading: 'Te invito a',
+          eventDate: 'Fecha',
+          eventRegisterCta: 'Inscribirme al evento',
+          eventOr: 'o si preferís hablar antes:',
           aiInstruction: 'Write in Spanish (using "vos" if natural — voseo style).',
           subject: (sName, accName) => `Pensé en ${sName ? sName + ' — ' : ''}${accName || 'tu empresa'}`,
         },
@@ -14522,6 +14526,10 @@ No markdown, no commentary. JSON only.`;
           ctaDefault: 'Let\'s talk 20 minutes',
           ctaFooter: 'If it doesn\'t apply, at least you keep these ideas. No selling in this call.',
           poweredBy: 'Powered by',
+          eventHeading: 'You\'re invited to',
+          eventDate: 'Date',
+          eventRegisterCta: 'Register for the event',
+          eventOr: 'or if you\'d rather talk first:',
           aiInstruction: 'Write in English. Natural, direct, conversational — not formal corporate speak.',
           subject: (sName, accName) => `Thinking about ${sName ? sName + ' — ' : ''}${accName || 'your company'}`,
         },
@@ -14536,6 +14544,10 @@ No markdown, no commentary. JSON only.`;
           ctaDefault: 'Vamos conversar 20 minutos',
           ctaFooter: 'Se não se aplica, pelo menos essas ideias ficam. Não vendo nessa call.',
           poweredBy: 'Powered by',
+          eventHeading: 'Você está convidado(a) a',
+          eventDate: 'Data',
+          eventRegisterCta: 'Inscrever-me no evento',
+          eventOr: 'ou se preferir conversar antes:',
           aiInstruction: 'Write in Brazilian Portuguese. Natural, direct, conversational.',
           subject: (sName, accName) => `Pensei em ${sName ? sName + ' — ' : ''}${accName || 'sua empresa'}`,
         },
@@ -14646,6 +14658,7 @@ No markdown, no commentary. JSON only.`;
         try {
           const s = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
           const sol = form.solutionId ? solutions.find(x => x.id === form.solutionId) : null;
+          const ev = form.eventId ? events.find(x => x.id === form.eventId) : null;
           // Account: explicit wins, otherwise from stakeholder
           const accId = form.accountId || (s ? linkedIds(s, 'Account')[0] : null);
           const acc = accId ? accounts.find(a => a.id === accId) : null;
@@ -14661,6 +14674,10 @@ No markdown, no commentary. JSON only.`;
           const solName = sol ? F(sol,'Name') : '';
           const solDetail = sol ? (F(sol,'Service | Solution Detail')||'').slice(0, 300) : '';
           const solKeyMsg = sol ? F(sol,'Stakeholder Key Message') : '';
+
+          const evName = ev ? F(ev,'Event Name') : '';
+          const evDate = ev?.fields?.['Starting'] ? new Date(ev.fields['Starting']).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' }) : '';
+          const evContext = ev ? (F(ev,'Aditional context')||'').slice(0, 400) : '';
 
           const langInstruction = LANDING_I18N[form.language || 'es'].aiInstruction;
           const targetDescriptor = sName
@@ -14679,6 +14696,8 @@ ${accNews ? `Company news: ${accNews}` : ''}
 ${accIntel ? `Company intel notes: ${accIntel}` : ''}
 
 ${solName ? `SOLUTION WE OFFER: ${solName}\n${solDetail}\n${solKeyMsg ? `Key message: ${solKeyMsg}` : ''}` : ''}
+
+${evName ? `EVENT TO INVITE THEM TO: "${evName}"${evDate ? ` on ${evDate}` : ''}${evContext ? `\nEvent context: ${evContext}` : ''}\nIMPORTANT: Reference this event naturally in the content. The hook OR the value proposition should mention WHY this prospect specifically is a great fit for this event. Don't make the whole landing about the event — the event is part of the offer, not the only point.` : ''}
 
 Generate 4 short sections in JSON format. Each very direct, human, no filler.
 
@@ -14714,6 +14733,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       const buildLandingHTML = (f) => {
         const s = f.stakeholderId ? stakeholders.find(x => x.id === f.stakeholderId) : null;
         const sol = f.solutionId ? solutions.find(x => x.id === f.solutionId) : null;
+        const ev = f.eventId ? events.find(x => x.id === f.eventId) : null;
         // Account: explicit form.accountId wins; else pull from stakeholder's linked account
         const accId = f.accountId || (s ? linkedIds(s,'Account')[0] : null);
         const acc = accId ? accounts.find(a => a.id === accId) : null;
@@ -14721,6 +14741,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         const sRole = s ? F(s,'Role') || '' : '';
         const accName = acc ? F(acc,'Account Name') : '';
         const solName = sol ? F(sol,'Name') : '';
+        const evName = ev ? F(ev,'Event Name') : '';
+        const evStart = ev?.fields?.['Starting'] ? new Date(ev.fields['Starting']) : null;
+        const evDateStr = evStart ? evStart.toLocaleDateString(f.language === 'en' ? 'en-US' : (f.language === 'pt' ? 'pt-BR' : 'es-ES'), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
+        const evRegisterLink = (f.eventRegisterLink || '').trim() || (ev ? F(ev,'URL') || '' : '');
+        const evContext = ev ? (F(ev,'Aditional context') || '') : '';
         const bulletsList = (f.bullets||'').split('\n').map(b => b.trim()).filter(Boolean);
         const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         const lang = f.language || 'es';
@@ -14770,6 +14795,19 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       ${escape(f.socialProof)}
     </div>` : ''}
 
+    ${ev ? `
+    <!-- Event invitation block -->
+    <div style="padding:20px 22px;background:linear-gradient(135deg,${secondaryColor}15 0%,${tertiaryColor}10 100%);border:2px solid ${secondaryColor};border-radius:12px;margin-bottom:24px;">
+      <div style="font-size:11px;font-weight:800;color:${secondaryColor};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">🎟️ ${t.eventHeading}</div>
+      <h3 style="margin:0 0 8px;font-size:20px;font-weight:800;color:${darkColor};line-height:1.2;">${escape(evName)}</h3>
+      ${evDateStr ? `<div style="font-size:13px;color:#6B7280;margin-bottom:10px;"><strong style="color:${darkColor};">${t.eventDate}:</strong> ${escape(evDateStr)}</div>` : ''}
+      ${evContext ? `<p style="margin:0 0 14px;font-size:13px;color:#374151;line-height:1.5;white-space:pre-wrap;">${escape(evContext.slice(0, 300))}${evContext.length > 300 ? '...' : ''}</p>` : ''}
+      ${evRegisterLink ? `
+      <a href="${escape(evRegisterLink)}" style="display:inline-block;padding:11px 22px;background:${secondaryColor};color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">
+        ${t.eventRegisterCta} →
+      </a>` : ''}
+    </div>` : ''}
+
     <!-- CTA + sender block -->
     <div style="padding:24px 0;border-top:1px solid #E5E7EB;margin-top:24px;">
       <table width="100%" cellpadding="0" cellspacing="0"><tr>
@@ -14777,7 +14815,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           <img src="${escape(senderPhoto)}" alt="${escape(senderName)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid ${accentColor};" />
         </td>` : ''}
         <td valign="middle">
-          <p style="margin:0 0 4px;font-size:12px;color:#6B7280;">${t.ctaIntro}</p>
+          <p style="margin:0 0 4px;font-size:12px;color:#6B7280;">${ev ? t.eventOr : t.ctaIntro}</p>
           <a href="${escape(f.ctaLink)}" style="display:inline-block;padding:12px 26px;background:${accentColor};color:#1A1A2E;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px;margin:6px 0;">
             ${escape(f.ctaText || t.ctaDefault)} →
           </a>
@@ -14817,8 +14855,10 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         try {
           const fields = {
             'Slug': form.slug,
-            'Stakeholder': [form.stakeholderId],
+            ...(form.stakeholderId ? { 'Stakeholder': [form.stakeholderId] } : {}),
             ...(form.solutionId ? { 'Solution': [form.solutionId] } : {}),
+            ...(form.eventId ? { 'Event': [form.eventId] } : {}),
+            ...(form.eventRegisterLink ? { 'Event Register Link': form.eventRegisterLink } : {}),
             'Hook': form.hook,
             'Pain Context': form.painContext,
             'Value Proposition': form.valueProposition,
@@ -14883,10 +14923,18 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         setEditingLanding(landing);
         const stkId = linkedIds(landing, 'Stakeholder')[0] || '';
         const solId = linkedIds(landing, 'Solution')[0] || '';
+        const evId = linkedIds(landing, 'Event')[0] || '';
+        // Derive accountId from stakeholder if available
+        const stk = stkId ? stakeholders.find(x => x.id === stkId) : null;
+        const accId = stk ? linkedIds(stk, 'Account')[0] || '' : '';
         setForm({
           slug: F(landing, 'Slug') || '',
           stakeholderId: stkId,
+          accountId: accId,
           solutionId: solId,
+          eventId: evId,
+          eventRegisterLink: F(landing, 'Event Register Link') || '',
+          language: 'es',
           hook: F(landing, 'Hook') || '',
           painContext: F(landing, 'Pain Context') || '',
           valueProposition: F(landing, 'Value Proposition') || '',
@@ -14999,6 +15047,37 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
                     <option value="">— No solution attached —</option>
                     {solutions.map(s => <option key={s.id} value={s.id}>{F(s,'Name')}</option>)}
                   </select>
+
+                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>🎟️ Event (optional — invite them)</label>
+                  <select style={inputSt} value={form.eventId} onChange={e => {
+                    const evId = e.target.value;
+                    const ev = evId ? events.find(x => x.id === evId) : null;
+                    setForm(f => ({
+                      ...f,
+                      eventId: evId,
+                      // Auto-fill register link with event URL if no custom link yet
+                      eventRegisterLink: f.eventRegisterLink || (ev ? F(ev, 'URL') || '' : ''),
+                    }));
+                  }}>
+                    <option value="">— No event attached —</option>
+                    {events
+                      .sort((a, b) => new Date(b.fields?.['Starting'] || 0) - new Date(a.fields?.['Starting'] || 0))
+                      .map(ev => {
+                        const start = ev.fields?.['Starting'];
+                        const dateStr = start ? new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                        return <option key={ev.id} value={ev.id}>{F(ev,'Event Name')}{dateStr ? ` · ${dateStr}` : ''}</option>;
+                      })}
+                  </select>
+
+                  {form.eventId && (
+                    <div style={{ marginTop: 8 }}>
+                      <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block' }}>🔗 Registration link (override del URL del evento)</label>
+                      <input style={inputSt} value={form.eventRegisterLink} onChange={e => setForm(f => ({ ...f, eventRegisterLink: e.target.value }))} placeholder="https://eventbrite.com/... o link interno" />
+                      <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3, fontStyle: 'italic' }}>
+                        Si está vacío, usa el URL del evento. Sirve para landings con link de inscripción específico.
+                      </div>
+                    </div>
+                  )}
 
                   <label style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, display: 'block', marginTop: 10 }}>Slug (URL) *</label>
                   <input style={inputSt} value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} placeholder="juan-nuvocargo" />
