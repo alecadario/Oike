@@ -7529,7 +7529,8 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
           if (onLogActivity) onLogActivity();
         } catch (err) {
           console.error('Generate Exec Summary failed:', err);
-          alert('Failed to generate summary. Try again or check the console.');
+          const msg = err?.message || String(err) || 'unknown error';
+          alert(`Failed to generate summary: ${msg}\n\nPosibles causas:\n• OpenAI rate limit / timeout\n• Sesión expirada (refrescá la página)\n• Campo Airtable no existe en tu base\n\nMirá la consola del browser para más detalle.`);
         }
         setEvGeneratingSummary(false);
       };
@@ -14732,25 +14733,51 @@ No markdown, no commentary. JSON only.`;
         return [n, l, accSlug].filter(Boolean).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '');
       };
 
-      // Pick stakeholder → auto-fill slug + account
+      // ── Auto-detect language based on stakeholder/account country ──
+      const detectLanguageFromCountry = (stakeholder, account) => {
+        const country = (stakeholder ? F(stakeholder, 'Country') : '') || (account ? F(account, 'Country') : '') || '';
+        const c = String(country).toLowerCase();
+        // Portuguese
+        if (c.includes('brazil') || c.includes('brasil') || c.includes('portugal')) return 'pt';
+        // Spanish (LatAm + España)
+        const esCountries = ['spain','españa','espana','mexico','méxico','argentina','colombia','chile','peru','perú','venezuela','ecuador','bolivia','paraguay','uruguay','guatemala','honduras','costa rica','panama','panamá','el salvador','nicaragua','dominican','cuba','puerto rico'];
+        if (esCountries.some(k => c.includes(k))) return 'es';
+        // English (default for everything else: USA, UK, MENA, Europe non-Spanish, Asia, Africa)
+        if (c) return 'en';
+        return null; // unknown country, don't override
+      };
+
+      // Pick stakeholder → auto-fill slug + account + language detection
       const onPickStakeholder = (stakeholderId) => {
         const s = stakeholders.find(x => x.id === stakeholderId);
         const accId = s ? linkedIds(s, 'Account')[0] : '';
+        const acc = accId ? accounts.find(a => a.id === accId) : null;
+        const detectedLang = detectLanguageFromCountry(s, acc);
         setForm(f => ({
           ...f,
           stakeholderId,
           accountId: accId || f.accountId,
           slug: f.slug || autoSlugFromStakeholder(stakeholderId),
+          // Override language if we can detect from country (and only if user hasn't manually picked yet)
+          language: detectedLang || f.language,
+          ctaText: detectedLang && (f.ctaText === LANDING_I18N[f.language || 'es'].ctaDefault || !f.ctaText)
+            ? LANDING_I18N[detectedLang].ctaDefault
+            : f.ctaText,
         }));
       };
 
-      // Pick account (standalone, no stakeholder)
+      // Pick account (standalone, no stakeholder) — also detect language from account country
       const onPickAccount = (accountId) => {
         const a = accounts.find(x => x.id === accountId);
+        const detectedLang = detectLanguageFromCountry(null, a);
         setForm(f => ({
           ...f,
           accountId,
           slug: f.slug || (a ? (F(a, 'Account Name')||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : ''),
+          language: detectedLang || f.language,
+          ctaText: detectedLang && (f.ctaText === LANDING_I18N[f.language || 'es'].ctaDefault || !f.ctaText)
+            ? LANDING_I18N[detectedLang].ctaDefault
+            : f.ctaText,
         }));
       };
 
