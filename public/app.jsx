@@ -19117,17 +19117,29 @@ Return ONLY valid JSON.`;
                 ⚙️ Settings
               </button>
             </div>
-            <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {CURRENT_USER && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--globant-text)' }}>{CURRENT_USER.name}</div>
                     <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>{CURRENT_USER.email}</div>
                     <div style={{ fontSize: 9, marginTop: 2 }}><span style={{ background: CURRENT_USER.role === 'admin' ? 'rgba(91,191,181,0.2)' : 'rgba(96,165,250,0.2)', color: CURRENT_USER.role === 'admin' ? 'var(--globant-green)' : 'var(--globant-info)', padding: '2px 8px', borderRadius: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{CURRENT_USER.role || 'user'}</span></div>
                   </div>
-                  <button onClick={logoutUser} style={{ background: 'none', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 10px', color: 'var(--globant-muted)', fontSize: 11, cursor: 'pointer' }} title="Sign out">↪ Exit</button>
-                </div>
+                </>
               )}
+              <button
+                onClick={() => { if (confirm('Sign out of Oike?')) logoutUser(); }}
+                style={{
+                  width: '100%', padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#f87171', fontSize: 12, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                title="Sign out of Oike">
+                🚪 Sign out
+              </button>
             </div>
           </div>
           <div className="main">
