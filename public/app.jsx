@@ -651,7 +651,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         setGenLoading('');
       };
 
-      // Email Enrichment: Dropcontact → Apollo waterfall via Netlify function
+      // Email Enrichment: Dropcontact → Snov.io waterfall via Netlify function
       const enrichEmail = async () => {
         if (enrichLoading) return;
         const hasEmail = !!localEmail;
@@ -687,7 +687,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             const tried = Array.isArray(data.providers_tried) ? data.providers_tried : [];
             const providerLines = [];
             if (tried.includes('dropcontact')) providerLines.push(`• Dropcontact → ${data.dropcontact_reason || data.reason || 'no match'}`);
-            if (tried.includes('apollo'))      providerLines.push(`• Apollo → ${data.apollo_reason || data.reason || 'no match'}`);
+            if (tried.includes('snov'))        providerLines.push(`• Snov.io → ${data.snov_reason || data.reason || 'no match'}`);
             if (providerLines.length === 0)    providerLines.push(`• No providers configured (check env vars)`);
             const shouldOpenLi = confirm(
               `No email found.\n\n` +
@@ -736,7 +736,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     <button
                       onClick={enrichEmail}
                       disabled={enrichLoading}
-                      title={localEmail ? 'Re-enrich email via Dropcontact + Apollo' : 'Find email via Dropcontact + Apollo'}
+                      title={localEmail ? 'Re-enrich email via Dropcontact + Snov.io' : 'Find email via Dropcontact + Snov.io'}
                       style={{
                         fontSize: 10, padding: '2px 8px', borderRadius: 6, cursor: enrichLoading ? 'wait' : 'pointer',
                         background: 'rgba(91,191,181,0.12)', border: '1px solid rgba(91,191,181,0.3)',
