@@ -49,11 +49,19 @@ function mapDropcontactQualification(q: string): string {
   return 'risky';
 }
 
-function mapApolloStatus(s: string): string {
-  const v = String(s || '').toLowerCase();
-  if (v === 'verified') return 'valid';
-  if (v === 'likely to engage' || v === 'guessed') return 'risky';
-  if (v === 'unavailable' || v === 'invalid') return 'invalid';
+function mapSnovStatus(emailStatus: string, smtpStatus: string): string {
+  const s = String(emailStatus || '').toLowerCase();
+  const sm = String(smtpStatus || '').toLowerCase();
+  // Verified + smtp yes → highest confidence
+  if (s === 'verified' && sm === 'yes') return 'valid';
+  if (s === 'verified') return 'valid';
+  // smtp yes alone → still valid
+  if (sm === 'yes') return 'valid';
+  // smtp no → invalid
+  if (sm === 'no') return 'invalid';
+  // Catch-all detection
+  if (s.includes('catch') || sm.includes('catch')) return 'catch_all';
+  // Otherwise risky/unverified
   return 'risky';
 }
 
@@ -137,40 +145,82 @@ async function enrichWithDropcontact(firstName: string, lastName: string, domain
   return { ok: false, reason: 'timeout' };
 }
 
-// ── Apollo (fallback) ──
-async function enrichWithApollo(firstName: string, lastName: string, domain: string | null, apiKey: string) {
-  const body: any = {
-    first_name: firstName,
-    last_name: lastName,
-    reveal_personal_emails: true,
-  };
-  if (domain) body.domain = domain;
-
-  const res = await fetch('https://api.apollo.io/api/v1/people/match', {
+// ── Snov.io (fallback) ──
+async function getSnovToken(userId: string, secret: string): Promise<string | null> {
+  const params = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: userId,
+    client_secret: secret,
+  });
+  const res = await fetch('https://api.snov.io/v1/oauth/access_token', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-      'accept': 'application/json',
-      'X-Api-Key': apiKey,
-    },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
   });
   const data: any = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.person) {
-    return { ok: false, reason: `apollo-${res.status}` };
+  if (!res.ok || !data.access_token) {
+    console.error('[snov] auth failed:', res.status, JSON.stringify(data).slice(0, 200));
+    return null;
   }
-  const email = data.person.email;
-  if (!email || String(email).toLowerCase().includes('email_not_unlocked')) {
-    return { ok: false, reason: 'no-email' };
+  return data.access_token;
+}
+
+async function enrichWithSnov(firstName: string, lastName: string, domain: string | null, userId: string, secret: string) {
+  if (!domain) return { ok: false, reason: 'snov-no-domain' };
+
+  const token = await getSnovToken(userId, secret);
+  if (!token) return { ok: false, reason: 'snov-auth-failed' };
+
+  // Find email by name + domain
+  const params = new URLSearchParams({
+    firstName,
+    lastName,
+    domain,
+  });
+  const res = await fetch('https://api.snov.io/v1/get-emails-from-names', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+  const data: any = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const apiMsg = data?.message || data?.error || JSON.stringify(data).slice(0, 120);
+    console.error('[snov] HTTP error:', res.status, apiMsg);
+    return { ok: false, reason: `snov-${res.status}: ${apiMsg}` };
   }
-  const qualification = mapApolloStatus(data.person.email_status || '');
+
+  if (!data?.success) {
+    return { ok: false, reason: `snov-error: ${data?.message || 'unknown'}` };
+  }
+
+  const emails = data?.data?.emails || [];
+  if (!Array.isArray(emails) || emails.length === 0) {
+    return { ok: false, reason: 'snov-no-match' };
+  }
+
+  // Pick best email — prefer verified + smtp_status yes
+  const sorted = [...emails].sort((a: any, b: any) => {
+    const score = (e: any) => {
+      const verified = String(e.status || '').toLowerCase() === 'verified' ? 2 : 0;
+      const smtp = String(e.smtp_status || '').toLowerCase() === 'yes' ? 1 : 0;
+      return verified + smtp;
+    };
+    return score(b) - score(a);
+  });
+  const best = sorted[0];
+  if (!best?.email) return { ok: false, reason: 'snov-no-email' };
+
+  const qualification = mapSnovStatus(best.status || '', best.smtp_status || '');
   return {
     ok: true,
-    email: String(email).toLowerCase(),
+    email: String(best.email).toLowerCase(),
     qualification,
     confidence: confidenceFromQualification(qualification),
-    source: 'apollo',
+    source: 'snov',
   };
 }
 
@@ -195,14 +245,16 @@ export default async (req: Request, context: Context) => {
 
   const AIRTABLE_KEY = Netlify.env.get('AIRTABLE_API_KEY');
   const DROPCONTACT_KEY = Netlify.env.get('DROPCONTACT_API_KEY');
-  const APOLLO_KEY = Netlify.env.get('APOLLO_API_KEY');
+  const SNOVIO_USER_ID = Netlify.env.get('SNOVIO_USER_ID');
+  const SNOVIO_SECRET = Netlify.env.get('SNOVIO_SECRET');
+  const SNOVIO_CONFIGURED = !!(SNOVIO_USER_ID && SNOVIO_SECRET);
   if (!AIRTABLE_KEY) {
     return new Response(JSON.stringify({ error: 'Airtable API key not configured' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
-  if (!DROPCONTACT_KEY && !APOLLO_KEY) {
-    return new Response(JSON.stringify({ error: 'No enrichment provider configured (Dropcontact or Apollo)' }), {
+  if (!DROPCONTACT_KEY && !SNOVIO_CONFIGURED) {
+    return new Response(JSON.stringify({ error: 'No enrichment provider configured (Dropcontact or Snov.io)' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -261,24 +313,24 @@ export default async (req: Request, context: Context) => {
       }
     }
 
-    // 4. Waterfall: Dropcontact → Apollo fallback
+    // 4. Waterfall: Dropcontact → Snov.io fallback
     let result: any = { ok: false, reason: 'no-provider-configured' };
     const providersTried: string[] = [];
     let dropcontactReason = '';
-    let apolloReason = '';
+    let snovReason = '';
 
     if (DROPCONTACT_KEY) {
       providersTried.push('dropcontact');
       result = await enrichWithDropcontact(firstName, lastName, domain, DROPCONTACT_KEY);
       if (!result.ok) dropcontactReason = result.reason || 'unknown';
     }
-    if (!result.ok && APOLLO_KEY) {
-      providersTried.push('apollo');
-      const apolloResult = await enrichWithApollo(firstName, lastName, domain, APOLLO_KEY);
-      if (apolloResult.ok) {
-        result = apolloResult;
+    if (!result.ok && SNOVIO_CONFIGURED) {
+      providersTried.push('snov');
+      const snovResult = await enrichWithSnov(firstName, lastName, domain, SNOVIO_USER_ID!, SNOVIO_SECRET!);
+      if (snovResult.ok) {
+        result = snovResult;
       } else {
-        apolloReason = apolloResult.reason || 'unknown';
+        snovReason = snovResult.reason || 'unknown';
       }
     }
 
@@ -311,7 +363,7 @@ export default async (req: Request, context: Context) => {
       domain_used: domain,
       providers_tried: providersTried,
       dropcontact_reason: dropcontactReason || null,
-      apollo_reason: apolloReason || null,
+      snov_reason: snovReason || null,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
