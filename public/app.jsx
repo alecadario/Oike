@@ -19101,7 +19101,7 @@ Return ONLY valid JSON.`;
                 </div>
               ))}
             </nav>
-            <div style={{ padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ flexShrink: 0, padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <button
                 className="action-btn btn-ghost"
                 style={{ width: '100%', fontSize: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
