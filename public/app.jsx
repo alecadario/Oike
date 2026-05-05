@@ -4678,6 +4678,9 @@ Output ONLY the message, nothing else.`;
       const [bulkPainProgress, setBulkPainProgress] = useState('');
       const [editingAccount, setEditingAccount] = useState(null);
       const [accDetailTab, setAccDetailTab] = useState('intel');
+      const [radarData, setRadarData] = useState(null);
+      const [loadingRadar, setLoadingRadar] = useState(false);
+      const [savingRadar, setSavingRadar] = useState(false);
       const now = new Date();
 
       const saveAccountEdit = async (updatedFields) => {
@@ -5636,7 +5639,158 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       };
 
       // Reset talking points and recs when account changes
-      useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('intel'); }, [selectedAccountId]);
+      useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('intel'); setRadarData(null); }, [selectedAccountId]);
+
+      // ── Sales Intelligence Radar — generate for current account ──
+      const generateAccountRadar = async () => {
+        if (!account) return;
+        setLoadingRadar(true);
+        try {
+          const accName = F(account, 'Account Name') || 'Account';
+          const accIndustry = F(account, 'Industry') || '';
+          const accCountry = F(account, 'Country') || '';
+          const accSize = F(account, 'Company size') || '';
+          const accDescription = F(account, 'Company Description') || '';
+          const accWebsite = F(account, 'Website') || '';
+          const accStatus = F(account, 'Inside Sales Status') || '';
+          const accNews = F(account, 'Recent News') || '';
+          const accIntelRaw = F(account, 'Intel Notes') || '';
+          const accIntelClean = accIntelRaw ? String(accIntelRaw).replace(/📎\s*FILE:[\s\S]*?(?=\n📎\s*FILE:|$)/g, '').trim() : '';
+
+          // Stakeholders with HOT/WARM/COLD temperature from outreach history
+          const stkSummary = stakeholderEngagement.slice(0, 12).map(e => {
+            const temp = e.hasMeeting ? 'HOT🔥' : (e.hasReplied || e.totalTouches > 0) ? 'WARM🌡️' : 'COLD❄️';
+            const pain = (F(e.s, 'Pain Points (Generated)') || F(e.s, 'Pain points') || '').slice(0, 180);
+            const linkedin = (F(e.s, 'LinkedIn News (Generated)') || F(e.s, 'Linkedin lates news') || '').slice(0, 150);
+            return `- ${e.sName} (${F(e.s,'Role')||'?'}) [${temp}]${e.totalTouches > 0 ? ` · ${e.totalTouches} touches${e.daysSince !== null ? `, ${e.daysSince}d ago` : ''}` : ''}
+${pain ? `  Pain: ${pain}` : ''}${linkedin ? `\n  Signal: ${linkedin}` : ''}`;
+          }).join('\n');
+
+          const outreachSummary = accOutreach.slice(0, 8).map(o => {
+            const stkId = linkedIds(o, 'Stakeholder')[0];
+            const stk = stkId ? accStakeholders.find(s => s.id === stkId) : null;
+            const sName = stk ? `${F(stk,'Name')||''}` : 'Unknown';
+            const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
+            return `- ${date} · ${F(o,'Channel')||''} · ${F(o,'Status')||''} · ${sName}`;
+          }).join('\n');
+
+          const oppsSummary = opps.slice(0, 5).map(o =>
+            `- ${F(o,'Deal/Opp name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`
+          ).join('\n');
+
+          const prompt = `You are a senior B2B sales intelligence analyst. Generate a Sales Intelligence Radar for the following account. Return ONLY valid JSON.
+
+ACCOUNT: ${accName}
+Industry: ${accIndustry} · Country: ${accCountry} · Size: ${accSize}
+Website: ${accWebsite}
+Description: ${accDescription.slice(0,300)}
+Inside Sales Status: ${accStatus}
+
+RECENT NEWS:
+${(typeof accNews === 'string' ? accNews : '').slice(0,1200) || 'None'}
+
+INTEL NOTES:
+${accIntelClean.slice(0,800) || 'None'}
+
+STAKEHOLDERS (${stakeholderEngagement.length} mapped):
+${stkSummary || 'None yet'}
+
+RECENT OUTREACH:
+${outreachSummary || 'No outreach history'}
+
+OPEN OPPORTUNITIES:
+${oppsSummary || 'None'}
+
+Return a JSON object with EXACTLY these keys. Be specific and data-driven. Never use generic platitudes.
+
+{
+  "tldr": "3 sentences max: biggest opportunity right now, key risk, one immediate action",
+  "est_budget": "Estimated annual tech/services budget range based on company size and industry. E.g. '$2M–5M'. If unknown write 'Unknown — discovery needed'",
+  "portfolio_label": "1 line: what category of buyer are they? e.g. 'Digital transformation leader, early AI adopter'",
+  "key_developments": [
+    { "headline": "...", "signal": "what this means for us", "source": "News/Intel/LinkedIn" }
+  ],
+  "financial_signals": "2-3 sentences on financial health, investment activity, budget signals, hiring trends that imply budget",
+  "people_moves": [
+    { "name": "...", "move": "what changed (new role, promoted, left)", "relevance": "why it matters for our deal" }
+  ],
+  "social_sentiment": "1-2 sentences: what is the company publicly saying/signaling on LinkedIn or press? Tone: growth, caution, cost-cutting?",
+  "tech_stack": [
+    { "tool": "tool or platform name", "category": "CRM/ERP/Cloud/Analytics/etc", "opportunity": "how we can replace, complement or integrate with this" }
+  ],
+  "competitive": "2-3 sentences: who else could they be evaluating? What is our differentiation vs likely competitors?",
+  "hiring_signals": "1-2 sentences: what roles are they hiring that reveal strategic priorities?",
+  "upcoming_events": [
+    { "event": "...", "date": "...", "angle": "how to use this as an outreach hook or meeting trigger" }
+  ],
+  "recommended_actions": [
+    { "priority": 1, "stakeholder": "Name or role", "temperature": "HOT/WARM/COLD", "action": "specific action", "channel": "LinkedIn/Email/Phone/WhatsApp", "rationale": "why now" }
+  ]
+}
+
+Rules:
+- key_developments: 2-4 items based on real news/intel provided
+- people_moves: only include if there are actual signals, otherwise empty array []
+- tech_stack: 2-5 tools you can infer from industry/description/news
+- upcoming_events: only if you can infer real events (conferences, fiscal year end, announced launches), otherwise []
+- recommended_actions: 3-5 actions, ordered by priority, using real stakeholder names from the data
+- Return ONLY valid JSON. No markdown. No commentary.`;
+
+          const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 2800 });
+          const cleaned = raw.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+          const parsed = JSON.parse(cleaned);
+          setRadarData(parsed);
+        } catch (e) {
+          console.error('Radar generation failed:', e);
+          alert('Radar generation failed: ' + (e?.message || String(e)));
+        }
+        setLoadingRadar(false);
+      };
+
+      // ── Save Radar to Intel Notes (prepends to existing notes) ──
+      const saveRadarToIntel = async () => {
+        if (!radarData || !account) return;
+        setSavingRadar(true);
+        try {
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const lines = [
+            `🔮 SALES INTELLIGENCE RADAR — ${F(account,'Account Name')||'Account'} · ${dateStr}`,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            ``,
+            `TL;DR: ${radarData.tldr || ''}`,
+            `Est. Budget: ${radarData.est_budget || ''}`,
+            `Profile: ${radarData.portfolio_label || ''}`,
+            ``,
+            `📰 KEY DEVELOPMENTS:`,
+            ...(radarData.key_developments || []).map(d => `• ${d.headline} → ${d.signal}`),
+            ``,
+            `💰 FINANCIAL SIGNALS: ${radarData.financial_signals || ''}`,
+            ``,
+            `👥 PEOPLE MOVES:`,
+            ...(radarData.people_moves || []).map(m => `• ${m.name}: ${m.move} — ${m.relevance}`),
+            ``,
+            `🏆 COMPETITIVE: ${radarData.competitive || ''}`,
+            ``,
+            `💼 HIRING SIGNALS: ${radarData.hiring_signals || ''}`,
+            ``,
+            `⚡ RECOMMENDED ACTIONS:`,
+            ...(radarData.recommended_actions || []).map(a => `• [${a.temperature}] ${a.stakeholder} → ${a.action} via ${a.channel} — ${a.rationale}`),
+            ``,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+          ];
+          const radarText = lines.join('\n');
+          const existingNotes = F(account, 'Intel Notes') || '';
+          const newNotes = radarText + (existingNotes ? '\n\n' + existingNotes : '');
+          if (onUpdateRecord) onUpdateRecord('accounts', account.id, { 'Intel Notes': newNotes });
+          await api.updateRecord(TABLE_IDS.accounts, account.id, { 'Intel Notes': newNotes });
+          if (onLogActivity) onLogActivity();
+          alert('✅ Radar saved to Intel Notes!');
+        } catch (e) {
+          console.error('Save radar failed:', e);
+          alert('Failed to save Radar: ' + (e?.message || String(e)));
+        }
+        setSavingRadar(false);
+      };
 
       return (
         <div>
@@ -6230,6 +6384,193 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
                       );
                     })()}
                   </div>
+                </div>
+              )}
+
+              {/* ══════════ SALES INTELLIGENCE RADAR (inline, intel tab) ══════════ */}
+              {accDetailTab === 'intel' && (
+                <div className="card" style={{ marginTop: 16 }}>
+                  <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                    <div>
+                      <h3>🔮 Sales Intelligence Radar</h3>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>AI-generated account intelligence snapshot</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {radarData && (
+                        <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={saveRadarToIntel} disabled={savingRadar}>
+                          {savingRadar ? '⏳ Saving...' : '💾 Save to Intel Notes'}
+                        </button>
+                      )}
+                      <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                        onClick={generateAccountRadar} disabled={loadingRadar}>
+                        {loadingRadar ? '⏳ Generating...' : radarData ? '🔄 Refresh Radar' : '✨ Generate Radar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!radarData && !loadingRadar && (
+                    <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0' }}>
+                      Generate a full intelligence radar for this account — key developments, financial signals, competitive landscape, people moves, and recommended actions with HOT🔥/WARM🌡️/COLD❄️ stakeholder priorities.
+                    </p>
+                  )}
+
+                  {loadingRadar && (
+                    <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>
+                      ⏳ Scanning signals and building your radar…
+                    </div>
+                  )}
+
+                  {radarData && (() => {
+                    const rd = radarData;
+                    const sectionTitle = (icon, label, color = '#5BBFB5') => (
+                      <div style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>{icon}</span><span>{label}</span>
+                      </div>
+                    );
+                    const box = (children, style = {}) => (
+                      <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.06)', ...style }}>
+                        {children}
+                      </div>
+                    );
+                    const tempBadge = (temp) => {
+                      const cfg = temp === 'HOT' ? { icon: '🔥', bg: 'rgba(239,68,68,0.15)', color: '#f87171' }
+                               : temp === 'WARM' ? { icon: '🌡️', bg: 'rgba(251,146,60,0.15)', color: '#fb923c' }
+                               : { icon: '❄️', bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' };
+                      return (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: cfg.bg, color: cfg.color }}>
+                          {cfg.icon} {temp}
+                        </span>
+                      );
+                    };
+                    return (
+                      <div>
+                        {/* TL;DR banner */}
+                        <div style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(91,191,181,0.12) 100%)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 10, padding: '14px 18px', marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#a78bfa', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>🔮 TL;DR</div>
+                          <p style={{ margin: 0, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6 }}>{rd.tldr}</p>
+                          <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            {rd.est_budget && (
+                              <span style={{ fontSize: 11, background: 'rgba(74,222,128,0.12)', color: '#4ade80', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>
+                                💰 {rd.est_budget}
+                              </span>
+                            )}
+                            {rd.portfolio_label && (
+                              <span style={{ fontSize: 11, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>
+                                🏷️ {rd.portfolio_label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Key Developments + People Moves */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                          {box(
+                            <>
+                              {sectionTitle('📰', 'Key Developments', '#fbbf24')}
+                              {(rd.key_developments || []).map((d, i) => (
+                                <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: i < rd.key_developments.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 3 }}>{d.headline}</div>
+                                  <div style={{ fontSize: 11, color: '#5BBFB5', marginBottom: 2 }}>→ {d.signal}</div>
+                                  {d.source && <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Source: {d.source}</div>}
+                                </div>
+                              ))}
+                              {(!rd.key_developments || rd.key_developments.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No key developments found.</div>}
+                            </>
+                          )}
+                          {box(
+                            <>
+                              {sectionTitle('👥', 'People Moves', '#fb923c')}
+                              {(rd.people_moves || []).length > 0 ? (rd.people_moves || []).map((m, i) => (
+                                <div key={i} style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{m.name}</div>
+                                  <div style={{ fontSize: 11, color: '#fb923c', marginBottom: 2 }}>{m.move}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{m.relevance}</div>
+                                </div>
+                              )) : <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No significant people moves detected.</div>}
+                              <div style={{ marginTop: 12 }}>
+                                {sectionTitle('📣', 'Social Sentiment', '#60a5fa')}
+                                <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.social_sentiment || '—'}</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Financial Signals + Tech Stack */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                          {box(
+                            <>
+                              {sectionTitle('💰', 'Financial Signals', '#4ade80')}
+                              <p style={{ margin: 0, fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.financial_signals || '—'}</p>
+                              <div style={{ marginTop: 12 }}>
+                                {sectionTitle('💼', 'Hiring Signals', '#a78bfa')}
+                                <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.hiring_signals || '—'}</p>
+                              </div>
+                            </>
+                          )}
+                          {box(
+                            <>
+                              {sectionTitle('⚙️', 'Tech Stack', '#94a3b8')}
+                              {(rd.tech_stack || []).map((t, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-text)' }}>{t.tool}</div>
+                                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 2 }}>{t.category}</div>
+                                    {t.opportunity && <div style={{ fontSize: 10, color: '#5BBFB5' }}>⚡ {t.opportunity}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                              {(!rd.tech_stack || rd.tech_stack.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No tech stack signals found.</div>}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Competitive + Upcoming Events */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                          {box(
+                            <>
+                              {sectionTitle('🏆', 'Competitive Landscape', '#f472b6')}
+                              <p style={{ margin: 0, fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.competitive || '—'}</p>
+                            </>
+                          )}
+                          {box(
+                            <>
+                              {sectionTitle('📅', 'Upcoming Events', '#38bdf8')}
+                              {(rd.upcoming_events || []).length > 0 ? (rd.upcoming_events || []).map((ev, i) => (
+                                <div key={i} style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{ev.event}</div>
+                                  {ev.date && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 2 }}>📅 {ev.date}</div>}
+                                  {ev.angle && <div style={{ fontSize: 11, color: '#38bdf8' }}>→ {ev.angle}</div>}
+                                </div>
+                              )) : <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No upcoming events identified.</div>}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Recommended Actions */}
+                        {(rd.recommended_actions || []).length > 0 && (
+                          <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.1) 0%, rgba(91,191,181,0.05) 100%)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '16px 18px' }}>
+                            {sectionTitle('⚡', 'Recommended Actions', '#5BBFB5')}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {(rd.recommended_actions || []).map((a, i) => (
+                                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '10px 12px' }}>
+                                  <div style={{ fontSize: 12, fontWeight: 800, color: '#5BBFB5', minWidth: 16, paddingTop: 1 }}>{i + 1}</div>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{a.stakeholder}</span>
+                                      {tempBadge(a.temperature)}
+                                      {a.channel && <span style={{ fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: 6 }}>{a.channel}</span>}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: 'var(--globant-text)', marginBottom: 3 }}>{a.action}</div>
+                                    {a.rationale && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{a.rationale}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -16687,12 +17028,12 @@ Return ONLY valid JSON.`;
       const generateAccountBriefingHtml = async () => {
         const targetAccountId = intelFilterAccountIds[0];
         if (!targetAccountId) {
-          alert('Pick exactly 1 account from "Specific account(s)" filter to generate an Account Briefing.');
+          alert('Pick exactly 1 account from "Specific account(s)" filter to generate a Sales Intelligence Radar.');
           return;
         }
         setGenerating(true);
         try {
-          const T = RB_DARK, G = RB_PRIMARY, S = RB_SECONDARY, TR = RB_TERTIARY, GR = '#4A4A4A';
+          const BG = '#0D0D1A', BG2 = '#131326', CARD = '#1A1A2E', G = RB_PRIMARY, S = RB_SECONDARY, GR = '#94a3b8';
 
           const acc = accounts.find(a => a.id === targetAccountId);
           if (!acc) { alert('Account not found.'); setGenerating(false); return; }
@@ -16706,495 +17047,307 @@ Return ONLY valid JSON.`;
           const accStatus = F(acc, 'Inside Sales Status') || '';
           const accDescription = F(acc, 'Company Description') || '';
           const accSize = F(acc, 'Company size') || '';
-
-          // Strip FILE: blocks from intel notes for cleaner display
-          const accIntelClean = accIntel
-            ? String(accIntel).replace(/📎\s*FILE:[\s\S]*?(?=\n📎\s*FILE:|$)/g, '').trim()
-            : '';
-
-          // ── Parse Recent News into structured items (same logic as in-app newsItems) ──
-          const parseNewsLocal = (sourceText) => {
-            if (!sourceText || typeof sourceText !== 'string') return [];
-            const raw = sourceText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 3);
-            const items = [];
-            let current = null;
-            const cleanMd = (s) => s.replace(/^\.\s*/, '').replace(/\*\*/g, '').replace(/^[-•*\d.]+\s*/, '').trim();
-            const isLink = (s) => /^\[Read more\]|^\[Source\]|^\[Link\]|^https?:\/\//i.test(s.trim());
-            const extractUrl = (s) => { const m = s.match(/\((https?:\/\/[^)]+)\)/); return m ? m[1] : (s.match(/(https?:\/\/\S+)/)?.[1] || ''); };
-            const isTitle = (s) => { const c = cleanMd(s); return c.length > 10 && c.length < 200 && (/\*\*/.test(s) || /^[A-Z]/.test(c)); };
-            for (const line of raw) {
-              if (isLink(cleanMd(line))) { if (current) current.source = extractUrl(line); continue; }
-              const cleaned = cleanMd(line);
-              if (!cleaned || cleaned.length < 5) continue;
-              if (isTitle(line) && cleaned.length < 120) {
-                if (current) items.push(current);
-                current = { title: cleaned, body: '', source: '' };
-              } else if (current && !current.body) { current.body = cleaned; }
-              else if (!current) { current = { title: cleaned, body: '', source: '' }; }
-            }
-            if (current) items.push(current);
-            const seen = new Set();
-            return items.filter(item => {
-              const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
-              if (seen.has(key)) return false; seen.add(key); return true;
-            }).slice(0, 5);
-          };
-          const newsItemsLocal = parseNewsLocal(accNews);
-          const tagFor = (title, body) => {
-            const lc = ((title||'') + ' ' + (body||'')).toLowerCase();
-            if (lc.includes('ai') || lc.includes('artificial')) return { label:'AI', color:'#bfd730' };
-            if (lc.includes('digital')) return { label:'Digital', color:'#60a5fa' };
-            if (lc.includes('partner') || lc.includes('deal') || lc.includes('agreement')) return { label:'Partnership', color:'#a78bfa' };
-            if (lc.includes('financ') || lc.includes('revenue') || lc.includes('invest') || lc.includes('dividend') || lc.includes('earning') || lc.includes('billion')) return { label:'Finance', color:'#4ade80' };
-            if (lc.includes('hire') || lc.includes('appoint') || lc.includes('ceo') || lc.includes('cto') || lc.includes('leader')) return { label:'Leadership', color:'#fb923c' };
-            if (lc.includes('customer') || lc.includes('cx') || lc.includes('experience')) return { label:'CX', color:'#f472b6' };
-            if (lc.includes('expand') || lc.includes('launch') || lc.includes('open') || lc.includes('new office')) return { label:'Expansion', color:'#38bdf8' };
-            if (lc.includes('incident') || lc.includes('fire') || lc.includes('shutdown') || lc.includes('crisis')) return { label:'Incident', color:'#ef4444' };
-            return { label:'News', color:'#94a3b8' };
-          };
-
-          // ── Read MEDDPICC from localStorage if available for this account ──
-          let savedMeddpicc = {};
-          try {
-            const all = JSON.parse(localStorage.getItem('oike_meddpicc') || '{}');
-            savedMeddpicc = all[targetAccountId]?.fields || {};
-          } catch {}
-
-          // Stakeholders for this account
+          // ── Stakeholders with HOT/WARM/COLD temperature from outreach ──
           const accStks = stakeholders.filter(s => linkedIds(s, 'Account').includes(targetAccountId));
-
-          // Outreach history for this account
           const accOutreach = outreach
             .filter(o => linkedIds(o, 'Account').includes(targetAccountId))
             .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+
           const totalSent = accOutreach.length;
           const replies = accOutreach.filter(o => F(o, 'Status') === 'Replied').length;
           const meetings = accOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status'))).length;
           const lastTouch = accOutreach[0];
-          const lastTouchDate = lastTouch?.fields?.['Date'] ? new Date(lastTouch.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
-          const daysSinceLastTouch = lastTouch?.fields?.['Date'] ? Math.floor((new Date() - new Date(lastTouch.fields['Date'])) / (1000*60*60*24)) : null;
+          const lastTouchDate = lastTouch?.fields?.['Date']
+            ? new Date(lastTouch.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'Never';
 
-          // Linked opportunities
+          // Opportunities
           const accOpps = opportunities.filter(o => linkedIds(o, 'Account').includes(targetAccountId));
           const openOpps = accOpps.filter(o => !['Closed Won','Closed/Won','Closed Lost','Closed/Lost','Closed/Canceled'].includes(F(o, 'Stage')));
           const pipelineValue = openOpps.reduce((sum, o) => sum + (o.fields?.['Value'] || 0), 0);
 
-          // Linked solutions (via opportunities)
-          const linkedSolIds = new Set(accOpps.flatMap(o => linkedIds(o, 'Solutions')));
-          const linkedSols = solutions.filter(s => linkedSolIds.has(s.id));
-
-          // Build the AI prompt with all the context
-          const stkSummary = accStks.slice(0, 10).map(s => {
-            const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
-            const sRole = F(s,'Role') || '';
-            const sInfluence = F(s,'Level of Influence') || '';
-            const sStatus = F(s,'Status') || '';
-            const sPain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 250);
-            const sLinkedin = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 200);
-            return `- ${sName} (${sRole})${sInfluence ? ' · ' + sInfluence : ''}${sStatus ? ' · ' + sStatus : ''}\n${sPain ? `  Pain: ${sPain}\n` : ''}${sLinkedin ? `  LinkedIn: ${sLinkedin}\n` : ''}`;
+          // Stakeholder summary with HOT/WARM/COLD
+          const stkSummary = accStks.slice(0, 12).map(s => {
+            const stkOutreach = accOutreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id));
+            const hasMeeting = stkOutreach.some(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status')));
+            const hasReplied = stkOutreach.some(o => F(o, 'Status') === 'Replied');
+            const temp = hasMeeting ? 'HOT🔥' : (hasReplied || stkOutreach.length > 0) ? 'WARM🌡️' : 'COLD❄️';
+            const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 180);
+            const signal = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 150);
+            return `- ${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() + ` (${F(s,'Role')||'?'}) [${temp}]${stkOutreach.length > 0 ? \` · \${stkOutreach.length} touches\` : ''}\n\${pain ? '  Pain: '+pain : ''}\${signal ? '\n  Signal: '+signal : ''}`;
           }).join('\n');
 
           const outreachSummary = accOutreach.slice(0, 8).map(o => {
-            const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
             const stkId = linkedIds(o, 'Stakeholder')[0];
             const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
-            const stkName = stk ? `${F(stk,'Name')||''}` : 'Unknown';
-            return `- ${date} | ${F(o,'Channel')||''} | ${F(o,'Status')||''} | ${stkName} | ${(F(o,'Notes') || F(o,'Message') || '').slice(0, 120)}`;
+            const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
+            return `- ${date} · ${F(o,'Channel')||''} · ${F(o,'Status')||''} · ${stk ? F(stk,'Name') : 'Unknown'}`;
           }).join('\n');
 
-          const oppsSummary = openOpps.slice(0, 5).map(o => `- ${F(o,'Deal/Opp name')||F(o,'Name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`).join('\n');
+          const oppsSummary = openOpps.slice(0, 5).map(o =>
+            `- ${F(o,'Deal/Opp name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`
+          ).join('\n');
 
-          // Existing MEDDPICC context for AI to enrich (don't overwrite, just fill gaps)
-          const meddpiccCtx = Object.entries(savedMeddpicc).filter(([_,v]) => v && String(v).trim()).map(([k,v]) => `${k}: ${v}`).join('\n') || 'None saved yet';
-
-          const aiPrompt = `You are a senior B2B sales strategist preparing a pre-meeting briefing for a sales rep about to meet with this account. Generate an executive briefing dashboard.
+          // ── AI Radar Prompt ──
+          const radarPrompt = `You are a senior B2B sales intelligence analyst. Generate a Sales Intelligence Radar for this account. Return ONLY valid JSON.
 
 ACCOUNT: ${accName}
-${accIndustry ? `Industry: ${accIndustry}` : ''}${accCountry ? ` · Country: ${accCountry}` : ''}${accSize ? ` · Size: ${accSize}` : ''}
-${accDescription ? `Description: ${accDescription.slice(0, 300)}` : ''}
-${accStatus ? `Inside Sales Status: ${accStatus}` : ''}
+Industry: ${accIndustry} · Country: ${accCountry} · Size: ${accSize}
+Website: ${accWebsite}
+Description: ${accDescription.slice(0,300)}
+Inside Sales Status: ${accStatus}
 
 RECENT NEWS:
-${typeof accNews === 'string' ? accNews.slice(0, 1200) : 'None'}
+${(typeof accNews === 'string' ? accNews : '').slice(0,1200)||'None'}
 
-INTEL NOTES (manual):
-${accIntelClean.slice(0, 800) || 'None'}
+INTEL NOTES:
+${accIntelClean.slice(0,800)||'None'}
 
-STAKEHOLDERS (${accStks.length} total):
-${stkSummary || 'None mapped yet'}
+STAKEHOLDERS (${accStks.length} mapped):
+${stkSummary||'None yet'}
 
-RECENT OUTREACH (last 8, total ${totalSent}, ${replies} replies, ${meetings} meetings):
-${outreachSummary || 'No outreach history'}
+OUTREACH SUMMARY (total ${totalSent}, ${replies} replies, ${meetings} meetings, last touch ${lastTouchDate}):
+${outreachSummary||'No outreach history'}
 
-OPEN OPPORTUNITIES (${openOpps.length}, total pipeline ${formatCurrency(pipelineValue)}):
-${oppsSummary || 'None'}
+OPEN OPPORTUNITIES (${openOpps.length}, pipeline ${formatCurrency(pipelineValue)}):
+${oppsSummary||'None'}
 
-LINKED SOLUTIONS WE OFFER:
-${linkedSols.map(s => `- ${F(s,'Name')}: ${F(s,'Stakeholder Key Message') || ''}`).join('\n') || 'None'}
-
-EXISTING MEDDPICC (if any):
-${meddpiccCtx}
-
-Return a JSON object with these EXACT keys. Be specific, use real names and numbers. Never write generic platitudes. If info is unknown, write "Unknown — needs discovery" (do NOT skip the field).
+Return JSON with EXACTLY these keys. Be specific. Use real names. Never use platitudes. If info is unknown, say so briefly.
 
 {
-  "account_snapshot": "2-3 sentences describing where this account is right now — sector, size, recent context, current standing in our pipeline. Mention named stakeholders if any.",
-  "strategic_angle": "2-3 sentences on the strategic angle: what we should pitch and why now, based on their pains/news/signals. Reference 1+ of our linked solutions if relevant.",
-  "pipeline_status": "2-3 sentences on the pipeline reality: outreach volume, reply rate, open opportunities, stage, stuck points, last touch.",
-  "relationship_map_summary": "2-3 sentences mapping who we know, who we don't, who's the champion (if any), and the gap to close to reach the economic buyer.",
-  "executive_summary": "3-4 sentences executive-level. The single biggest opportunity, the single biggest risk, named stakeholder, and what's next. This is the TL;DR.",
-  "what_changed": "What's new since last contact or in the company recently. Reference news + LinkedIn signals. 2-3 sentences.",
-  "stakeholder_map": [
-    { "name": "...", "role": "...", "status": "Cold/Engaged/Champion/Blocker/Decision Maker/Influencer", "influence": "High/Medium/Low/Unknown", "key_insight": "1 sentence about what they care about and how to approach", "next_action": "specific action" }
-  ],
-  "meddpicc": {
-    "metrics": "What measurable value will we deliver? (or 'Unknown — needs discovery')",
-    "economicBuyer": "Named person with budget authority (or 'Unknown — needs discovery')",
-    "decisionCriteria": "How they'll evaluate options",
-    "decisionProcess": "Internal approval process and timeline",
-    "paperProcess": "Contracting, legal, procurement",
-    "identifyPain": "Core problem they urgently need to solve",
-    "champion": "Named internal advocate (or 'Unknown — needs discovery')",
-    "competition": "Who else they're evaluating + our differentiator"
-  },
-  "talking_points": ["3-5 specific points based on real pains + news. Each one references real data, not platitudes."],
-  "open_questions": ["3-4 strategic questions to ask in the meeting that uncover budget, decision-makers, or timing"],
-  "risk_or_blockers": "Specific risk (stale relationship, competitive threat, internal change, budget freeze, etc.) — 1-2 sentences. Or null if none.",
-  "recommended_next_step": "ONE concrete next step after this meeting. Specific. Time-bound."
+  "tldr": "3 sentences max: biggest opportunity, key risk, one immediate action",
+  "est_budget": "Estimated annual tech/services budget range based on size+industry. E.g. '$2M–5M'. If unknown: 'Unknown — discovery needed'",
+  "portfolio_label": "1 line buyer profile, e.g. 'Digital transformation leader, early AI adopter'",
+  "key_developments": [{ "headline": "...", "signal": "what this means for us", "source": "News/Intel/LinkedIn" }],
+  "financial_signals": "2-3 sentences: financial health, investments, budget signals from hiring/news",
+  "people_moves": [{ "name": "...", "move": "what changed", "relevance": "why it matters for our deal" }],
+  "social_sentiment": "1-2 sentences: what are they signaling publicly? Growth, caution, cost-cutting?",
+  "tech_stack": [{ "tool": "tool or platform", "category": "CRM/ERP/Cloud/Analytics/etc", "opportunity": "how we can replace, complement or integrate" }],
+  "competitive": "2-3 sentences: who else could they evaluate? Our differentiation vs likely competitors?",
+  "hiring_signals": "1-2 sentences: what roles reveal their strategic priorities?",
+  "upcoming_events": [{ "event": "...", "date": "...", "angle": "outreach hook or meeting trigger" }],
+  "recommended_actions": [{ "priority": 1, "stakeholder": "Name or role", "temperature": "HOT/WARM/COLD", "action": "specific action", "channel": "LinkedIn/Email/Phone/WhatsApp", "rationale": "why now" }]
 }
 
-Return ONLY valid JSON. No fluff in any field.`;
+Rules: key_developments 2-4 items · people_moves only if real signals else [] · tech_stack 2-5 tools · upcoming_events only real events else [] · recommended_actions 3-5 ordered by priority · Return ONLY valid JSON no markdown.`;
 
-          let aiData = {};
+          let rd = {};
           try {
-            const raw = await callOpenAI({ prompt: aiPrompt, temperature: 0.5, max_tokens: 2600 });
-            const cleaned = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-            aiData = JSON.parse(cleaned);
+            const raw = await callOpenAI({ prompt: radarPrompt, temperature: 0.5, max_tokens: 2800 });
+            const cleaned = raw.replace(/\`\`\`json?\n?/g,'').replace(/\`\`\`/g,'').trim();
+            rd = JSON.parse(cleaned);
           } catch (e) {
-            console.error('Account briefing AI failed:', e);
-            aiData = { executive_summary: 'AI generation failed. Check OpenAI proxy or try again.' };
+            console.error('Radar AI parse failed:', e);
+            rd = { tldr: 'AI generation failed — check OpenAI proxy or try again.', est_budget: '', portfolio_label: '', key_developments: [], financial_signals: '', people_moves: [], social_sentiment: '', tech_stack: [], competitive: '', hiring_signals: '', upcoming_events: [], recommended_actions: [] };
           }
 
-          const escape = (x) => String(x||'').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          const dateLabel = `Generated ${new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}`;
+          const escape = (x) => String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const dateLabel = `Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
 
-          // ── Recent News cards HTML (2-col grid, colored tags) ──
-          const newsCardsHtml = newsItemsLocal.length ? `
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
-              ${(() => {
-                const rows = [];
-                for (let i = 0; i < newsItemsLocal.length; i += 2) {
-                  const a = newsItemsLocal[i], b = newsItemsLocal[i+1];
-                  const card = (it) => {
-                    if (!it) return '<td style="width:50%;padding:5px;"></td>';
-                    const tag = tagFor(it.title, it.body);
-                    return `<td valign="top" style="width:50%;padding:5px;">
-                      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-left:3px solid ${tag.color};border-radius:8px;padding:12px 14px;">
-                        <table width="100%" cellpadding="0" cellspacing="0"><tr>
-                          <td style="font-size:13px;font-weight:700;color:${T};line-height:1.35;padding-right:6px;">${escape(it.title)}</td>
-                          <td style="text-align:right;vertical-align:top;width:80px;">
-                            <span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:5px;background:${tag.color}22;color:${tag.color};">${escape(tag.label)}</span>
-                          </td>
-                        </tr></table>
-                        ${it.body ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-top:6px;">${escape(it.body.slice(0, 220))}${it.body.length>220?'…':''}</div>` : ''}
-                        ${it.source ? `<div style="margin-top:6px;"><a href="${escape(it.source)}" style="font-size:10px;color:${G};text-decoration:none;">🔗 Source</a></div>` : ''}
-                      </div>
-                    </td>`;
-                  };
-                  rows.push(`<tr>${card(a)}${card(b)}</tr>`);
-                }
-                return rows.join('');
-              })()}
-            </table>` : '';
-
-          // ── Stakeholders Identified — merge real account stakeholders + AI insights ──
-          const aiStkByName = {};
-          (aiData.stakeholder_map || []).forEach(m => {
-            const key = (m.name || '').toLowerCase().trim();
-            if (key) aiStkByName[key] = m;
-          });
-          const statusColorFor = (st) => ({
-            'Champion':'#10B981','Engaged':'#10B981','Engaging':'#10B981',
-            'Decision Maker':'#3B82F6','Decision-Maker':'#3B82F6',
-            'Cold':'#9CA3AF','Unknown':'#9CA3AF',
-            'Blocker':'#EF4444',
-            'Influencer':'#8B5CF6',
-          }[st] || G);
-          const initials = (s) => `${(F(s,'Name')||'').charAt(0)}${(F(s,'Last name')||'').charAt(0)}`.toUpperCase() || '?';
-
-          let stakeholdersHtml = '';
-          if (accStks.length > 0) {
-            stakeholdersHtml = accStks.slice(0, 12).map(s => {
-              const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() || 'Unnamed';
-              const sRole = F(s,'Role') || '';
-              const sStatus = F(s,'Status') || 'Unknown';
-              const sInfluence = F(s,'Level of Influence') || '';
-              const sLinkedin = F(s,'LinkedIn URL') || F(s,'LinkedIn') || '';
-              const sEmail = F(s,'Email') || '';
-              const sPain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0, 240);
-              const sLNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0, 220);
-              const ai = aiStkByName[sName.toLowerCase()] || {};
-              const finalStatus = ai.status || sStatus;
-              const sc = statusColorFor(finalStatus);
-              return `
-              <div style="background:#FFF;border:1px solid #E5E7EB;border-left:4px solid ${sc};border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:10px;">
-                <table width="100%" cellpadding="0" cellspacing="0"><tr>
-                  <td valign="top" width="44" style="padding-right:10px;">
-                    <div style="width:36px;height:36px;border-radius:50%;background:${sc}22;color:${sc};font-weight:800;font-size:13px;text-align:center;line-height:36px;">${initials(s)}</div>
-                  </td>
-                  <td valign="top">
-                    <div style="font-size:14px;font-weight:700;color:${T};">${escape(sName)}</div>
-                    ${sRole ? `<div style="font-size:11px;color:#6B7280;margin-top:2px;">${escape(sRole)}</div>` : ''}
-                  </td>
-                  <td valign="top" style="text-align:right;width:auto;">
-                    <span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:${sc}22;color:${sc};margin-bottom:3px;">${escape(finalStatus)}</span>
-                    ${sInfluence ? `<div style="font-size:9px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Inf: ${escape(sInfluence)}</div>` : ''}
-                  </td>
-                </tr></table>
-                ${sPain ? `<div style="margin-top:10px;padding:8px 10px;background:#FEF3C7;border-left:2px solid #F59E0B;border-radius:0 4px 4px 0;font-size:11px;color:${T};line-height:1.5;"><strong style="color:#B45309;">Pain:</strong> ${escape(sPain)}</div>` : ''}
-                ${sLNews ? `<div style="margin-top:6px;padding:8px 10px;background:#DBEAFE;border-left:2px solid #3B82F6;border-radius:0 4px 4px 0;font-size:11px;color:${T};line-height:1.5;"><strong style="color:#1E40AF;">LinkedIn signal:</strong> ${escape(sLNews)}</div>` : ''}
-                ${ai.key_insight ? `<div style="margin-top:6px;font-size:12px;color:${GR};line-height:1.5;"><strong style="color:${T};">Approach:</strong> ${escape(ai.key_insight)}</div>` : ''}
-                ${ai.next_action ? `<div style="margin-top:8px;padding:7px 10px;background:${G}15;border-left:2px solid ${G};border-radius:0 4px 4px 0;font-size:11px;color:${T};"><strong style="color:${G};">▸ Next action:</strong> ${escape(ai.next_action)}</div>` : ''}
-                ${(sEmail || sLinkedin) ? `<div style="margin-top:8px;font-size:10px;color:#6B7280;">${sEmail ? `<a href="mailto:${escape(sEmail)}" style="color:${G};text-decoration:none;">✉ ${escape(sEmail)}</a>` : ''}${sEmail && sLinkedin ? ' · ' : ''}${sLinkedin ? `<a href="${escape(sLinkedin)}" style="color:${G};text-decoration:none;">in/${escape(sName)}</a>` : ''}</div>` : ''}
-              </div>`;
-            }).join('');
-          } else {
-            stakeholdersHtml = `<div style="padding:18px;background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:0 10px 10px 0;font-size:13px;color:${T};">
-              <strong style="color:#B45309;">⚠️ No stakeholders mapped yet.</strong> Discovery needed — run prospecting before the meeting.
-            </div>`;
-          }
-
-          // ── MEDDPICC HTML — merge saved + AI ──
-          const meddpiccLabels = {
-            metrics: 'M — Metrics',
-            economicBuyer: 'E — Economic Buyer',
-            decisionCriteria: 'D — Decision Criteria',
-            decisionProcess: 'D — Decision Process',
-            paperProcess: 'P — Paper Process',
-            identifyPain: 'I — Identify Pain',
-            champion: 'C — Champion',
-            competition: 'C — Competition',
+          // Temperature badge HTML
+          const tempHtml = (temp) => {
+            const cfg = (temp||'').toUpperCase() === 'HOT' ? { emoji:'🔥', color:'#f87171', bg:'rgba(239,68,68,0.18)' }
+                       : (temp||'').toUpperCase() === 'WARM' ? { emoji:'🌡️', color:'#fb923c', bg:'rgba(251,146,60,0.18)' }
+                       : { emoji:'❄️', color:'#94a3b8', bg:'rgba(148,163,184,0.12)' };
+            return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:800;padding:2px 9px;border-radius:10px;background:${cfg.bg};color:${cfg.color};">${cfg.emoji} ${escape((temp||'COLD').toUpperCase())}</span>`;
           };
-          const aiMedd = aiData.meddpicc || {};
-          const meddpiccFinal = {};
-          Object.keys(meddpiccLabels).forEach(k => {
-            meddpiccFinal[k] = (savedMeddpicc[k] && String(savedMeddpicc[k]).trim()) || aiMedd[k] || 'Unknown — needs discovery';
-          });
-          const meddpiccCardsHtml = `
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
-              ${(() => {
-                const keys = Object.keys(meddpiccLabels);
-                const rows = [];
-                for (let i = 0; i < keys.length; i += 2) {
-                  const a = keys[i], b = keys[i+1];
-                  const cell = (k) => {
-                    if (!k) return '<td style="width:50%;padding:5px;"></td>';
-                    const v = meddpiccFinal[k];
-                    const isUnknown = /unknown|needs discovery|not defined/i.test(v);
-                    const accent = isUnknown ? '#9CA3AF' : '#EC4899';
-                    return `<td valign="top" style="width:50%;padding:5px;">
-                      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:12px 14px;min-height:64px;">
-                        <div style="font-size:10px;font-weight:800;color:${accent};letter-spacing:0.5px;margin-bottom:5px;">${escape(meddpiccLabels[k])}</div>
-                        <div style="font-size:12px;color:${isUnknown ? '#9CA3AF' : T};line-height:1.5;${isUnknown ? 'font-style:italic;' : ''}">${escape(v)}</div>
-                      </div>
-                    </td>`;
-                  };
-                  rows.push(`<tr>${cell(a)}${cell(b)}</tr>`);
-                }
-                return rows.join('');
-              })()}
-            </table>`;
 
-          // ── Helper: section header ──
-          const sectionH = (icon, title, color = T) => `<h2 style="margin:0 0 10px;font-size:16px;font-weight:800;color:${color};border-bottom:2px solid ${G};padding-bottom:8px;">${icon} ${title}</h2>`;
-          const subSection = (icon, title, body, color) => body ? `
-            <div style="margin-top:16px;">
-              <div style="font-size:11px;font-weight:800;color:${color};letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">${icon} ${title}</div>
-              <div style="font-size:13px;color:${T};line-height:1.6;">${escape(body)}</div>
-            </div>` : '';
+          // Section header helper
+          const secH = (icon, label, color='#5BBFB5') => `<div style="font-size:10px;font-weight:800;color:${color};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><span>${icon}</span><span>${label}</span></div>`;
 
-          const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${T};">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 16px;">
+          // Card helper (dark)
+          const card = (content, style='') => `<div style="background:#1A1A2E;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px;${style}">${content}</div>`;
+
+          // Key Developments HTML
+          const keyDevHtml = (rd.key_developments||[]).length
+            ? (rd.key_developments||[]).map((d,i,arr) => `<div style="margin-bottom:${i<arr.length-1?'12px':'0'};padding-bottom:${i<arr.length-1?'12px':'0'};border-bottom:${i<arr.length-1?'1px solid rgba(255,255,255,0.05)':'none'};">
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:3px;">${escape(d.headline||'')}</div>
+                <div style="font-size:11px;color:#5BBFB5;margin-bottom:2px;">→ ${escape(d.signal||'')}</div>
+                ${d.source?`<div style="font-size:10px;color:#64748b;">Source: ${escape(d.source)}</div>`:''}
+              </div>`).join('')
+            : '<div style="font-size:11px;color:#64748b;">No key developments in data provided.</div>';
+
+          // People Moves HTML
+          const peopleMovesHtml = (rd.people_moves||[]).length
+            ? (rd.people_moves||[]).map(m => `<div style="margin-bottom:10px;">
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">${escape(m.name||'')}</div>
+                <div style="font-size:11px;color:#fb923c;margin-bottom:2px;">${escape(m.move||'')}</div>
+                <div style="font-size:11px;color:#94a3b8;">${escape(m.relevance||'')}</div>
+              </div>`).join('')
+            : '<div style="font-size:11px;color:#64748b;">No significant people moves detected.</div>';
+
+          // Tech Stack HTML
+          const techStackHtml = (rd.tech_stack||[]).length
+            ? (rd.tech_stack||[]).map(t => `<div style="margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                  <span style="font-size:12px;font-weight:700;color:#e2e8f0;">${escape(t.tool||'')}</span>
+                  <span style="font-size:9px;background:rgba(148,163,184,0.12);color:#94a3b8;padding:2px 7px;border-radius:6px;">${escape(t.category||'')}</span>
+                </div>
+                ${t.opportunity?`<div style="font-size:11px;color:#5BBFB5;">⚡ ${escape(t.opportunity)}</div>`:''}
+              </div>`).join('')
+            : '<div style="font-size:11px;color:#64748b;">No tech stack signals identified.</div>';
+
+          // Upcoming Events HTML
+          const eventsHtml = (rd.upcoming_events||[]).length
+            ? (rd.upcoming_events||[]).map(ev => `<div style="margin-bottom:10px;">
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">${escape(ev.event||'')}</div>
+                ${ev.date?`<div style="font-size:10px;color:#64748b;margin-bottom:2px;">📅 ${escape(ev.date)}</div>`:''}
+                ${ev.angle?`<div style="font-size:11px;color:#38bdf8;">→ ${escape(ev.angle)}</div>`:''}
+              </div>`).join('')
+            : '<div style="font-size:11px;color:#64748b;">No upcoming events identified.</div>';
+
+          // Recommended Actions HTML
+          const actionsHtml = (rd.recommended_actions||[]).length
+            ? (rd.recommended_actions||[]).map((a,i) => `
+              <div style="display:flex;gap:14px;align-items:flex-start;background:rgba(0,0,0,0.25);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+                <div style="font-size:13px;font-weight:800;color:#5BBFB5;min-width:18px;padding-top:1px;">${i+1}</div>
+                <div style="flex:1;">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap;">
+                    <span style="font-size:12px;font-weight:700;color:#e2e8f0;">${escape(a.stakeholder||'')}</span>
+                    ${tempHtml(a.temperature)}
+                    ${a.channel?`<span style="font-size:10px;background:rgba(255,255,255,0.07);color:#94a3b8;padding:2px 8px;border-radius:6px;">${escape(a.channel)}</span>`:''}
+                  </div>
+                  <div style="font-size:13px;color:#e2e8f0;margin-bottom:4px;">${escape(a.action||'')}</div>
+                  ${a.rationale?`<div style="font-size:11px;color:#94a3b8;">${escape(a.rationale)}</div>`:''}
+                </div>
+              </div>`).join('')
+            : '<div style="font-size:11px;color:#64748b;">No actions generated.</div>';
+
+          // ── Full HTML Report ──
+          const html = \`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0;padding:0;background:#0D0D1A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;line-height:1.6;color:#e2e8f0; }
+  @media print { body { -webkit-print-color-adjust:exact;print-color-adjust:exact; } }
+</style>
+</head>
+<body>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0D0D1A;padding:24px 16px;">
 <tr><td align="center">
-<table width="780" cellpadding="0" cellspacing="0" style="max-width:780px;">
+<table width="820" cellpadding="0" cellspacing="0" style="max-width:820px;">
 
-  <!-- Header -->
-  <tr><td style="background:${T};padding:28px 32px;border-radius:12px 12px 0 0;">
+  <!-- Header bar -->
+  <tr><td style="background:linear-gradient(135deg,#1e1040 0%,#0e1628 50%,#0d1a12 100%);padding:28px 32px;border-radius:14px 14px 0 0;border-bottom:2px solid rgba(91,191,181,0.3);">
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
       <td>
-        ${RB_LOGO ? `<img src="${RB_LOGO}" alt="Logo" style="max-height:32px;max-width:140px;margin-bottom:10px;" />` : `<div style="font-size:18px;font-weight:800;color:${G};letter-spacing:1px;">OIKE</div>`}
-        <div style="font-size:20px;color:#fff;font-weight:800;">📋 Account Briefing</div>
-        <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Pre-meeting strategic prep</div>
+        \${RB_LOGO ? \`<img src="\${RB_LOGO}" alt="Logo" style="max-height:30px;max-width:120px;margin-bottom:10px;" />\` : \`<div style="font-size:16px;font-weight:800;color:#5BBFB5;letter-spacing:2px;margin-bottom:8px;">OIKE</div>\`}
+        <div style="font-size:22px;color:#fff;font-weight:800;letter-spacing:-0.3px;">🔮 Sales Intelligence Radar</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">AI-generated account intelligence · \${dateLabel}</div>
       </td>
-      <td style="text-align:right;">
-        <div style="font-size:13px;color:#e5e7eb;font-weight:600;">${dateLabel}</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Prepared by ${RB_NAME}</div>
+      <td style="text-align:right;vertical-align:top;">
+        <div style="font-size:13px;color:#e2e8f0;font-weight:600;">\${escape(accName)}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Prepared by \${RB_NAME}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">\${accIndustry}\${accCountry?' · '+accCountry:''}</div>
       </td>
     </tr></table>
   </td></tr>
 
-  <!-- Account header -->
-  <tr><td style="background:#fff;padding:24px 32px;border-bottom:3px solid ${G};">
-    <h1 style="margin:0;font-size:30px;font-weight:800;color:${T};letter-spacing:-0.5px;">🏢 ${escape(accName)}</h1>
-    <div style="margin-top:6px;font-size:13px;color:#6B7280;">
-      ${accIndustry ? `<span><strong>${escape(accIndustry)}</strong></span>` : ''}
-      ${accCountry ? `<span style="margin-left:8px;">· ${escape(accCountry)}</span>` : ''}
-      ${accSize ? `<span style="margin-left:8px;">· ${escape(accSize)}</span>` : ''}
-      ${accWebsite ? `<span style="margin-left:8px;">· <a href="${escape(accWebsite)}" style="color:${G};text-decoration:none;">${escape(accWebsite.replace(/^https?:\/\//, ''))}</a></span>` : ''}
-    </div>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;"><tr>
-      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
-        <div style="font-size:20px;font-weight:800;color:${T};">${accStks.length}</div>
-        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Stakeholders</div>
+  <!-- Account stats bar -->
+  <tr><td style="background:#131326;padding:16px 32px;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="text-align:center;padding:0 10px;">
+        <div style="font-size:22px;font-weight:800;color:#e2e8f0;">\${accStks.length}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Stakeholders</div>
       </td>
-      <td width="8"></td>
-      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
-        <div style="font-size:20px;font-weight:800;color:${G};">${totalSent}</div>
-        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Outreach</div>
+      <td style="text-align:center;padding:0 10px;border-left:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:22px;font-weight:800;color:#5BBFB5;">\${totalSent}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Outreach</div>
       </td>
-      <td width="8"></td>
-      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
-        <div style="font-size:20px;font-weight:800;color:${replies>0?'#10B981':'#9CA3AF'};">${replies}</div>
-        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Replies</div>
+      <td style="text-align:center;padding:0 10px;border-left:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:22px;font-weight:800;color:\${replies>0?'#4ade80':'#64748b'};">\${replies}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Replies</div>
       </td>
-      <td width="8"></td>
-      <td style="background:#F9FAFB;padding:10px 14px;border-radius:6px;text-align:center;width:25%;">
-        <div style="font-size:20px;font-weight:800;color:${pipelineValue>0?'#10B981':'#9CA3AF'};">${pipelineValue>0?formatCurrency(pipelineValue):'$0'}</div>
-        <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Pipeline</div>
+      <td style="text-align:center;padding:0 10px;border-left:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:22px;font-weight:800;color:\${meetings>0?'#a78bfa':'#64748b'};">\${meetings}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Meetings</div>
+      </td>
+      <td style="text-align:center;padding:0 10px;border-left:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:22px;font-weight:800;color:\${pipelineValue>0?'#4ade80':'#64748b'};">\${pipelineValue>0?formatCurrency(pipelineValue):'$0'}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Pipeline</div>
+      </td>
+      <td style="text-align:center;padding:0 10px;border-left:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:12px;font-weight:600;color:#e2e8f0;">\${escape(lastTouchDate)}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Last Touch</div>
       </td>
     </tr></table>
-    <div style="margin-top:14px;font-size:12px;color:#6B7280;">
-      Last touch: <strong style="color:${T};">${escape(lastTouchDate)}</strong>
-      ${daysSinceLastTouch !== null ? ` · ${daysSinceLastTouch}d ago` : ''}
-      ${accStatus ? ` · Status: <strong style="color:${T};">${escape(accStatus)}</strong>` : ''}
-    </div>
   </td></tr>
 
-  <!-- Body -->
-  <tr><td style="background:#fff;padding:8px 32px 32px;">
+  <!-- Main body -->
+  <tr><td style="background:#0D0D1A;padding:24px 32px;">
 
-    <!-- 📰 RECENT NEWS -->
-    ${newsItemsLocal.length ? `
-    <div style="margin-top:22px;">
-      ${sectionH('📰', `Recent News (${newsItemsLocal.length})`)}
-      ${newsCardsHtml}
-    </div>` : ''}
-
-    <!-- 🧠 EXECUTIVE SUMMARY (with 4 sub-sections) -->
-    <div style="margin-top:28px;padding:20px 22px;background:linear-gradient(135deg,${S}10 0%,${S}05 100%);border-left:4px solid ${S};border-radius:0 12px 12px 0;">
-      <div style="font-size:13px;font-weight:800;color:${S};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">🧠 Executive Summary</div>
-      ${aiData.executive_summary ? `<p style="margin:8px 0 0;font-size:14px;color:${T};line-height:1.65;">${escape(aiData.executive_summary)}</p>` : ''}
-      ${subSection('📌','Account Snapshot', aiData.account_snapshot, '#60a5fa')}
-      ${subSection('🎯','Strategic Angle', aiData.strategic_angle, G)}
-      ${subSection('📊','Pipeline Status', aiData.pipeline_status, '#a78bfa')}
-      ${subSection('👥','Relationship Map', aiData.relationship_map_summary, '#fb923c')}
+    <!-- TL;DR + Budget + Profile -->
+    <div style="background:linear-gradient(135deg,rgba(167,139,250,0.15) 0%,rgba(91,191,181,0.1) 100%);border:1px solid rgba(167,139,250,0.25);border-radius:12px;padding:18px 22px;margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">🔮 TL;DR</div>
+      <p style="margin:0 0 12px;font-size:13px;color:#e2e8f0;line-height:1.65;">\${escape(rd.tldr||'')}</p>
+      <table cellpadding="0" cellspacing="0"><tr>
+        \${rd.est_budget?\`<td style="padding-right:8px;"><span style="display:inline-block;font-size:11px;background:rgba(74,222,128,0.12);color:#4ade80;padding:4px 12px;border-radius:8px;font-weight:600;">💰 \${escape(rd.est_budget)}</span></td>\`:''}
+        \${rd.portfolio_label?\`<td><span style="display:inline-block;font-size:11px;background:rgba(96,165,250,0.12);color:#60a5fa;padding:4px 12px;border-radius:8px;font-weight:600;">🏷️ \${escape(rd.portfolio_label)}</span></td>\`:''}
+      </tr></table>
     </div>
 
-    <!-- ⚡ What changed -->
-    ${aiData.what_changed ? `
-    <div style="margin-top:18px;padding:16px 20px;background:${TR}15;border-left:4px solid ${TR};border-radius:0 10px 10px 0;">
-      <div style="font-size:11px;font-weight:800;color:${TR};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">⚡ What changed recently</div>
-      <p style="margin:0;font-size:13px;color:${T};line-height:1.6;">${escape(aiData.what_changed)}</p>
-    </div>` : ''}
+    <!-- 2-col grid: Key Developments | People Moves + Social -->
+    <table width="100%" cellpadding="0" cellspacing="8" style="margin-bottom:16px;"><tr>
+      <td valign="top" width="50%" style="padding-right:8px;">
+        \${card(secH('📰','Key Developments','#fbbf24') + keyDevHtml)}
+      </td>
+      <td valign="top" width="50%" style="padding-left:8px;">
+        \${card(secH('👥','People Moves','#fb923c') + peopleMovesHtml + '<div style="margin-top:14px;">' + secH('📣','Social Sentiment','#60a5fa') + \`<p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.6;">\${escape(rd.social_sentiment||'—')}</p></div>\`)}
+      </td>
+    </tr></table>
 
-    <!-- 🚨 Risks/Blockers -->
-    ${aiData.risk_or_blockers ? `
-    <div style="margin-top:14px;padding:14px 18px;background:#FEE2E2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;">
-      <div style="font-size:11px;font-weight:800;color:#B91C1C;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">🚨 Risk / Blocker</div>
-      <p style="margin:0;font-size:13px;color:${T};line-height:1.55;">${escape(aiData.risk_or_blockers)}</p>
-    </div>` : ''}
+    <!-- 2-col grid: Financial + Hiring | Tech Stack -->
+    <table width="100%" cellpadding="0" cellspacing="8" style="margin-bottom:16px;"><tr>
+      <td valign="top" width="50%" style="padding-right:8px;">
+        \${card(secH('💰','Financial Signals','#4ade80') + \`<p style="margin:0 0 14px;font-size:12px;color:#94a3b8;line-height:1.6;">\${escape(rd.financial_signals||'—')}</p>\` + secH('💼','Hiring Signals','#a78bfa') + \`<p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.6;">\${escape(rd.hiring_signals||'—')}</p>\`)}
+      </td>
+      <td valign="top" width="50%" style="padding-left:8px;">
+        \${card(secH('⚙️','Tech Stack Map','#94a3b8') + techStackHtml)}
+      </td>
+    </tr></table>
 
-    <!-- 👥 STAKEHOLDERS IDENTIFIED -->
-    <div style="margin-top:28px;">
-      ${sectionH('👥', `Stakeholders Identified (${accStks.length})`)}
-      ${stakeholdersHtml}
+    <!-- 2-col grid: Competitive | Upcoming Events -->
+    <table width="100%" cellpadding="0" cellspacing="8" style="margin-bottom:16px;"><tr>
+      <td valign="top" width="50%" style="padding-right:8px;">
+        \${card(secH('🏆','Competitive Landscape','#f472b6') + \`<p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.6;">\${escape(rd.competitive||'—')}</p>\`)}
+      </td>
+      <td valign="top" width="50%" style="padding-left:8px;">
+        \${card(secH('📅','Upcoming Events','#38bdf8') + eventsHtml)}
+      </td>
+    </tr></table>
+
+    <!-- Recommended Actions (full width) -->
+    <div style="background:linear-gradient(135deg,rgba(91,191,181,0.12) 0%,rgba(91,191,181,0.05) 100%);border:1px solid rgba(91,191,181,0.2);border-radius:12px;padding:18px 22px;margin-bottom:20px;">
+      \${secH('⚡','Recommended Actions','#5BBFB5')}
+      \${actionsHtml}
     </div>
-
-    <!-- 🎯 MEDDPICC -->
-    <div style="margin-top:28px;">
-      ${sectionH('🎯', 'MEDDPICC Qualification', '#EC4899')}
-      ${meddpiccCardsHtml}
-    </div>
-
-    <!-- 🎤 TALKING POINTS -->
-    ${aiData.talking_points && aiData.talking_points.length ? `
-    <div style="margin-top:28px;">
-      ${sectionH('🎤', 'Talking Points')}
-      <ol style="margin:0;padding-left:0;list-style:none;">
-        ${aiData.talking_points.map((tp, i) => `<li style="display:flex;gap:14px;padding:10px 0;border-bottom:1px solid #F3F4F6;">
-          <span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${G}20;color:${G};font-weight:800;font-size:12px;text-align:center;line-height:26px;flex-shrink:0;">${i+1}</span>
-          <span style="font-size:14px;color:${T};line-height:1.55;padding-top:2px;">${escape(tp)}</span>
-        </li>`).join('')}
-      </ol>
-    </div>` : ''}
-
-    <!-- ❓ STRATEGIC QUESTIONS -->
-    ${aiData.open_questions && aiData.open_questions.length ? `
-    <div style="margin-top:24px;padding:18px 20px;background:#F9FAFB;border-radius:10px;">
-      <div style="font-size:11px;font-weight:800;color:${T};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">❓ Strategic questions to ask</div>
-      ${aiData.open_questions.map(q => `<div style="padding:6px 0 6px 18px;position:relative;font-size:13px;color:${T};line-height:1.55;">
-        <span style="position:absolute;left:0;color:${G};font-weight:700;">→</span>${escape(q)}
-      </div>`).join('')}
-    </div>` : ''}
-
-    <!-- 📬 RECENT OUTREACH -->
-    ${accOutreach.length > 0 ? `
-    <div style="margin-top:28px;">
-      ${sectionH('📬', `Recent Outreach (${accOutreach.length})`)}
-      ${accOutreach.slice(0, 5).map(o => {
-        const stkId = linkedIds(o, 'Stakeholder')[0];
-        const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
-        const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : 'Unknown';
-        const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '?';
-        const status = F(o,'Status') || '';
-        const statusColor = status === 'Replied' ? '#10B981' : status === 'Meeting Scheduled' || status === 'Meeting Booked' ? '#3B82F6' : '#9CA3AF';
-        return `<div style="padding:10px 14px;background:#F9FAFB;border-radius:6px;margin-bottom:6px;">
-          <table width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="font-size:12px;color:${T};">
-              <strong>${escape(stkName)}</strong> · ${escape(F(o,'Channel')||'')} · ${escape(date)}
-            </td>
-            <td style="text-align:right;">
-              <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${statusColor}20;color:${statusColor};">${escape(status)}</span>
-            </td>
-          </tr></table>
-          ${F(o,'Notes') ? `<div style="font-size:11px;color:${GR};margin-top:4px;">${escape(String(F(o,'Notes')).slice(0,180))}</div>` : ''}
-        </div>`;
-      }).join('')}
-    </div>` : ''}
-
-    <!-- 🎯 RECOMMENDED NEXT STEP -->
-    ${aiData.recommended_next_step ? `
-    <div style="margin-top:28px;padding:22px 24px;background:${G};color:${T};border-radius:12px;">
-      <div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">🎯 Recommended Next Step</div>
-      <p style="margin:0;font-size:15px;font-weight:700;line-height:1.5;">${escape(aiData.recommended_next_step)}</p>
-    </div>` : ''}
 
     <!-- Sender block + Footer -->
-    <div style="margin-top:28px;padding-top:20px;border-top:1px solid #E5E7EB;">
-      ${(RB_PHOTO || RB_TITLE) ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;"><tr>
-        ${RB_PHOTO ? `<td width="64" valign="middle" style="padding-right:12px;"><img src="${RB_PHOTO}" alt="${RB_NAME}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid ${G};" /></td>` : ''}
+    <div style="padding-top:20px;border-top:1px solid rgba(255,255,255,0.07);">
+      \${(RB_PHOTO || RB_TITLE) ? \`<table cellpadding="0" cellspacing="0" style="margin-bottom:12px;"><tr>
+        \${RB_PHOTO?\`<td width="64" valign="middle" style="padding-right:12px;"><img src="\${RB_PHOTO}" alt="\${RB_NAME}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #5BBFB5;" /></td>\`:''}
         <td valign="middle">
-          <div style="font-size:13px;font-weight:700;color:${T};">${RB_NAME}</div>
-          ${RB_TITLE ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${RB_TITLE}</div>` : ''}
-          ${RB_EMAIL ? `<div style="font-size:11px;margin-top:2px;"><a href="mailto:${RB_EMAIL}" style="color:${G};text-decoration:none;">${RB_EMAIL}</a></div>` : ''}
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;">\${RB_NAME}</div>
+          \${RB_TITLE?\`<div style="font-size:11px;color:#94a3b8;margin-top:2px;">\${RB_TITLE}</div>\`:''}
+          \${RB_EMAIL?\`<div style="font-size:11px;margin-top:2px;"><a href="mailto:\${RB_EMAIL}" style="color:#5BBFB5;text-decoration:none;">\${RB_EMAIL}</a></div>\`:''}
         </td>
-      </tr></table>` : ''}
-      <div style="font-size:10px;color:#9ca3af;text-align:center;letter-spacing:0.5px;">
-        Generated by <strong style="color:${G};">Oike</strong> · Account Briefing · ${dateLabel}
+      </tr></table>\` : ''}
+      <div style="font-size:10px;color:#475569;text-align:center;letter-spacing:0.5px;">
+        Generated by <strong style="color:#5BBFB5;">Oike</strong> · Sales Intelligence Radar · \${dateLabel}
       </div>
     </div>
 
   </td></tr>
 </table>
-</td></tr></table></body></html>`;
+</td></tr></table>
+</body></html>\`;
 
           setReportHtml(html);
+
           setIntelInsights([]);
         } catch (e) {
           console.error('Account briefing failed:', e);
-          alert(`Failed to generate Account Briefing: ${e?.message || String(e)}`);
+          alert(`Failed to generate Intelligence Radar: ${e?.message || String(e)}`);
         } finally {
           setGenerating(false);
         }
@@ -17488,7 +17641,7 @@ Return ONLY valid JSON.`;
                 { k: 'outreach',         icon: '📊', label: 'Outreach Activity',  sub: 'Messages sent, replies, meetings, posts' },
                 { k: 'company',          icon: '🏢', label: 'Company Intel',      sub: 'News, intel notes, grouped insights' },
                 { k: 'stakeholder',      icon: '🎯', label: 'Stakeholder Pains',  sub: 'Pains + LinkedIn, aggregated by cluster' },
-                { k: 'account-briefing', icon: '📋', label: 'Account Briefing',   sub: 'Full prep: intel + outreach + pains for 1 account' },
+                { k: 'account-briefing', icon: '🔮', label: 'Intelligence Radar', sub: 'AI radar: signals, people moves, tech stack, actions' },
               ].map(opt => (
                 <button key={opt.k}
                   onClick={() => { setReportMode(opt.k); setReportHtml(''); setIntelInsights([]); setTasksCreatedCount(0); }}
@@ -17545,7 +17698,7 @@ Return ONLY valid JSON.`;
               <div className="card">
                 {reportMode === 'account-briefing' && (
                   <div style={{ marginBottom:10, padding:'8px 10px', background:'rgba(91,191,181,0.08)', border:'1px solid rgba(91,191,181,0.25)', borderRadius:6, fontSize:11, color:'var(--globant-text)', lineHeight:1.5 }}>
-                    📋 <strong>Account Briefing</strong> — Pick exactly <strong>1 account</strong> below. AI will combine intel, outreach history, stakeholder pains, and pipeline into one pre-meeting prep doc.
+                    🔮 <strong>Intelligence Radar</strong> — Pick exactly <strong>1 account</strong> below. AI will generate a full radar: key signals, financial intel, people moves, tech stack, competitive landscape, and HOT🔥/WARM🌡️/COLD❄️ recommended actions.
                   </div>
                 )}
                 {reportMode !== 'account-briefing' && (
@@ -17657,7 +17810,7 @@ Return ONLY valid JSON.`;
                   )}
                   {reportMode === 'account-briefing' && intelFilterAccountIds.length > 1 && (
                     <div style={{ marginTop:8, padding:'6px 10px', background:'rgba(255,200,80,0.08)', border:'1px solid rgba(255,200,80,0.3)', borderRadius:6, fontSize:11, color:'#ffc850' }}>
-                      ⚠️ Pick only <strong>1 account</strong> for Account Briefing. The first selected will be used.
+                      ⚠️ Pick only <strong>1 account</strong> for the Intelligence Radar. The first selected will be used.
                     </div>
                   )}
                 </div>
@@ -17829,7 +17982,7 @@ Return ONLY valid JSON.`;
                   else if (reportMode === 'stakeholder') generateStakeholderPainsHtml();
                   else if (reportMode === 'account-briefing') generateAccountBriefingHtml();
                 }} disabled={generating}>
-                {generating ? '⏳ Generating...' : `✨ Generate ${reportMode === 'outreach' ? 'Activity' : reportMode === 'company' ? 'Company Intel' : reportMode === 'stakeholder' ? 'Stakeholder Pains' : 'Account Briefing'} Report`}
+                {generating ? '⏳ Generating...' : `✨ Generate ${reportMode === 'outreach' ? 'Activity' : reportMode === 'company' ? 'Company Intel' : reportMode === 'stakeholder' ? 'Stakeholder Pains' : 'Intelligence Radar'} Report`}
               </button>
             </div>
 
