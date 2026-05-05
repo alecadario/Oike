@@ -2287,7 +2287,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
 
             {/* Solution to pitch */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>SOLUTION TO PITCH <span style={{ fontWeight: 400 }}>(optional)</span></label>
+              <label style={{ display: 'block', fontSize: 11, marginBottom: 6, color: 'var(--globant-muted)', fontWeight: 600 }}>OFFERING TO PITCH <span style={{ fontWeight: 400 }}>(optional)</span></label>
               <select className="input-field" style={{ width: '100%', fontSize: 12 }}
                 value={selectedSolutionId} onChange={e => setSelectedSolutionId(e.target.value)}>
                 <option value="">— No specific solution —</option>
@@ -10327,7 +10327,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <h1>Offering Hub</h1>
-              <p>Explore solutions, track adoption across accounts, and get strategic recommendations</p>
+              <p>Explore your offering, track adoption across accounts, and get strategic recommendations</p>
             </div>
             {isAdmin && <button className="action-btn btn-primary" style={{ fontSize: 12, padding: '8px 16px', marginTop: 4 }}
               onClick={() => { setShowNewSol(true); setNewSolForm({ name: '', type: 'Service', description: '', price: '', keyMessage: '' }); }}>
@@ -10387,7 +10387,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           })()}
 
           <div className="filters-row" style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
-            <input className="input-field" style={{ maxWidth: 350 }} placeholder="Search solution..." value={searchTerm}
+            <input className="input-field" style={{ maxWidth: 350 }} placeholder="Search offering..." value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)} />
             <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>{solutions.length} solutions</span>
           </div>
@@ -10418,7 +10418,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
                 <thead><tr>
-                  <th>Solution</th>
+                  <th>Offering</th>
                   <th>Type</th>
                   <th>Price</th>
                   <th style={{ textAlign: 'center' }}>Accounts</th>
