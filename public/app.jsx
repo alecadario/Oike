@@ -16841,18 +16841,22 @@ Return ONLY valid JSON:
             : 'Never';
 
           // ── Per-stakeholder outreach breakdown (for the outreach section) ──
+          const AUTO_LOG_PATTERN = /auto.?logged|auto.?log|cp briefings|outreach logged/i;
           const stkTouchMap = {};
           accOutreach.forEach(o => {
             const stkId = linkedIds(o, 'Stakeholder')[0];
             if (!stkId) return;
-            if (!stkTouchMap[stkId]) stkTouchMap[stkId] = { touches: 0, replied: false, meeting: false, topics: [], notes: [] };
+            if (!stkTouchMap[stkId]) stkTouchMap[stkId] = { touches: 0, replied: false, meeting: false, interactions: [] };
             stkTouchMap[stkId].touches++;
-            if (F(o,'Status') === 'Replied') stkTouchMap[stkId].replied = true;
-            if (['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status'))) stkTouchMap[stkId].meeting = true;
-            const note = (F(o,'Notes') || F(o,'Message') || '').slice(0, 120);
-            const topic = F(o,'Subject') || F(o,'Topic') || '';
-            if (topic && !stkTouchMap[stkId].topics.includes(topic)) stkTouchMap[stkId].topics.push(topic);
-            if (note) stkTouchMap[stkId].notes.push(note);
+            const status = F(o,'Status') || '';
+            if (status === 'Replied') stkTouchMap[stkId].replied = true;
+            if (['Meeting Scheduled','Meeting Booked'].includes(status)) stkTouchMap[stkId].meeting = true;
+            const rawNote = (F(o,'Notes') || F(o,'Message') || '').trim();
+            const note = AUTO_LOG_PATTERN.test(rawNote) ? '' : rawNote.slice(0, 150);
+            const channel = F(o,'Channel') || '';
+            const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+            const subject = F(o,'Subject') || F(o,'Topic') || '';
+            stkTouchMap[stkId].interactions.push({ status, channel, date, note, subject });
           });
 
           // ── Opportunities + Solutions ──
@@ -16964,10 +16968,20 @@ Rules: key_developments 2-4 items · people_moves only if real signals else [] �
               const t = stkTouchMap[sid];
               const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim() || 'Unknown';
               const sRole = F(s,'Role') || '';
-              const tempLabel = t.meeting ? 'HOT' : t.replied ? 'WARM' : 'WARM';
-              // Last 2 notes for context
-              const contextLines = t.notes.slice(0,2).map(n => escape(n)).join('<br>');
-              const topicsStr = t.topics.length ? escape(t.topics.slice(0,3).join(', ')) : '';
+              const tempLabel = t.meeting ? 'HOT' : t.replied ? 'WARM' : 'COLD';
+              // Build interaction lines from real data (skip auto-logged empties)
+              const interactionLines = (t.interactions||[]).slice(0,3).map(ix => {
+                const parts = [];
+                if (ix.date) parts.push(`<span style="color:#64748b;">${escape(ix.date)}</span>`);
+                if (ix.channel) parts.push(`<span style="background:rgba(96,165,250,0.12);color:#60a5fa;padding:1px 6px;border-radius:4px;font-size:9px;">${escape(ix.channel)}</span>`);
+                if (ix.status === 'Replied') parts.push(`<span style="color:#4ade80;font-size:9px;">✓ Replied</span>`);
+                else if (['Meeting Scheduled','Meeting Booked'].includes(ix.status)) parts.push(`<span style="color:#a78bfa;font-size:9px;">📅 Meeting</span>`);
+                const noteText = ix.note || ix.subject || '';
+                return `<div style="margin-bottom:5px;line-height:1.5;">
+                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:2px;">${parts.join('')}</div>
+                  ${noteText?`<div style="font-size:11px;color:#94a3b8;">${escape(noteText)}</div>`:''}
+                </div>`;
+              }).join('');
               return `<div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
                 <table width="100%" cellpadding="0" cellspacing="0"><tr>
                   <td valign="top">
@@ -16983,9 +16997,8 @@ Rules: key_developments 2-4 items · people_moves only if real signals else [] �
                   ${t.meeting?`<span style="font-size:9px;background:rgba(167,139,250,0.18);color:#a78bfa;padding:2px 8px;border-radius:6px;font-weight:700;">📅 Meeting booked</span>`:''}
                   ${t.replied&&!t.meeting?`<span style="font-size:9px;background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:6px;font-weight:700;">💬 Replied</span>`:''}
                   ${!t.replied&&!t.meeting?`<span style="font-size:9px;background:rgba(148,163,184,0.12);color:#94a3b8;padding:2px 8px;border-radius:6px;font-weight:700;">📤 No reply yet</span>`:''}
-                  ${topicsStr?`<span style="font-size:9px;background:rgba(96,165,250,0.12);color:#60a5fa;padding:2px 8px;border-radius:6px;">Topic: ${topicsStr}</span>`:''}
                 </div>
-                ${contextLines?`<div style="margin-top:8px;font-size:11px;color:#94a3b8;line-height:1.5;border-left:2px solid rgba(255,255,255,0.08);padding-left:10px;">${contextLines}</div>`:''}
+                ${interactionLines?`<div style="margin-top:8px;border-left:2px solid rgba(255,255,255,0.08);padding-left:10px;">${interactionLines}</div>`:''}
               </div>`;
             }).join('');
 
