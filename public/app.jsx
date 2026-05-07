@@ -4389,9 +4389,10 @@ Output ONLY the message, nothing else.`;
       // Active accounts
       const activeAccountsCount = accounts.filter(a => ['Active', 'Activo'].includes(F(a, 'Inside Sales Status'))).length;
 
-      // Meetings & Replies
+      // Meetings, Replies & Bounced
       const meetings = outreach.filter(a => F(a, 'Status') === 'Meeting Scheduled' || F(a, 'Status') === 'Meeting Booked').length;
       const replies = outreach.filter(a => F(a, 'Status') === 'Replied').length;
+      const bouncedActivities = outreach.filter(a => F(a, 'Status') === 'Bounced').length;
       const drafts = outreach.filter(a => F(a, 'Status') === 'Draft').length;
 
       // Filter
@@ -4425,7 +4426,7 @@ Output ONLY the message, nothing else.`;
           </div>
 
           {/* KPI Dashboard */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 24 }}>
             <div className="card" style={{ textAlign: 'center', padding: '16px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{outreach.length}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Total Activities</div>
@@ -4449,6 +4450,10 @@ Output ONLY the message, nothing else.`;
             <div className="card" style={{ textAlign: 'center', padding: '16px 12px', cursor: 'pointer', border: selectedStatus === 'Replied' ? '1px solid #4ade80' : undefined }} onClick={() => setSelectedStatus(selectedStatus === 'Replied' ? '' : 'Replied')}>
               <div style={{ fontSize: 30, fontWeight: 800, color: '#4ade80', lineHeight: 1 }}>{replies}</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>💬 Replies</div>
+            </div>
+            <div className="card" style={{ textAlign: 'center', padding: '16px 12px', cursor: 'pointer', borderBottom: bouncedActivities > 0 ? '3px solid #ea580c' : undefined, border: selectedStatus === 'Bounced' ? '1px solid #ea580c' : undefined }} onClick={() => setSelectedStatus(selectedStatus === 'Bounced' ? '' : 'Bounced')}>
+              <div style={{ fontSize: 30, fontWeight: 800, color: bouncedActivities > 0 ? '#ea580c' : 'var(--globant-muted)', lineHeight: 1 }}>{bouncedActivities}</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>📭 Bounced</div>
             </div>
           </div>
 
@@ -7334,6 +7339,8 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
       filteredOutreach.forEach(o => { const st = F(o, 'Status') || 'Unknown'; byStatus[st] = (byStatus[st] || 0) + 1; });
       const repliedCount = byStatus['Replied'] || 0;
       const meetingCount = byStatus['Meeting Scheduled'] || 0;
+      const bouncedCount = byStatus['Bounced'] || 0;
+      const bouncedRate  = totalOutreach > 0 ? Math.round((bouncedCount / totalOutreach) * 100) : 0;
       const replyRate = totalOutreach > 0 ? Math.round((repliedCount / totalOutreach) * 100) : 0;
       const meetingRate = totalOutreach > 0 ? Math.round((meetingCount / totalOutreach) * 100) : 0;
 
@@ -7631,7 +7638,7 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
               📅 Showing activity for: {periodLabel}
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 14, marginBottom: 24 }}>
             <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.15) 0%, rgba(91,191,181,0.03) 100%)' }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{coveragePct}%</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Account Coverage</div>
@@ -7652,6 +7659,11 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
               <div style={{ fontSize: 9, color: meetingBench.color, marginTop: 4, fontWeight: 600 }}>{meetingBench.icon} {meetingBench.label}</div>
               <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>{`Benchmark: ${BENCH_MEETING_LOW}–${BENCH_MEETING_HIGH}%`}</div>
               <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 4 }}>{meetingCount} meetings / {totalOutreach} touches</div>
+            </div>
+            <div className="card" style={{ textAlign: 'center', padding: '18px 12px', borderBottom: bouncedCount > 0 ? '3px solid #ea580c' : undefined }}>
+              <div style={{ fontSize: 32, fontWeight: 800, color: bouncedCount > 0 ? '#ea580c' : 'var(--globant-muted)', lineHeight: 1 }}>{bouncedCount}</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>📭 Bounced</div>
+              {bouncedCount > 0 && <div style={{ fontSize: 9, color: '#ea580c', marginTop: 4, fontWeight: 600 }}>{bouncedRate}% of touches · fix emails</div>}
             </div>
             <div className="card" style={{ textAlign: 'center', padding: '18px 12px' }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: winRate >= 40 ? 'var(--globant-success)' : 'var(--globant-warning)', lineHeight: 1 }}>{winRate}%</div>
@@ -16435,9 +16447,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
         return arr.findIndex(x => linkedIds(x, 'Stakeholder')[0] === stkId) === arr.indexOf(o);
       });
       const meetings      = periodOutreach.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o, 'Status')));
+      const bounced       = periodOutreach.filter(o => F(o, 'Status') === 'Bounced');
       const uniqueRepliers = replies.length; // already deduplicated by stakeholder above
       const replyRate     = totalSent > 0 ? Math.round(uniqueRepliers / totalSent * 100) : 0;
       const meetingRate   = totalSent > 0 ? Math.round(meetings.length / totalSent * 100) : 0;
+      const bouncedRate   = totalSent > 0 ? Math.round(bounced.length / totalSent * 100) : 0;
       const accsContacted = new Set(periodOutreach.flatMap(o => linkedIds(o, 'Account'))).size;
 
       const activeSolIds = activeSols.map(s => s.id);
@@ -16498,6 +16512,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           const itemUniqueStkIds = new Set(itemAllReplies.flatMap(o => linkedIds(o,'Stakeholder')).filter(Boolean));
           const itemUniqueReplies = itemUniqueStkIds.size || itemAllReplies.length;
           const itemMeetings = itemOut.filter(o => ['Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
+          const itemBounced = itemOut.filter(o => F(o,'Status') === 'Bounced');
           const rr = itemOut.length > 0 ? Math.round(itemUniqueReplies/itemOut.length*100) : 0;
           return {
             item,
@@ -16506,6 +16521,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             sent: itemOut.length,
             replies: itemUniqueReplies,
             meetings: itemMeetings.length,
+            bounced: itemBounced.length,
             rr,
           };
         }).filter(r => r.sent > 0 || r.accs.length > 0);
@@ -16612,7 +16628,7 @@ Return ONLY valid JSON:
             <h2 style="margin:0 0 16px;font-size:16px;font-weight:700;color:${T};border-bottom:2px solid ${G};padding-bottom:8px;">By ${allOptions.label}</h2>
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr style="background:${T};">
-                ${[firstColLabel, secondColLabel,'Sent','Replies','Reply %','Meetings'].map(h=>`<th style="padding:8px 10px;text-align:left;font-size:11px;color:#fff;font-weight:600;">${h}</th>`).join('')}
+                ${[firstColLabel, secondColLabel,'Sent','Replies','Reply %','Meetings','Bounced'].map(h=>`<th style="padding:8px 10px;text-align:left;font-size:11px;color:#fff;font-weight:600;">${h}</th>`).join('')}
               </tr>
               ${groupRows.map((r,i) => {
                 // For accounts groupBy, second column shows stakeholder count instead of the same account name
@@ -16631,6 +16647,7 @@ Return ONLY valid JSON:
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.replies>0?'#059669':'#9ca3af'};">${r.replies}</td>
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.rr>=20?'#059669':r.rr>=10?'#d97706':'#9ca3af'};">${r.rr}%</td>
                 <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.meetings>0?'#2563eb':'#9ca3af'};">${r.meetings}</td>
+                <td style="padding:8px 10px;font-size:13px;font-weight:700;color:${r.bounced>0?'#ea580c':'#9ca3af'};">${r.bounced > 0 ? `📭 ${r.bounced}` : '—'}</td>
               </tr>`;
               }).join('')}
             </table>
@@ -16790,6 +16807,7 @@ Return ONLY valid JSON:
             ${kpiBox('Accounts Touched', accsContacted, '#2563eb')}
             ${kpiBox('Reply Rate', replyRate+'%', replyRate>=20?'#059669':replyRate>=10?'#d97706':'#ef4444')}
             ${kpiBox('Meetings', meetings.length, meetings.length>0?'#059669':'#9ca3af')}
+            ${bounced.length > 0 ? kpiBox('📭 Bounced', bounced.length, '#ea580c') : ''}
           </tr>
         </table>
       </td></tr>
