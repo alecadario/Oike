@@ -16285,7 +16285,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data, api, onAddRecord, onCreateCampaignFromInsight }) {
-      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [] } = data;
+      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [], clientPartners = [] } = data;
       const now = new Date();
       const fmt = (d) => d.toISOString().split('T')[0];
       const defaultFrom = fmt(new Date(now - 14 * 86400000));
@@ -16295,7 +16295,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
       const [reportMode, setReportMode] = useState('outreach');
       const [dateFrom, setDateFrom]   = useState(defaultFrom);
       const [dateTo, setDateTo]       = useState(defaultTo);
-      // Grouping dimension (outreach mode): 'accounts' | 'solutions' | 'campaigns' | 'events'
+      // Grouping dimension (outreach mode): 'accounts' | 'solutions' | 'campaigns' | 'events' | 'cp'
       const [groupBy, setGroupBy]     = useState('accounts');
       const [selectedIds, setSelectedIds] = useState([]);
       const [searchQuery, setSearchQuery] = useState('');
@@ -16337,10 +16337,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           case 'solutions': return { items: sortByName(solutions, 'Name'), nameField: 'Name', icon: '🛠️', label: 'Offering' };
           case 'campaigns': return { items: sortByName(campaigns, 'Name'), nameField: 'Name', icon: '📣', label: 'Campaigns' };
           case 'events':    return { items: sortByName(events, 'Event Name'), nameField: 'Event Name', icon: '🎤', label: 'Events' };
+          case 'cp':        return { items: sortByName(clientPartners, 'Name'), nameField: 'Name', icon: '👤', label: 'Client Partners' };
           case 'accounts':
           default:          return { items: sortByName(accounts, 'Account Name'), nameField: 'Account Name', icon: '🏢', label: 'Accounts' };
         }
-      }, [groupBy, accounts, solutions, campaigns, events]);
+      }, [groupBy, accounts, solutions, campaigns, events, clientPartners]);
 
       // Filtered dropdown options (by search query)
       const filteredOptions = useMemo(() => {
@@ -16389,6 +16390,11 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             if (invitedStkIds.has(s.id)) linkedIds(s, 'Account').forEach(id => accIds.add(id));
           });
           return [...accIds];
+        }
+        if (groupBy === 'cp') {
+          // Accounts where the CP linked field matches one of the active CP records
+          const cpIds = new Set(activeItems.map(cp => cp.id));
+          return accounts.filter(a => linkedIds(a, 'CP').some(id => cpIds.has(id))).map(a => a.id);
         }
         return accounts.map(a => a.id);
       }, [groupBy, activeItems, opportunities, outreach, stakeholders, accounts]);
@@ -16505,6 +16511,10 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
             const invitedStkIds = new Set(linkedIds(item, 'Stakeholders invited'));
             itemOut = periodOutreach.filter(o => linkedIds(o,'Stakeholder').some(id => invitedStkIds.has(id)));
             itemAccIds = [...new Set(itemOut.flatMap(o => linkedIds(o,'Account')))];
+          } else if (groupBy === 'cp') {
+            // All accounts assigned to this CP, then outreach on those accounts
+            itemAccIds = accounts.filter(a => linkedIds(a,'CP').includes(item.id)).map(a => a.id);
+            itemOut = periodOutreach.filter(o => linkedIds(o,'Account').some(id => itemAccIds.includes(id)));
           }
 
           const itemAccs = accounts.filter(a => itemAccIds.includes(a.id));
@@ -17817,12 +17827,13 @@ Return ONLY valid JSON.`;
 
                 {/* Group by tabs */}
                 <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:6, fontWeight:600 }}>GROUP BY</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:4, marginBottom:12 }}>
                   {[
                     { key: 'accounts', label: 'Accounts', icon: '🏢' },
                     { key: 'solutions', label: 'Offering', icon: '🛠️' },
                     { key: 'campaigns', label: 'Campaigns', icon: '📣' },
                     { key: 'events', label: 'Events', icon: '🎤' },
+                    { key: 'cp', label: 'CP', icon: '👤' },
                   ].map(opt => (
                     <button key={opt.key} onClick={() => changeGroupBy(opt.key)}
                       style={{
