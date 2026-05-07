@@ -3736,9 +3736,11 @@ Output ONLY the message, nothing else.`;
             if (row.linkedin) fields['LinkedIn'] = row.linkedin;
             if (row.source) fields['Source'] = row.source;
             // Resolve campaign: manual selector takes priority, then CSV column by name match
+            // NOTE: do NOT set stakeholder's 'Campaign' field — that's the reverse link of
+            // 'Stakeholders Reached' and would mark them as reached. Campaign assignment is
+            // handled by updating 'Assigned Stakeholders' on the campaign record (done after loop).
             const resolvedCampaignId = csvCampaignId
               || (row.campaign ? (campaigns.find(c => (F(c,'Name')||'').toLowerCase() === row.campaign.toLowerCase())?.id || '') : '');
-            if (resolvedCampaignId) fields['Campaign'] = [resolvedCampaignId];
             const resolvedCountry = row.country || (matchedAcc ? F(matchedAcc, 'Country') : '') || '';
             if (resolvedCountry) fields['Country'] = resolvedCountry;
             if (matchedAcc) fields['Account'] = [matchedAcc.id];
@@ -4742,7 +4744,28 @@ Output ONLY the message, nothing else.`;
         let list = hasFilter
           ? [...accounts]
           : [...mappedAccounts];
-        list = list.sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
+
+        // Build outreach count per account for sorting
+        const outreachCountByAccount = {};
+        outreach.forEach(o => {
+          linkedIds(o, 'Account').forEach(aid => {
+            outreachCountByAccount[aid] = (outreachCountByAccount[aid] || 0) + 1;
+          });
+        });
+
+        // Active statuses rank highest
+        const ACTIVE_STATUSES = ['Active Outreach', 'Active', 'Activo', 'Meeting Booked', 'Qualified', 'Proposal Sent', 'Negotiation'];
+        const statusRank = (a) => ACTIVE_STATUSES.includes(F(a, 'Inside Sales Status')) ? 0 : 1;
+
+        list = list.sort((a, b) => {
+          const rankDiff = statusRank(a) - statusRank(b);
+          if (rankDiff !== 0) return rankDiff;
+          // Within same group: most outreach first
+          const outDiff = (outreachCountByAccount[b.id] || 0) - (outreachCountByAccount[a.id] || 0);
+          if (outDiff !== 0) return outDiff;
+          // Fallback: alphabetical
+          return (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || '');
+        });
         if (searchTerm) {
           list = list.filter(a => (F(a, 'Account Name') || '').toLowerCase().includes(searchTerm.toLowerCase()));
         }
@@ -4760,7 +4783,7 @@ Output ONLY the message, nothing else.`;
           list = list.filter(a => linkedIds(a, 'CP').includes(filterCPId));
         }
         return list;
-      }, [accounts, mappedAccounts, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId]);
+      }, [accounts, mappedAccounts, outreach, searchTerm, filterSolutionId, filterIndustry, filterCountry, filterCPId]);
 
       const account = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) : null;
 
@@ -12745,9 +12768,8 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
         try {
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
-          // Also write Campaign linked field on the stakeholder
-          await a.updateRecord(TABLE_IDS.stakeholders, stakeholderId, { 'Campaign': [selectedCampaign.id] });
-          if (onUpdateRecord) onUpdateRecord('stakeholders', stakeholderId, { 'Campaign': [selectedCampaign.id] });
+          // NOTE: do NOT update stakeholder's 'Campaign' field — that field is the reverse link
+          // of 'Stakeholders Reached' and would mark the contact as reached immediately.
         } catch (e) { console.error('Add contact to campaign failed:', e); }
         setAddingContactId(null);
       };
@@ -12762,13 +12784,9 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
         if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
         try {
           const a = api || new AirtableAPI();
-          // Update campaign's Assigned Stakeholders in one call
+          // Update campaign's Assigned Stakeholders only — do NOT touch stakeholder's 'Campaign' field
+          // because that is the reverse link of 'Stakeholders Reached' and would mark them as reached.
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
-          // Update each stakeholder's Campaign field
-          await Promise.all(toAdd.map(sid => {
-            if (onUpdateRecord) onUpdateRecord('stakeholders', sid, { 'Campaign': [selectedCampaign.id] });
-            return a.updateRecord(TABLE_IDS.stakeholders, sid, { 'Campaign': [selectedCampaign.id] });
-          }));
         } catch (e) { console.error('Bulk add contacts failed:', e); alert('Some contacts may not have been added — check your connection and try again.'); }
         setSelectedToAdd(new Set());
         setShowAddContacts(false);
