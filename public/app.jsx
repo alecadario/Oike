@@ -3512,7 +3512,10 @@ Output ONLY the message, nothing else.`;
                     <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
                       value={values[f.key] || ''} onChange={e => set(f.key, e.target.value)}>
                       <option value="">Select...</option>
-                      {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                      {f.options.map(o => typeof o === 'object'
+                        ? <option key={o.value} value={o.value}>{o.label}</option>
+                        : <option key={o} value={o}>{o}</option>
+                      )}
                     </select>
                   ) : f.type === 'date' ? (
                     <input type="date" className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }}
@@ -3537,7 +3540,7 @@ Output ONLY the message, nothing else.`;
 
     // ============ CONTACTS SECTION ============
     function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, goToAccount }) {
-      const { accounts, stakeholders, outreach } = data;
+      const { accounts, stakeholders, outreach, campaigns = [] } = data;
       const [searchName, setSearchName] = useState('');
       const [searchAccount, setSearchAccount] = useState('');
       const [selectedInfluence, setSelectedInfluence] = useState('');
@@ -3567,6 +3570,7 @@ Output ONLY the message, nothing else.`;
       const [contactCsvRows, setContactCsvRows] = useState([]);
       const [contactImporting, setContactImporting] = useState(false);
       const [updateDuplicates, setUpdateDuplicates] = useState(false);
+      const [csvCampaignId, setCsvCampaignId] = useState(''); // campaign applied to all imported contacts
       const [contactImportResult, setContactImportResult] = useState(null);
 
       const isInbound = (src) => src && src.startsWith('Inbound');
@@ -3603,7 +3607,7 @@ Output ONLY the message, nothing else.`;
         if (ctxNewLinkedin.trim()) fields['LinkedIn'] = ctxNewLinkedin.trim();
         if (ctxNewInfluence) fields['Level of Influence'] = ctxNewInfluence;
         if (ctxNewSource) fields['Source'] = ctxNewSource;
-        // Campaign/Camapaña is a linked record field — cannot set via text input, skip
+        if (ctxNewCampaign) fields['Campaign'] = [ctxNewCampaign]; // linked record by ID
         if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
         if (CURRENT_USER?.role === 'cp') fields['CP Assigned'] = CURRENT_USER?.name || '';
         // Duplicate check
@@ -3682,6 +3686,7 @@ Output ONLY the message, nothing else.`;
         let websitesAdded = 0;
         let industriesAdded = 0;
         let accountsCreated = 0;
+        const createdStakeholderIds = []; // track for campaign assignment
         const a = api || new AirtableAPI();
         const toImport = toCreate; // alias for loop below (creation flow stays the same)
         // Track account-level fields we already wrote this session to avoid redundant writes
@@ -3730,12 +3735,16 @@ Output ONLY the message, nothing else.`;
             if (row.role) fields['Role'] = row.role;
             if (row.linkedin) fields['LinkedIn'] = row.linkedin;
             if (row.source) fields['Source'] = row.source;
-            // Campaign is a linked record field in Airtable, cannot set via text — skip
+            // Resolve campaign: manual selector takes priority, then CSV column by name match
+            const resolvedCampaignId = csvCampaignId
+              || (row.campaign ? (campaigns.find(c => (F(c,'Name')||'').toLowerCase() === row.campaign.toLowerCase())?.id || '') : '');
+            if (resolvedCampaignId) fields['Campaign'] = [resolvedCampaignId];
             const resolvedCountry = row.country || (matchedAcc ? F(matchedAcc, 'Country') : '') || '';
             if (resolvedCountry) fields['Country'] = resolvedCountry;
             if (matchedAcc) fields['Account'] = [matchedAcc.id];
             if (CURRENT_USER?.role === 'bdr') fields['BDR Owner'] = CURRENT_USER?.name || '';
-            await a.createRecord(TABLE_IDS.stakeholders, fields);
+            const newStk = await a.createRecord(TABLE_IDS.stakeholders, fields);
+            if (newStk?.id && resolvedCampaignId) createdStakeholderIds.push(newStk.id);
             created++;
             // Fill account-level fields from CSV if account matched and fields are empty
             if (matchedAcc) {
@@ -3849,6 +3858,16 @@ Output ONLY the message, nothing else.`;
           } catch (e) { failed++; console.error('[Update duplicate]', e); }
         }
 
+        // Add all newly-created contacts to the campaign's Assigned Stakeholders
+        if (createdStakeholderIds.length > 0 && csvCampaignId) {
+          try {
+            const campaignRec = campaigns.find(c => c.id === csvCampaignId);
+            const currentAssigned = campaignRec ? linkedIds(campaignRec, 'Assigned Stakeholders') : [];
+            const newAssigned = [...new Set([...currentAssigned, ...createdStakeholderIds])];
+            await a.updateRecord(TABLE_IDS.campaigns, csvCampaignId, { 'Assigned Stakeholders': newAssigned });
+          } catch (e) { console.warn('[Import] campaign assignment failed:', e); }
+        }
+
         setContactImportResult({ created, failed, updated, updateSkipped, websitesAdded, industriesAdded, accountsCreated });
         setContactImporting(false);
         if (onLogActivity) onLogActivity();
@@ -3924,7 +3943,7 @@ Output ONLY the message, nothing else.`;
           'Email': values['Email'],
           'Phone number': values['Phone number'],
           'LinkedIn': values['LinkedIn'],
-          // 'Campaign' is a linked record field in Airtable — not editable via text form
+          'Campaign': values['Campaign'] ? [values['Campaign']] : null, // linked record by ID
           'Country': values['Country'] || null,
           'Level of Influence': values['Level of Influence'] || null,
           'Source': values['Source'] || null,
@@ -4063,12 +4082,15 @@ Output ONLY the message, nothing else.`;
                     {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                {isInbound(ctxNewSource) && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>CAMPAIGN<InfoTip text="The specific event or campaign that brought this contact in. E.g. 'GITEX 2025', 'Webinar April'." /></label>
-                    <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. GITEX 2025" value={ctxNewCampaign} onChange={e => setCtxNewCampaign(e.target.value)} />
-                  </div>
-                )}
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>CAMPAIGN<InfoTip text="Link this contact to an existing campaign. Create the campaign first in the Campaigns section." /></label>
+                  <select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={ctxNewCampaign} onChange={e => setCtxNewCampaign(e.target.value)}>
+                    <option value="">No campaign</option>
+                    {campaigns.sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(c => (
+                      <option key={c.id} value={c.id}>{F(c,'Name')}{F(c,'Status') ? ` (${F(c,'Status')})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
                 <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={createContact} disabled={!ctxNewName.trim() || !ctxNewAccountId || ctxCreating}>
@@ -4088,9 +4110,20 @@ Output ONLY the message, nothing else.`;
               </div>
               {!contactCsvRows.length ? (
                 <div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
+                      Assign to Campaign <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional — applies to all imported contacts)</span>
+                    </label>
+                    <select className="input-field" style={{ fontSize: 12, padding: '6px 8px', minWidth: 260 }} value={csvCampaignId} onChange={e => setCsvCampaignId(e.target.value)}>
+                      <option value="">No campaign</option>
+                      {campaigns.sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(c => (
+                        <option key={c.id} value={c.id}>{F(c,'Name')}{F(c,'Status') ? ` (${F(c,'Status')})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
                   <input type="file" accept=".csv" onChange={handleContactCsv} style={{ fontSize: 12, color: 'var(--globant-muted)' }} />
                   <p style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 8 }}>
-                    Tip: Column headers must match exactly (case-insensitive). Country is auto-inherited from the account if not specified. Duplicates by email or full name are auto-detected.
+                    Tip: Column headers must match exactly (case-insensitive). Country is auto-inherited from the account if not specified. Duplicates by email or full name are auto-detected. You can also include a "Campaign" column in the CSV to assign per-row.
                   </p>
                 </div>
               ) : (
@@ -4270,26 +4303,32 @@ Output ONLY the message, nothing else.`;
               onSend={useMessage}
             />
           )}
-          {editingContact && (
-            <EditModal
-              title={`${F(editingContact, 'Name')} ${F(editingContact, 'Last name') || ''}`.trim()}
-              fields={[
-                { key: 'Name', label: 'First Name' },
-                { key: 'Last name', label: 'Last Name' },
-                { key: 'Role', label: 'Role / Title' },
-                { key: 'Email', label: 'Email' },
-                { key: 'Phone number', label: 'Phone' },
-                { key: 'LinkedIn', label: 'LinkedIn URL' },
-                { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
-                { key: 'Country', label: 'Country' },
-                { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
-                { key: 'Campaign', label: 'Campaign (if inbound)' },
-              ]}
-              initialValues={editingContact.fields || {}}
-              onSave={saveContactEdit}
-              onClose={() => setEditingContact(null)}
-            />
-          )}
+          {editingContact && (() => {
+            const currentCampaignId = (editingContact.fields?.['Campaign'] || [])[0] || '';
+            const campaignOptions = [{ value: '', label: 'No campaign' },
+              ...campaigns.sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(c => ({ value: c.id, label: `${F(c,'Name')}${F(c,'Status') ? ` (${F(c,'Status')})` : ''}` }))
+            ];
+            return (
+              <EditModal
+                title={`${F(editingContact, 'Name')} ${F(editingContact, 'Last name') || ''}`.trim()}
+                fields={[
+                  { key: 'Name', label: 'First Name' },
+                  { key: 'Last name', label: 'Last Name' },
+                  { key: 'Role', label: 'Role / Title' },
+                  { key: 'Email', label: 'Email' },
+                  { key: 'Phone number', label: 'Phone' },
+                  { key: 'LinkedIn', label: 'LinkedIn URL' },
+                  { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
+                  { key: 'Country', label: 'Country' },
+                  { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
+                  { key: 'Campaign', label: 'Campaign', type: 'select', options: campaignOptions },
+                ]}
+                initialValues={{ ...(editingContact.fields || {}), Campaign: currentCampaignId }}
+                onSave={saveContactEdit}
+                onClose={() => setEditingContact(null)}
+              />
+            );
+          })()}
         </div>
       );
     }
@@ -4533,7 +4572,7 @@ Output ONLY the message, nothing else.`;
 
     // ============ CP BRIEFINGS ============
     function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, goToAccount, goToProposal }) {
-      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [] } = data;
+      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [], campaigns = [] } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
       const isAdmin = CURRENT_USER?.role === 'admin';
@@ -4622,7 +4661,7 @@ Output ONLY the message, nothing else.`;
           'Name': values['Name'], 'Last name': values['Last name'],
           'Role': values['Role'], 'Email': values['Email'],
           'Phone number': values['Phone number'], 'LinkedIn': values['LinkedIn'],
-          // 'Campaign' is a linked record field in Airtable — not editable via text form
+          'Campaign': values['Campaign'] ? [values['Campaign']] : null, // linked record
           'Country': values['Country'] || null,
           'Level of Influence': values['Level of Influence'] || null,
           'Source': values['Source'] || null,
@@ -6951,25 +6990,33 @@ Rules:
           )}
 
           {/* Edit Contact Modal (from Account view) */}
-          {cpEditingContact && (
-            <EditModal
-              title={`${F(cpEditingContact, 'Name')} ${F(cpEditingContact, 'Last name') || ''}`.trim()}
-              fields={[
-                { key: 'Name', label: 'First Name' },
-                { key: 'Last name', label: 'Last Name' },
-                { key: 'Role', label: 'Role / Title' },
-                { key: 'Email', label: 'Email' },
-                { key: 'Phone number', label: 'Phone' },
-                { key: 'LinkedIn', label: 'LinkedIn URL' },
-                { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
-                { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
-                { key: 'Campaign', label: 'Campaign (if inbound)' },
-              ]}
-              initialValues={cpEditingContact.fields || {}}
-              onSave={saveCpContactEdit}
-              onClose={() => setCpEditingContact(null)}
-            />
-          )}
+          {cpEditingContact && (() => {
+            // Resolve current Campaign: field holds array of IDs in Airtable
+            const currentCampaignId = (cpEditingContact.fields?.['Campaign'] || [])[0] || '';
+            const campaignOptions = [{ value: '', label: 'No campaign' },
+              ...campaigns.sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(c => ({ value: c.id, label: `${F(c,'Name')}${F(c,'Status') ? ` (${F(c,'Status')})` : ''}` }))
+            ];
+            const editInitial = { ...(cpEditingContact.fields || {}), Campaign: currentCampaignId };
+            return (
+              <EditModal
+                title={`${F(cpEditingContact, 'Name')} ${F(cpEditingContact, 'Last name') || ''}`.trim()}
+                fields={[
+                  { key: 'Name', label: 'First Name' },
+                  { key: 'Last name', label: 'Last Name' },
+                  { key: 'Role', label: 'Role / Title' },
+                  { key: 'Email', label: 'Email' },
+                  { key: 'Phone number', label: 'Phone' },
+                  { key: 'LinkedIn', label: 'LinkedIn URL' },
+                  { key: 'Level of Influence', label: 'Influence', type: 'select', options: ['Decision Maker', 'High', 'Influencer', 'Champion', 'Medium', 'Low'] },
+                  { key: 'Source', label: 'Source', type: 'select', options: SOURCE_OPTIONS },
+                  { key: 'Campaign', label: 'Campaign', type: 'select', options: campaignOptions },
+                ]}
+                initialValues={editInitial}
+                onSave={saveCpContactEdit}
+                onClose={() => setCpEditingContact(null)}
+              />
+            );
+          })()}
 
           {/* AI Message Modal */}
           {cpSelectedStakeholder && (
