@@ -12684,6 +12684,8 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [showAddContacts, setShowAddContacts] = useState(false);
       const [addContactsSearch, setAddContactsSearch] = useState('');
       const [addingContactId, setAddingContactId] = useState(null);
+      const [selectedToAdd, setSelectedToAdd] = useState(new Set()); // bulk selection
+      const [bulkAdding, setBulkAdding] = useState(false);
       const [campaignHistoryStk, setCampaignHistoryStk] = useState(null); // for StakeholderHistoryModal
 
       const addContactToCampaign = async (stakeholderId) => {
@@ -12696,8 +12698,35 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
         try {
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
+          // Also write Campaign linked field on the stakeholder
+          await a.updateRecord(TABLE_IDS.stakeholders, stakeholderId, { 'Campaign': [selectedCampaign.id] });
+          if (onUpdateRecord) onUpdateRecord('stakeholders', stakeholderId, { 'Campaign': [selectedCampaign.id] });
         } catch (e) { console.error('Add contact to campaign failed:', e); }
         setAddingContactId(null);
+      };
+
+      const addBulkContactsToCampaign = async () => {
+        if (!selectedCampaign || selectedToAdd.size === 0) return;
+        setBulkAdding(true);
+        const currentAssigned = linkedIds(selectedCampaign, 'Assigned Stakeholders');
+        const toAdd = [...selectedToAdd].filter(id => !currentAssigned.includes(id));
+        if (toAdd.length === 0) { setBulkAdding(false); setSelectedToAdd(new Set()); return; }
+        const newAssigned = [...currentAssigned, ...toAdd];
+        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
+        try {
+          const a = api || new AirtableAPI();
+          // Update campaign's Assigned Stakeholders in one call
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
+          // Update each stakeholder's Campaign field
+          await Promise.all(toAdd.map(sid => {
+            if (onUpdateRecord) onUpdateRecord('stakeholders', sid, { 'Campaign': [selectedCampaign.id] });
+            return a.updateRecord(TABLE_IDS.stakeholders, sid, { 'Campaign': [selectedCampaign.id] });
+          }));
+        } catch (e) { console.error('Bulk add contacts failed:', e); alert('Some contacts may not have been added — check your connection and try again.'); }
+        setSelectedToAdd(new Set());
+        setShowAddContacts(false);
+        setAddContactsSearch('');
+        setBulkAdding(false);
       };
 
       const removeContactFromCampaign = async (stakeholderId) => {
@@ -13053,17 +13082,44 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
             {showAddContacts && (
               <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--globant-green)', padding: '12px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>➕ Add contacts to campaign</div>
-                  <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setShowAddContacts(false); setAddContactsSearch(''); }}>✕ Close</button>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>➕ Add contacts to campaign</div>
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>
+                      Campaign: <strong style={{ color: 'var(--globant-text)' }}>{F(selectedCampaign, 'Name')}</strong>
+                    </div>
+                  </div>
+                  <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setShowAddContacts(false); setAddContactsSearch(''); setSelectedToAdd(new Set()); }}>✕ Close</button>
                 </div>
                 <input
                   className="input-field"
-                  style={{ width: '100%', fontSize: 12, marginBottom: 10 }}
+                  style={{ width: '100%', fontSize: 12, marginBottom: 8 }}
                   placeholder="Search by name, role, or account..."
                   value={addContactsSearch}
-                  onChange={e => setAddContactsSearch(e.target.value)}
+                  onChange={e => { setAddContactsSearch(e.target.value); setSelectedToAdd(new Set()); }}
                   autoFocus
                 />
+                {availableToAdd.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '4px 2px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--globant-muted)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedToAdd.size === availableToAdd.length}
+                        onChange={e => setSelectedToAdd(e.target.checked ? new Set(availableToAdd.map(s => s.id)) : new Set())}
+                      />
+                      Select all ({availableToAdd.length})
+                    </label>
+                    {selectedToAdd.size > 0 && (
+                      <button
+                        className="action-btn btn-primary"
+                        style={{ fontSize: 11 }}
+                        disabled={bulkAdding}
+                        onClick={addBulkContactsToCampaign}
+                      >
+                        {bulkAdding ? '⏳ Adding...' : `✅ Add ${selectedToAdd.size} contact${selectedToAdd.size > 1 ? 's' : ''} to "${F(selectedCampaign,'Name')}"`}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--globant-border)', borderRadius: 6 }}>
                   {availableToAdd.length === 0 ? (
                     <div style={{ padding: 14, textAlign: 'center', color: 'var(--globant-muted)', fontSize: 12 }}>
@@ -13075,16 +13131,18 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       const acc = accId ? accounts.find(a => a.id === accId) : null;
                       const accName = acc ? F(acc, 'Account Name') : '';
                       const industry = acc ? F(acc, 'Industry') : '';
-                      const isAdding = addingContactId === s.id;
+                      const isChecked = selectedToAdd.has(s.id);
                       return (
-                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--globant-border)', opacity: isAdding ? 0.5 : 1 }}>
-                          <div>
+                        <div
+                          key={s.id}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--globant-border)', cursor: 'pointer', background: isChecked ? 'rgba(91,191,181,0.06)' : 'transparent' }}
+                          onClick={() => setSelectedToAdd(prev => { const n = new Set(prev); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}
+                        >
+                          <input type="checkbox" checked={isChecked} onChange={() => {}} style={{ pointerEvents: 'none', flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 12, fontWeight: 600 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</div>
                             <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>{F(s,'Role')}{accName ? ` · ${accName}` : ''}{industry ? ` · ${industry}` : ''}</div>
                           </div>
-                          <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px' }} disabled={isAdding} onClick={() => addContactToCampaign(s.id)}>
-                            {isAdding ? '⏳' : '+ Add'}
-                          </button>
                         </div>
                       );
                     })
