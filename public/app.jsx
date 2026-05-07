@@ -18976,29 +18976,38 @@ Return ONLY valid JSON.`;
           const userEmail = CURRENT_USER?.email || '';
 
           if (userRole === 'bdr') {
-            // BDR: only accounts where Owner linked record matches user email
-            // First, find the user's record ID in the Users table (loaded as part of data or from Owner links)
             const allAccounts = results.accounts || [];
-            // We need to find which user record IDs match the logged-in user's email
-            // Owner field links to Users table — we check if any linked Owner record's Name matches
-            // Since we can't resolve the linked record here without the Users table, we use a simpler approach:
-            // Load Users table to find the user's record ID
+            const userName = (CURRENT_USER?.name || '').toLowerCase().trim();
+
+            // Try to resolve user's record ID from Users table (for linked record field 'BDR')
             let userRecordIds = [];
             try {
               if (TABLE_IDS.users) {
-                const usersRecords = await apiInstance.fetchTable(TABLE_IDS.users);
+                const usersRecords = results.users || await apiInstance.fetchTable(TABLE_IDS.users);
                 userRecordIds = usersRecords
-                  .filter(u => (F(u, 'Email') || '').toLowerCase() === userEmail.toLowerCase())
+                  .filter(u => {
+                    const uEmail = (F(u, 'Email') || '').toLowerCase();
+                    const uName  = (F(u, 'Name') || '').toLowerCase();
+                    return uEmail === userEmail.toLowerCase() || (userName && uName === userName);
+                  })
                   .map(u => u.id);
               }
-            } catch (e) { console.warn('Could not load users for filtering:', e); }
+            } catch (e) { console.warn('Could not load users for BDR filtering:', e); }
 
-            if (userRecordIds.length > 0) {
-              results.accounts = allAccounts.filter(a => {
-                const ownerIds = linkedIds(a, 'BDR');
-                return ownerIds.some(id => userRecordIds.includes(id));
-              });
-            }
+            // Filter accounts: match via linked record 'BDR' OR text field 'BDR Owner' (name match)
+            results.accounts = allAccounts.filter(a => {
+              // 1. Linked record match
+              if (userRecordIds.length > 0) {
+                const bdrIds = linkedIds(a, 'BDR');
+                if (bdrIds.some(id => userRecordIds.includes(id))) return true;
+              }
+              // 2. Text field fallback: 'BDR Owner' contains the user's name
+              const bdrOwner = (F(a, 'BDR Owner') || '').toLowerCase().trim();
+              if (userName && bdrOwner === userName) return true;
+              // 3. Email fallback: some bases store email in BDR Owner
+              if (userEmail && bdrOwner === userEmail.toLowerCase()) return true;
+              return false;
+            });
 
             // Cascade filter: only show related data for visible accounts
             const visibleAccountIds = new Set(results.accounts.map(a => a.id));
