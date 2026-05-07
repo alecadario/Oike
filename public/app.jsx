@@ -16285,7 +16285,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
     // ============ REPORT BUILDER ============
     function ReportBuilder({ data, api, onAddRecord, onCreateCampaignFromInsight }) {
-      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [], clientPartners = [] } = data;
+      const { accounts, stakeholders, outreach, solutions, opportunities, campaigns = [], events = [], contentLab = [], clientPartners = [], users = [] } = data;
       const now = new Date();
       const fmt = (d) => d.toISOString().split('T')[0];
       const defaultFrom = fmt(new Date(now - 14 * 86400000));
@@ -16337,11 +16337,16 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           case 'solutions': return { items: sortByName(solutions, 'Name'), nameField: 'Name', icon: '🛠️', label: 'Offering' };
           case 'campaigns': return { items: sortByName(campaigns, 'Name'), nameField: 'Name', icon: '📣', label: 'Campaigns' };
           case 'events':    return { items: sortByName(events, 'Event Name'), nameField: 'Event Name', icon: '🎤', label: 'Events' };
-          case 'cp':        return { items: sortByName(clientPartners, 'Name'), nameField: 'Name', icon: '👤', label: 'Client Partners' };
+          case 'cp': {
+            // CP users: those whose ID appears in at least one account's 'CP' linked field
+            const cpUserIds = new Set(accounts.flatMap(a => linkedIds(a, 'CP')));
+            const cpUsers = users.filter(u => cpUserIds.has(u.id));
+            return { items: sortByName(cpUsers.length > 0 ? cpUsers : users, 'Name'), nameField: 'Name', icon: '👤', label: 'Client Partners' };
+          }
           case 'accounts':
           default:          return { items: sortByName(accounts, 'Account Name'), nameField: 'Account Name', icon: '🏢', label: 'Accounts' };
         }
-      }, [groupBy, accounts, solutions, campaigns, events, clientPartners]);
+      }, [groupBy, accounts, solutions, campaigns, events, users]);
 
       // Filtered dropdown options (by search query)
       const filteredOptions = useMemo(() => {
