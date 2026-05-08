@@ -18993,42 +18993,28 @@ Return ONLY valid JSON.`;
 
           if (userRole === 'bdr') {
             const allAccounts = results.accounts || [];
-            const allAccountIds = new Set(allAccounts.map(a => a.id));
             const userName = (CURRENT_USER?.name || '').toLowerCase().trim();
 
-            // ── Step 1: Get the user's record ID in the CLIENT users table ──
-            // clientRecordId is resolved at login time from the client's users table.
-            // Fallback: find by name/email match in results.users.
-            let myUserRecord = null;
+            // assignedAccountIds comes from the login response (read from client users table at auth time)
+            const assignedFromLogin = new Set(CURRENT_USER?.assignedAccountIds || []);
+
+            // Fallback: find user record in results.users by clientRecordId or name
             const clientRecordId = CURRENT_USER?.clientRecordId || '';
             const usersRecords = results.users || [];
-            if (clientRecordId) {
-              myUserRecord = usersRecords.find(r => r.id === clientRecordId);
-            }
-            if (!myUserRecord) {
-              // Fallback: match by name or email
-              myUserRecord = usersRecords.find(r => {
-                const rEmail = (F(r, 'Email') || '').toLowerCase();
-                const rName  = (F(r, 'Name') || '').toLowerCase();
-                return (userEmail && rEmail === userEmail.toLowerCase())
-                    || (userName && rName === userName);
-              });
-            }
-
-            // ── Step 2: Get accounts assigned to this user (via 'Accounts' field on user record) ──
-            const assignedAccountIds = new Set(
-              myUserRecord ? linkedIds(myUserRecord, 'Accounts').filter(id => allAccountIds.has(id)) : []
+            const myUserRecord = usersRecords.find(r =>
+              (clientRecordId && r.id === clientRecordId) ||
+              (userName && (F(r, 'Name') || '').toLowerCase().trim() === userName)
             );
+            const assignedFromRecord = new Set(myUserRecord ? linkedIds(myUserRecord, 'Accounts') : []);
             const myRecordId = myUserRecord?.id || clientRecordId;
-            console.log('[BDR filter] clientRecordId:', clientRecordId, '| myUserRecord:', myUserRecord?.id, '| assignedAccounts:', assignedAccountIds.size);
 
-            // ── Step 3: Filter accounts ──
+            console.log('[BDR filter] assignedFromLogin:', assignedFromLogin.size, '| assignedFromRecord:', assignedFromRecord.size, '| myRecordId:', myRecordId);
+
+            // Filter: account must be in assigned set (either source), or BDR field, or BDR Owner text
             results.accounts = allAccounts.filter(a => {
-              // 1. Account directly assigned to user via users table 'Accounts' field
-              if (assignedAccountIds.has(a.id)) return true;
-              // 2. Account's BDR linked field references this user's record
+              if (assignedFromLogin.has(a.id)) return true;
+              if (assignedFromRecord.has(a.id)) return true;
               if (myRecordId && linkedIds(a, 'BDR').includes(myRecordId)) return true;
-              // 3. Text field fallback: 'BDR Owner'
               const bdrOwner = (F(a, 'BDR Owner') || '').toLowerCase().trim();
               if (userName && bdrOwner === userName) return true;
               if (userEmail && bdrOwner === userEmail.toLowerCase()) return true;
