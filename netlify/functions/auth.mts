@@ -135,23 +135,38 @@ async function findAndValidateUser(email: string, password: string) {
   const baseId = fields['TABLE_IDS'] || '';
   const userName = fields['Name'] || '';
 
-  // Look up the user's record ID in the CLIENT's users table (not the central auth base).
-  // This ID is what accounts' linked fields (BDR, CP, etc.) actually reference.
+  // Look up the user's record in the CLIENT's users table.
+  // Read their assigned Accounts directly here so we don't depend on runtime lookups.
   let clientRecordId = '';
+  let assignedAccountIds: string[] = [];
   if (baseId && AIRTABLE_KEY) {
     try {
       const clientUsersTableId = STANDARD_TABLES.users;
-      const nameFormula = encodeURIComponent(`{Name}='${userName.replace(/'/g, "\\'")}'`);
-      const clientUrl = `https://api.airtable.com/v0/${baseId}/${clientUsersTableId}?filterByFormula=${nameFormula}&maxRecords=1`;
+      // Fetch all users (small table) and find by name
+      const clientUrl = `https://api.airtable.com/v0/${baseId}/${clientUsersTableId}?pageSize=100`;
       const clientRes = await fetch(clientUrl, {
         headers: { 'Authorization': `Bearer ${AIRTABLE_KEY}` },
       });
       if (clientRes.ok) {
         const clientData = await clientRes.json();
-        clientRecordId = clientData.records?.[0]?.id || '';
+        const clientRecords = clientData.records || [];
+        const nameLower = userName.toLowerCase().trim();
+        const userRec = clientRecords.find((r: any) => {
+          const rName = (r.fields?.['Name'] || '').toLowerCase().trim();
+          return rName === nameLower;
+        });
+        if (userRec) {
+          clientRecordId = userRec.id;
+          // Read the 'Accounts' linked field — array of account record IDs
+          const accts = userRec.fields?.['Accounts'];
+          if (Array.isArray(accts)) {
+            assignedAccountIds = accts.map((v: any) => typeof v === 'string' ? v : v?.id).filter(Boolean);
+          }
+        }
+        console.log('[auth] clientRecordId:', clientRecordId, '| assignedAccountIds:', assignedAccountIds.length);
       }
     } catch (e) {
-      console.warn('[auth] Could not look up client record ID:', e);
+      console.warn('[auth] Could not look up client record:', e);
     }
   }
 
@@ -161,7 +176,8 @@ async function findAndValidateUser(email: string, password: string) {
     role: (typeof fields['Role'] === 'object' && fields['Role']?.name) ? fields['Role'].name : (fields['Role'] || 'viewer'),
     baseId,
     airtableRecordId: record.id,
-    clientRecordId, // Record ID in the CLIENT's users table (used for BDR/CP filtering)
+    clientRecordId,
+    assignedAccountIds, // Account IDs from the client users table — used for BDR filtering
   };
 }
 
@@ -211,7 +227,7 @@ export default async (req: Request, context: Context) => {
 
     return new Response(JSON.stringify({
       token,
-      user: { email: user.email, name: user.name, role: user.role, clientRecordId: user.clientRecordId },
+      user: { email: user.email, name: user.name, role: user.role, clientRecordId: user.clientRecordId, assignedAccountIds: user.assignedAccountIds },
       baseId: user.baseId,
       config: clientConfig,
     }), {
