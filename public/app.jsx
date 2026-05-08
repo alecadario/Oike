@@ -18994,34 +18994,48 @@ Return ONLY valid JSON.`;
           if (userRole === 'bdr') {
             const allAccounts = results.accounts || [];
             const userName = (CURRENT_USER?.name || '').toLowerCase().trim();
+            // First name only (e.g. "pranitha" from "pranitha tiwari")
+            const userFirstName = userName.split(' ')[0];
 
-            // Try to resolve user's record ID from Users table (for linked record field 'BDR')
+            // Try to resolve user's record ID from Users AND clientPartners tables
+            // (the BDR linked field may point to either one depending on base setup)
             let userRecordIds = [];
             try {
-              if (TABLE_IDS.users) {
-                const usersRecords = results.users || await apiInstance.fetchTable(TABLE_IDS.users);
-                userRecordIds = usersRecords
-                  .filter(u => {
-                    const uEmail = (F(u, 'Email') || '').toLowerCase();
-                    const uName  = (F(u, 'Name') || '').toLowerCase();
-                    return uEmail === userEmail.toLowerCase() || (userName && uName === userName);
-                  })
-                  .map(u => u.id);
+              const matchFn = (r) => {
+                const rEmail = (F(r, 'Email') || '').toLowerCase();
+                const rName  = (F(r, 'Name') || '').toLowerCase();
+                if (userEmail && rEmail === userEmail.toLowerCase()) return true;
+                if (userName && rName === userName) return true;
+                // Partial: first name + last name both present
+                if (userFirstName && rName.startsWith(userFirstName)) return true;
+                return false;
+              };
+              // Search in users table
+              const usersRecords = results.users || (TABLE_IDS.users ? await apiInstance.fetchTable(TABLE_IDS.users).catch(() => []) : []);
+              const fromUsers = usersRecords.filter(matchFn).map(u => u.id);
+              // Search in clientPartners table (BDR field may link here in some bases)
+              const cpRecords = results.clientPartners || (TABLE_IDS.clientPartners ? await apiInstance.fetchTable(TABLE_IDS.clientPartners).catch(() => []) : []);
+              const fromCp = cpRecords.filter(matchFn).map(u => u.id);
+              userRecordIds = [...new Set([...fromUsers, ...fromCp])];
+              if (userRecordIds.length === 0) {
+                console.warn('[BDR filter] No record found for user:', userName, userEmail, '— falling back to text fields only');
               }
-            } catch (e) { console.warn('Could not load users for BDR filtering:', e); }
+            } catch (e) { console.warn('Could not load records for BDR filtering:', e); }
 
-            // Filter accounts: match via linked record 'BDR' OR text field 'BDR Owner' (name match)
+            // Filter accounts: match via linked record 'BDR' OR text fields
             results.accounts = allAccounts.filter(a => {
-              // 1. Linked record match
+              // 1. Linked record match (BDR field)
               if (userRecordIds.length > 0) {
                 const bdrIds = linkedIds(a, 'BDR');
                 if (bdrIds.some(id => userRecordIds.includes(id))) return true;
               }
-              // 2. Text field fallback: 'BDR Owner' contains the user's name
+              // 2. Text field: 'BDR Owner' exact name match
               const bdrOwner = (F(a, 'BDR Owner') || '').toLowerCase().trim();
               if (userName && bdrOwner === userName) return true;
-              // 3. Email fallback: some bases store email in BDR Owner
+              // 3. Email fallback
               if (userEmail && bdrOwner === userEmail.toLowerCase()) return true;
+              // 4. First-name partial match (e.g. "Pranitha" in "Pranitha Tiwari")
+              if (userFirstName && bdrOwner.startsWith(userFirstName)) return true;
               return false;
             });
 
