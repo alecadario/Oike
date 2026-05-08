@@ -4745,8 +4745,11 @@ Output ONLY the message, nothing else.`;
 
       const mappedAccounts = useMemo(() => accounts.filter(a => linkedIds(a, 'Stakeholders').length > 0), [accounts]);
       const filteredAccounts = useMemo(() => {
+        const isBdr = CURRENT_USER?.role === 'bdr';
         const hasFilter = searchTerm || filterSolutionId || filterIndustry || filterCountry || filterCPId;
-        let list = hasFilter
+        // BDRs see ALL their assigned accounts (not just mapped ones), because accounts
+        // may have been assigned before any stakeholders are added.
+        let list = (hasFilter || isBdr)
           ? [...accounts]
           : [...mappedAccounts];
 
