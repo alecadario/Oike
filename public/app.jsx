@@ -13793,7 +13793,7 @@ ${contentMeta}
     ${senderLogo ? `<img src="${escape(senderLogo)}" alt="${escape(senderCo)}" width="auto" height="44" style="display:block;max-height:44px;max-width:160px;margin:0 auto 20px;border:0;outline:none;" />` : `<div style="display:inline-block;background:${escape(accentColor)};color:${escape(darkColor)};font-size:18px;font-weight:900;letter-spacing:1px;padding:8px 18px;border-radius:10px;margin:0 auto 20px;font-family:Arial,Helvetica,sans-serif;">${escape(senderCo)}</div>`}
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 14px;"><tr><td bgcolor="${escape(accentColor)}25" style="background:${escape(accentColor)}25;border:1px solid ${escape(accentColor)}66;border-radius:20px;padding:4px 14px;color:${escape(accentColor)};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${escape(campaignType)} &middot; ${escape(senderCo)}</td></tr></table>
     <h1 style="margin:0;font-size:28px;color:#ffffff;font-weight:800;line-height:1.2;letter-spacing:-0.5px;font-family:Arial,Helvetica,sans-serif;">${escape(campaignName)}</h1>
-    <p style="margin:12px 0 0;font-size:13px;color:${escape(accentColor)};letter-spacing:0.5px;font-family:Arial,Helvetica,sans-serif;opacity:0.85;">{{company}}</p>
+    ${S.subtitle !== '' ? `<p style="margin:12px 0 0;font-size:13px;color:${escape(accentColor)};letter-spacing:0.5px;font-family:Arial,Helvetica,sans-serif;opacity:0.85;">${S.subtitle || '{{company}}'}</p>` : ''}
   </td></tr>
   <tr><td style="padding:36px 36px 28px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;"><tr><td bgcolor="${escape(accentColor)}10" style="background:${escape(accentColor)}10;padding:18px 22px;border-left:4px solid ${escape(accentColor)};border-radius:0 10px 10px 0;font-size:15px;line-height:1.6;color:${escape(darkColor)};font-weight:500;font-family:Arial,Helvetica,sans-serif;">{{ai_opener}}</td></tr></table>
@@ -13849,50 +13849,54 @@ ${contentMeta}
         try {
           const campaignName = F(selectedCampaign,'Name') || '';
           const campaignType = F(selectedCampaign,'Type') || '';
-          const template     = (F(selectedCampaign,'Message Template') || '').slice(0,300);
-          const context      = (F(selectedCampaign,'Context') || '').slice(0,700);
-          const aiSummary    = (F(selectedCampaign,'AI Summary') || '').slice(0,600);
+          const template     = F(selectedCampaign,'Message Template') || '';
+          const context      = F(selectedCampaign,'Context') || '';
+          const aiSummary    = F(selectedCampaign,'AI Summary') || '';
           const assetUrl     = F(selectedCampaign,'Asset URL') || '';
           const senderName   = COMPANY_PROFILE.senderName || 'Ale';
           const senderCo     = COMPANY_PROFILE.companyName || 'Oike';
           const senderEmail  = CURRENT_USER?.email || '';
+          const companyServices = COMPANY_PROFILE.services || '';
+          const companyDesc  = COMPANY_PROFILE.description || COMPANY_PROFILE.companyDescription || '';
 
           // Aggregate pain intel from assigned contacts (across industries)
-          const allContacts = detailContacts.slice(0, 20);
+          const allContacts = detailContacts.slice(0, 30);
           const pains = allContacts.map(s => F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').filter(Boolean);
+          const roles = [...new Set(allContacts.map(s => F(s,'Role') || '').filter(Boolean))].slice(0, 8);
           const industries = [...new Set(allContacts.map(s => { const a = accounts.find(ac => linkedIds(s,'Account').includes(ac.id)); return a ? F(a,'Industry') : ''; }).filter(Boolean))];
-          const painSummary = pains.slice(0,6).join(' · ').slice(0,600);
-          const industrySummary = industries.slice(0,5).join(', ') || 'various industries';
+          const painSummary = pains.slice(0, 10).join('\n- ').slice(0, 1200);
+          const industrySummary = industries.slice(0, 6).join(', ') || 'various industries';
 
           // Step 1: generate content sections
-          const sectionsPrompt = `You are a B2B industry analyst writing a thought leadership piece — NOT a salesperson. Your goal is to share genuine, useful insights that make the reader think "this is valuable, I want to talk to this person." Never pitch, never sell, never use phrases like "our solution" or "we offer". Write like someone who deeply understands the industry and is sharing what they're observing.
+          const sectionsPrompt = `You are a B2B industry analyst writing a substantive thought leadership email — NOT a salesperson. Your goal is to deliver real value: specific insights, data points, and observations that make the reader think "this person understands my world." Never pitch, never sell, never say "our solution" or "we offer". Write like a trusted advisor sharing what they're seeing across the industry.
 
-Return a JSON object with these keys (all strings):
+Return a JSON object with these exact keys (all strings):
 {
-  "hook": "1-2 sentences sharing a specific trend or pattern you're observing across companies in this industry right now. Data-grounded, surprising, not generic. No question marks.",
-  "painHeading": "3-5 word heading that names the core tension or challenge — phrased as an observation, not a pain point. E.g. 'Why most [industry] teams stall here'",
-  "pain": "2-3 sentences describing the challenge as an analyst would — specific to the industry, credible, acknowledges complexity. No blame, just observation.",
-  "valueHeading": "3-5 word heading for the insight/recommendation section — e.g. 'What's working in 2025' or 'The shift we're seeing'",
-  "value": "2-3 sentences sharing what's actually working for teams that get this right. Frame as industry insight, not a product pitch. ${senderCo} can appear naturally as context but is not the focus.",
-  "bullets": ["actionable insight or data point — specific, under 15 words", "insight 2", "insight 3", "insight 4"],
-  "socialProof": "1 sentence describing a concrete result or shift observed — can reference a type of company without naming names. Or empty string.",
-  "ctaText": ""
+  "hook": "2-3 sentences. A sharp, specific observation about what's happening in the target industry RIGHT NOW. Reference real dynamics, tensions, or shifts. Surprising and credible — not generic.",
+  "painHeading": "4-6 word heading naming the core tension as an observation. E.g. 'Why alignment breaks down at scale' or 'The gap between strategy and execution'",
+  "pain": "3-4 sentences. Describe the challenge in depth — the WHY behind it, the systemic reasons it happens, the cost of ignoring it. Analytical and empathetic, not blaming.",
+  "valueHeading": "4-6 word heading for the insight/shift section. E.g. 'What leading teams are doing differently' or 'The move that changes the dynamic'",
+  "value": "3-4 sentences. Share specific, concrete approaches that work — what high-performing teams do differently, what patterns lead to better outcomes. Can reference ${senderCo}'s perspective naturally but NOT as a pitch.",
+  "bullets": ["Specific, actionable insight or data point — concrete, under 18 words", "insight 2", "insight 3", "insight 4", "insight 5"],
+  "socialProof": "1-2 sentences. A specific result or shift observed — reference a type of company or role without naming names. Or empty string if forced."
 }
 
 LANGUAGE: Write ALL content in ${tplLanguage === 'es' ? 'Spanish (Latin American)' : tplLanguage === 'pt' ? 'Brazilian Portuguese' : 'English'}.
 CAMPAIGN: "${campaignName}" (${campaignType})
-SENDER: ${senderName}, ${senderCo}
+SENDER: ${senderName} — ${senderCo}${companyServices ? ` (${companyServices})` : ''}${companyDesc ? `\nCOMPANY CONTEXT: ${companyDesc.slice(0,400)}` : ''}
 TARGET INDUSTRIES: ${industrySummary}
-CONTEXT FROM PROSPECTS (${pains.length} contacts): ${painSummary}
-${context ? `CAMPAIGN CONTEXT:\n${context}\n` : ''}${aiSummary ? `STRATEGIC BRIEF:\n${aiSummary}\n` : ''}${template ? `ANGLE: ${template}\n` : ''}
+TARGET ROLES: ${roles.join(', ') || 'various'}
+PAIN INTEL from ${pains.length} contacts:\n- ${painSummary}
+${context ? `\nCAMPAIGN CONTEXT (use this heavily):\n${context.slice(0,1500)}\n` : ''}${aiSummary ? `\nSTRATEGIC BRIEF (use this heavily):\n${aiSummary.slice(0,1200)}\n` : ''}${template ? `\nMESSAGING ANGLE:\n${template.slice(0,600)}\n` : ''}
 
-Return ONLY the JSON. No markdown fences.`;
+Be specific. Use the campaign context and strategic brief as the primary source of content. Return ONLY the JSON. No markdown fences.`;
 
-          const sectionsRaw = await callOpenAI({ prompt: sectionsPrompt, temperature: 0.5, max_tokens: 800 });
+          const sectionsRaw = await callOpenAI({ prompt: sectionsPrompt, temperature: 0.5, max_tokens: 1600 });
           let sections = {};
           try { sections = JSON.parse(sectionsRaw.replace(/^```json\n?|```$/g,'')); } catch { sections = {}; }
 
           const S = {
+            subtitle: '{{company}}',
             hook: sections.hook || '',
             painHeading: sections.painHeading || (tplLanguage === 'es' ? 'El desafío más común' : tplLanguage === 'pt' ? 'O desafio mais comum' : 'The challenge most teams face'),
             pain: sections.pain || '',
@@ -14003,9 +14007,28 @@ Return ONLY the 1-2 sentences in ${langLabel}. No greeting, no subject line.`;
 
             if (res.ok) {
               setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: opener, status: bulkDraftMode ? 'draft' : 'sent', error: '' } }));
+              const a = api || new AirtableAPI();
+              const today = new Date().toISOString().split('T')[0];
+              const activityFields = {
+                'Channel': 'Email',
+                'Status': bulkDraftMode ? 'Draft' : 'Sent',
+                'Activity Name': `Email — ${new Date().toLocaleDateString('en-US')}`,
+                'Message': opener,
+                'Stakeholder': [s.id],
+                'Date': today,
+                'Logged By': CURRENT_USER?.name || '',
+              };
+              const accIds = linkedIds(s, 'Account');
+              if (accIds.length) activityFields['Account'] = accIds;
+              // Create outreach record directly from frontend (reliable, same path as manual log)
+              a.createRecord(TABLE_IDS.outreach, activityFields)
+                .then(rec => { if (onAddRecord && rec?.id) onAddRecord('outreach', activityFields, rec.id); })
+                .catch(e => console.error('[bulk-send] outreach log failed:', e));
+              // Also optimistically update local state for immediate display
+              if (onAddRecord) onAddRecord('outreach', activityFields);
+              // Update campaign reached count
               const currentReached = linkedIds(selectedCampaign,'Stakeholders Reached');
               const currentAssigned = linkedIds(selectedCampaign,'Assigned Stakeholders');
-              const a = api || new AirtableAPI();
               await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
                 'Stakeholders Reached': [...new Set([...currentReached, s.id])],
                 'Assigned Stakeholders': [...new Set([...currentAssigned, s.id])],
@@ -14574,6 +14597,17 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                             ✏️ Edit the content below — the email updates automatically. Tokens <code style={{ color: '#60a5fa' }}>{'{{first_name}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{company}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{ai_opener}}'}</code> are filled per contact on send.
                           </div>
 
+                          <label style={labelStyle}>Header subtitle</label>
+                          <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
+                            value={C.subtitle ?? '{{company}}'}
+                            onChange={e => updateContent('subtitle', e.target.value)}>
+                            <option value="{{company}}">Company name — {'{{company}}'}</option>
+                            <option value="{{first_name}}">First name — {'{{first_name}}'}</option>
+                            <option value="{{first_name}} at {{company}}">Name at Company — {'{{first_name}} at {{company}}'}</option>
+                            <option value="Prepared for {{first_name}}">Prepared for {'{{first_name}}'}</option>
+                            <option value="">No subtitle</option>
+                          </select>
+
                           <label style={labelStyle}>Opening hook (1-2 sentences)</label>
                           <textarea className="input-field" style={{ ...fieldStyle, minHeight: 56, resize: 'vertical', fontSize: 12 }}
                             value={C.hook || ''} onChange={e => updateContent('hook', e.target.value)} />
@@ -14613,10 +14647,6 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           <label style={labelStyle}>Social proof / quote (optional)</label>
                           <textarea className="input-field" style={{ ...fieldStyle, minHeight: 48, resize: 'vertical', fontSize: 12 }}
                             value={C.socialProof || ''} onChange={e => updateContent('socialProof', e.target.value)} />
-
-                          <label style={labelStyle}>CTA button text</label>
-                          <input className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
-                            value={C.ctaText || ''} onChange={e => updateContent('ctaText', e.target.value)} />
 
                           <label style={labelStyle}>Evento (opcional)</label>
                           <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
