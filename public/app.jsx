@@ -124,6 +124,33 @@
       localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(COMPANY_PROFILE));
     }
 
+    // ============ MESSAGE PROMPT TEMPLATES (configurable per user) ============
+    const MESSAGE_PROMPTS_KEY = 'oike_message_prompts';
+    const MESSAGE_PROMPT_DEFAULTS = {
+      first: `First message to {{name}} — they don't know you yet. Open a conversation, earn a reply. No pitch. Genuine curiosity. One sentence intro: who you are, your role, {{company}}.`,
+      followup: `Follow-up to {{name}} ({{touchCount}} touches, {{replyState}}).\n\nRead the conversation history and diagnose the state:\n• ENGAGED → advance with a concrete next step\n• STALLED → nudge with a NEW signal or angle from their pain points or LinkedIn\n• GHOSTED → radically different angle (shorter, question-first, pattern-interrupt)\n• OBJECTION → address it honestly\n\nDO NOT repeat phrases or angles used before. Feel like a natural continuation.`,
+      breakup: `Last message to {{name}} — {{touchCount}} attempts, {{replyState}}. Ultra-short (max 3 sentences).\n\nRead the history: what didn't land? Pick ONE honest observation. Close the loop with zero pressure. Leave a door open (e.g. "if X changes for you") but don't beg.\n\nHuman, warm, final. No guilt-tripping, no final pitch.`,
+    };
+    let MESSAGE_PROMPTS = (() => {
+      try {
+        const saved = localStorage.getItem(MESSAGE_PROMPTS_KEY);
+        if (saved) return { ...MESSAGE_PROMPT_DEFAULTS, ...JSON.parse(saved) };
+      } catch (e) { /* ignore */ }
+      return { ...MESSAGE_PROMPT_DEFAULTS };
+    })();
+    function saveMessagePrompts(prompts) {
+      MESSAGE_PROMPTS = { ...MESSAGE_PROMPTS, ...prompts };
+      localStorage.setItem(MESSAGE_PROMPTS_KEY, JSON.stringify(MESSAGE_PROMPTS));
+    }
+    function resolvePromptTemplate(template, vars) {
+      return template
+        .replace(/\{\{name\}\}/g, vars.name || '')
+        .replace(/\{\{company\}\}/g, vars.company || '')
+        .replace(/\{\{touchCount\}\}/g, vars.touchCount ?? '')
+        .replace(/\{\{replyCount\}\}/g, vars.replyCount ?? '')
+        .replace(/\{\{replyState\}\}/g, vars.replyState || '');
+    }
+
     // ============ AIRTABLE API (via backend proxy) ============
     class AirtableAPI {
       constructor(apiKeyOrNull) {
@@ -2073,6 +2100,14 @@ ${chronological.map(o => {
           let mission = '';
           let contextBlock = '';
 
+          const promptVars = {
+            name: sName,
+            company: COMPANY_PROFILE.companyName,
+            touchCount,
+            replyCount,
+            replyState: replyCount > 0 ? `${replyCount} repl${replyCount>1?'ies':'y'} from them` : 'no replies yet',
+          };
+
           if (isEventInvite) {
             mission = `MISSION: Invite ${sName} to this event. Casual and direct — ask if they're attending, mention you'd like to meet there. No pitch. No formalities. One question, done.`;
             contextBlock = eventBlock;
@@ -2080,36 +2115,14 @@ ${chronological.map(o => {
             mission = `MISSION: Follow up after meeting ${sName} in person at an event. Skip intro. Reference the meeting naturally. ONE clear next step.`;
             contextBlock = eventBlock;
           } else if (tab === 'first') {
-            mission = `MISSION: First message to ${sName} — they don't know you yet. Open a conversation, earn a reply. No pitch. Genuine curiosity. One sentence intro: who you are, your role, ${COMPANY_PROFILE.companyName}.`;
+            mission = `MISSION: ${resolvePromptTemplate(MESSAGE_PROMPTS.first, promptVars)}`;
             contextBlock = firstContactBlock ? `━━━ CONTEXT (use this, don't invent) ━━━\n${firstContactBlock}` : '→ No specific data. Infer from role and industry.';
           } else if (tab === 'followup') {
-            const replyState = replyCount > 0 ? `${replyCount} repl${replyCount>1?'ies':'y'} from them` : 'no replies yet';
-            mission = `MISSION: Follow-up #${touchCount} to ${sName} (${replyState}).
-
-━━━ STRATEGIC ANALYSIS (do this silently before writing) ━━━
-1. Read the FULL history above and diagnose the state:
-   • ENGAGED — they're replying, conversation is active → advance it with a concrete next step
-   • QUESTION_PENDING — they asked something last and it wasn't answered → answer it directly + add value
-   • STALLED — you answered, they went quiet → gentle nudge with NEW signal or angle
-   • OBJECTION — they raised a concern → address it honestly, don't dodge
-   • GHOSTED — multiple sends, zero engagement → try a radically different angle (shorter, question-first, pattern-interrupt)
-   • POST_MEETING — a meeting happened → confirm next step referenced in history
-2. What was the LAST signal from them (if any)? Anchor your message to that signal.
-3. DO NOT repeat phrases, angles, or openers used in previous messages. Variety is the point.
-
-Write the next message strategically advancing from the current state. Feel like a natural continuation, NOT a reset or an opener.`;
-            contextBlock = historyBlock || '→ No previous messages found.';
+            mission = `MISSION: ${resolvePromptTemplate(MESSAGE_PROMPTS.followup, promptVars)}`;
+            contextBlock = [historyBlock, firstContactBlock && `━━━ CONTACT CONTEXT (pain points, LinkedIn, news — use as NEW angles if relevant) ━━━\n${firstContactBlock}`].filter(Boolean).join('\n\n') || '→ No previous messages found.';
           } else if (tab === 'breakup') {
-            mission = `MISSION: Last message to ${sName} — ${touchCount} attempts, ${replyCount > 0 ? `${replyCount} reply(ies) earlier but now silent` : 'no reply ever'}. Ultra-short (max 3 sentences).
-
-━━━ STRATEGIC ANALYSIS (do silently) ━━━
-1. Read the history: what did you offer/ask that didn't land?
-2. Pick ONE honest observation (not a pitch) that reflects the real state of the thread.
-3. Close the loop with zero pressure. Make it clear this is the last touch from your side.
-4. Leave a door open (e.g., "if X changes for you") but don't beg.
-
-Human, warm, final. No guilt-tripping, no final pitch, no "just one more thing".`;
-            contextBlock = historyBlock || '→ No previous messages found.';
+            mission = `MISSION: ${resolvePromptTemplate(MESSAGE_PROMPTS.breakup, promptVars)}`;
+            contextBlock = [historyBlock, firstContactBlock && `━━━ CONTACT CONTEXT (pain points, LinkedIn, news — reference only if it adds a genuine closing note) ━━━\n${firstContactBlock}`].filter(Boolean).join('\n\n') || '→ No previous messages found.';
           }
 
           const prompt = `You are a senior B2B sales copywriter. Write ONE message that sounds like a real human — not a template.
@@ -18233,6 +18246,18 @@ Return ONLY valid JSON.`;
       const [profile, setProfile] = useState({ ...COMPANY_PROFILE });
       const [saved, setSaved] = useState(false);
 
+      // ── Message Prompts state ──
+      const [prompts, setPrompts] = useState({ ...MESSAGE_PROMPTS });
+      const [promptsSaved, setPromptsSaved] = useState(false);
+      const handleSavePrompts = () => {
+        saveMessagePrompts(prompts);
+        setPromptsSaved(true);
+        setTimeout(() => setPromptsSaved(false), 2000);
+      };
+      const handleResetPrompts = (key) => {
+        setPrompts(p => ({ ...p, [key]: MESSAGE_PROMPT_DEFAULTS[key] }));
+      };
+
       // ── Proposal branding ──
       const [branding, setBranding] = useState(() => {
         const b = loadBranding();
@@ -18333,6 +18358,7 @@ Return ONLY valid JSON.`;
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--globant-border)', paddingBottom: 12, flexShrink: 0 }}>
               {[
                 { key: 'profile', label: '🤖 AI Profile' },
+                { key: 'prompts', label: '✉️ Prompts' },
                 { key: 'proposals', label: '🏷️ Company Info' },
                 { key: 'integrations', label: '🔌 Integrations' },
                 { key: 'workspace', label: '🏢 Workspace' },
@@ -18345,6 +18371,38 @@ Return ONLY valid JSON.`;
                 }}>{t.label}</button>
               ))}
             </div>
+
+            {/* Message Prompts tab */}
+            {tab === 'prompts' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, overflowY: 'auto' }}>
+                <div style={{ fontSize: 12, color: 'var(--globant-muted)', background: 'rgba(91,191,181,0.08)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.6 }}>
+                  Customize the mission each message type follows. Use <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>{'{{name}}'}</code>, <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>{'{{company}}'}</code>, <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>{'{{touchCount}}'}</code>, <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>{'{{replyCount}}'}</code>, <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 11 }}>{'{{replyState}}'}</code> as placeholders.
+                </div>
+
+                {[
+                  { key: 'first', label: '🟢 First Contact', hint: 'The very first message to a prospect who doesn\'t know you yet.' },
+                  { key: 'followup', label: '🔵 Follow-up', hint: 'Subsequent touches. Has access to full conversation history + contact pain points.' },
+                  { key: 'breakup', label: '💀 Breakup', hint: 'Final message after multiple attempts with no response.' },
+                ].map(({ key, label, hint }) => (
+                  <div key={key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <label style={labelStyle}>{label}</label>
+                      <button onClick={() => handleResetPrompts(key)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>Reset to default</button>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 6 }}>{hint}</div>
+                    <textarea
+                      style={{ ...inputStyle, minHeight: 110, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}
+                      value={prompts[key]}
+                      onChange={e => setPrompts(p => ({ ...p, [key]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+
+                <button onClick={handleSavePrompts} style={{ padding: '10px 20px', background: 'var(--globant-green)', color: 'var(--globant-dark)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  {promptsSaved ? '✅ Saved!' : 'Save Prompts'}
+                </button>
+              </div>
+            )}
 
             {/* Company Info tab */}
             {tab === 'proposals' && (
