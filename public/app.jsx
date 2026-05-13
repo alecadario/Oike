@@ -13283,55 +13283,195 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
       };
 
-      // ── Email HTML Template ──
+      // ── Email HTML Template (white paper style, landing-page structure) ──
       const generateEmailTemplate = async () => {
         if (!selectedCampaign) return;
         setGeneratingTpl(true);
-        const campaignName   = F(selectedCampaign,'Name') || '';
-        const campaignType   = F(selectedCampaign,'Type') || '';
-        const template       = F(selectedCampaign,'Message Template') || '';
-        const context        = (F(selectedCampaign,'Context') || '').slice(0, 800);
-        const aiSummary      = (F(selectedCampaign,'AI Summary') || '').slice(0, 600);
-        const assetUrl       = F(selectedCampaign,'Asset URL') || '';
-        const senderName     = COMPANY_PROFILE.senderName || 'Ale';
-        const companyName    = COMPANY_PROFILE.companyName || 'Oike';
-        const senderEmail    = CURRENT_USER?.email || '';
-        // Aggregate sample pains from assigned contacts for context
-        const samplePains = pendingEmailContacts.slice(0, 8)
-          .map(s => F(s,'Pain Points (Generated)') || F(s,'Pain points') || '')
-          .filter(Boolean).join(' | ').slice(0, 500);
-        const industries = [...new Set(pendingEmailContacts.map(s => {
-          const acc = accounts.find(a => linkedIds(s,'Account').includes(a.id));
-          return acc ? F(acc,'Industry') : '';
-        }).filter(Boolean))].slice(0,5).join(', ');
+        try {
+          const campaignName = F(selectedCampaign,'Name') || '';
+          const campaignType = F(selectedCampaign,'Type') || '';
+          const template     = (F(selectedCampaign,'Message Template') || '').slice(0,300);
+          const context      = (F(selectedCampaign,'Context') || '').slice(0,700);
+          const aiSummary    = (F(selectedCampaign,'AI Summary') || '').slice(0,600);
+          const assetUrl     = F(selectedCampaign,'Asset URL') || '';
+          const senderName   = COMPANY_PROFILE.senderName || 'Ale';
+          const senderCo     = COMPANY_PROFILE.companyName || 'Oike';
+          const senderEmail  = CURRENT_USER?.email || '';
 
-        const prompt = `Generate a professional HTML email for a B2B outreach campaign. Return ONLY valid HTML with all styles inline (no <style> tags, no external CSS — it must render in Gmail/Outlook).
+          // Aggregate pain intel from assigned contacts (across industries)
+          const allContacts = detailContacts.slice(0, 20);
+          const pains = allContacts.map(s => F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').filter(Boolean);
+          const industries = [...new Set(allContacts.map(s => { const a = accounts.find(ac => linkedIds(s,'Account').includes(ac.id)); return a ? F(a,'Industry') : ''; }).filter(Boolean))];
+          const painSummary = pains.slice(0,6).join(' · ').slice(0,600);
+          const industrySummary = industries.slice(0,5).join(', ') || 'various industries';
+
+          // Step 1: generate content sections
+          const sectionsPrompt = `You are a B2B strategist. Generate a white-paper-style email campaign. Return a JSON object with these keys (all strings):
+{
+  "hook": "1-2 sentence insight that calls out a real pattern you're seeing across companies in their industry — specific, not generic. No question marks.",
+  "painHeading": "3-5 word heading for the pain section, e.g. 'The challenge most [industry] teams face'",
+  "pain": "2-3 sentences expanding on the main pain. Reference the industry/sector. Be specific and credible — this should read like an analyst observation.",
+  "valueHeading": "3-5 word heading for the solution section",
+  "value": "2-3 sentences on how ${senderCo} addresses this. Concrete, not fluffy.",
+  "bullets": ["bullet 1 — outcome-focused, under 15 words", "bullet 2", "bullet 3", "bullet 4"],
+  "socialProof": "1-2 sentence quote or result from a client or case (make it plausible and specific). Or leave empty string if not relevant.",
+  "ctaText": "Short CTA button text, e.g. 'See how it works' or 'Book 20 minutes'"
+}
 
 CAMPAIGN: "${campaignName}" (${campaignType})
-SENDER: ${senderName}, ${companyName}${senderEmail ? ` <${senderEmail}>` : ''}
-TARGET INDUSTRIES: ${industries || 'various'}
-PAIN CONTEXT: ${samplePains || 'business efficiency and growth'}
-${context ? `CAMPAIGN CONTEXT:\n${context}\n` : ''}${aiSummary ? `STRATEGIC BRIEF:\n${aiSummary}\n` : ''}${template ? `MESSAGE ANGLE: ${template.slice(0,300)}\n` : ''}${assetUrl ? `ASSET/RESOURCE: ${assetUrl}\n` : ''}
+SENDER: ${senderName}, ${senderCo}
+TARGET INDUSTRIES: ${industrySummary}
+PAIN INTEL (from ${pains.length} prospects): ${painSummary}
+${context ? `CAMPAIGN CONTEXT:\n${context}\n` : ''}${aiSummary ? `STRATEGIC BRIEF:\n${aiSummary}\n` : ''}${template ? `ANGLE: ${template}\n` : ''}
 
-STRUCTURE (use a single-column table layout, 600px max width, white background):
-1. Header bar: dark background (#1a1a2e or brand dark), campaign name or sender company in white
-2. Greeting: "Hi {{first_name}}," in 15px dark gray
-3. Personalized opener: a placeholder paragraph — literally the text "{{ai_opener}}" wrapped in <p> tags with color #555, font-size 14px, line-height 1.6 — DO NOT write actual content here, keep the placeholder exactly as {{ai_opener}}
-4. Main body: 2-3 short paragraphs with the core campaign message (specific, no fluff). Reference {{company}} when talking about their situation.
-5. CTA button: prominent button linking to ${assetUrl || '#'} — text like "Learn More" or "Schedule a Call"
-6. Signature block: "Best,<br>${senderName}<br>${companyName}" in small gray text
-7. Footer: very small gray text, font-size 11px: "${companyName} · ${senderEmail}"
+Return ONLY the JSON. No markdown fences.`;
 
-TOKENS TO PRESERVE EXACTLY (do not fill them in, keep as-is):
-- {{first_name}} — contact's first name
-- {{company}} — contact's company name
-- {{ai_opener}} — personalized opening paragraph (will be filled per recipient)
+          const sectionsRaw = await callOpenAI({ prompt: sectionsPrompt, temperature: 0.5, max_tokens: 800 });
+          let sections = {};
+          try { sections = JSON.parse(sectionsRaw.replace(/^```json\n?|```$/g,'')); } catch { sections = {}; }
 
-Return ONLY the HTML. No markdown, no explanation, no code fences.`;
+          const S = {
+            hook: sections.hook || '',
+            painHeading: sections.painHeading || 'The challenge your team faces',
+            pain: sections.pain || '',
+            valueHeading: sections.valueHeading || 'How we help',
+            value: sections.value || '',
+            bullets: Array.isArray(sections.bullets) ? sections.bullets.filter(Boolean) : [],
+            socialProof: sections.socialProof || '',
+            ctaText: sections.ctaText || 'Let\'s connect',
+          };
 
-        try {
-          const html = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 2000 });
-          setEmailTplHtml(html.trim());
+          // Branding from COMPANY_PROFILE / localStorage
+          const accentColor   = COMPANY_PROFILE.accentColor   || '#5bbfb5';
+          const darkColor     = COMPANY_PROFILE.darkColor      || '#1a1a2e';
+          const senderLogo    = COMPANY_PROFILE.senderLogo     || '';
+          const senderPhoto   = COMPANY_PROFILE.senderPhoto    || '';
+          const senderTitle   = COMPANY_PROFILE.senderTitle    || '';
+          const ctaLink       = assetUrl || `mailto:${senderEmail}`;
+          const escape = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+          const nl2br = t => String(t||'').replace(/\n/g,'<br/>');
+
+          // Step 2: render HTML (same structure as landing renderModern)
+          const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<meta name="x-apple-disable-message-reformatting" />
+<title>${escape(campaignName)}</title>
+<!--[if mso]><style type="text/css">table,td,div,h1,h2,h3,p,a{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:${escape(darkColor)};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6" style="background:#f3f4f6;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:620px;background:#ffffff;border-radius:16px;border-collapse:separate;">
+
+  <!-- Hero -->
+  <tr><td bgcolor="${escape(darkColor)}" align="center" style="background:${escape(darkColor)};padding:40px 36px 36px;text-align:center;border-bottom:4px solid ${escape(accentColor)};border-radius:16px 16px 0 0;">
+    ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" width="auto" height="44" style="display:block;max-height:44px;max-width:160px;margin:0 auto 20px;border:0;outline:none;" />` : ''}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 14px;">
+      <tr><td bgcolor="${escape(accentColor)}25" style="background:${escape(accentColor)}25;border:1px solid ${escape(accentColor)}66;border-radius:20px;padding:4px 14px;color:${escape(accentColor)};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">
+        ${escape(campaignType)} &middot; ${escape(senderCo)}
+      </td></tr>
+    </table>
+    <h1 style="margin:0;font-size:28px;color:#ffffff;font-weight:800;line-height:1.2;letter-spacing:-0.5px;font-family:Arial,Helvetica,sans-serif;">${escape(campaignName)}</h1>
+    <p style="margin:12px 0 0;font-size:14px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;">Prepared for <strong style="color:${escape(accentColor)};">{{first_name}} at {{company}}</strong></p>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="padding:36px 36px 28px;">
+
+    <!-- Personalized opener (token — filled per recipient) -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;">
+      <tr><td bgcolor="${escape(accentColor)}10" style="background:${escape(accentColor)}10;padding:18px 22px;border-left:4px solid ${escape(accentColor)};border-radius:0 10px 10px 0;font-size:15px;line-height:1.6;color:${escape(darkColor)};font-weight:500;font-family:Arial,Helvetica,sans-serif;">
+        {{ai_opener}}
+      </td></tr>
+    </table>
+
+    ${S.hook ? `
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(S.hook))}</p>` : ''}
+
+    ${S.pain ? `
+    <div style="margin-bottom:28px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr>
+        <td valign="middle" width="6" style="background:${escape(accentColor)};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>
+        <td valign="middle" style="padding-left:10px;font-size:18px;font-weight:800;color:${escape(darkColor)};font-family:Arial,Helvetica,sans-serif;">${escape(S.painHeading)}</td>
+      </tr></table>
+      <div style="font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(S.pain))}</div>
+    </div>` : ''}
+
+    ${S.value ? `
+    <div style="margin-bottom:24px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr>
+        <td valign="middle" width="6" style="background:#a78bfa;border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>
+        <td valign="middle" style="padding-left:10px;font-size:18px;font-weight:800;color:${escape(darkColor)};font-family:Arial,Helvetica,sans-serif;">${escape(S.valueHeading)}</td>
+      </tr></table>
+      <div style="font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(S.value))}</div>
+    </div>` : ''}
+
+    ${S.bullets.length ? `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;">
+      <tr><td bgcolor="#FAFAFA" style="background:#FAFAFA;padding:18px 20px;border-radius:12px;border:1px solid ${escape(accentColor)}22;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          ${S.bullets.map((b,i) => {
+            const c = [accentColor,'#a78bfa','#60a5fa',accentColor][i%4];
+            return `<tr>
+              <td valign="top" width="38" style="padding:7px 12px 7px 0;${i<S.bullets.length-1?`border-bottom:1px solid ${escape(c)}15;`:''}">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                  <td bgcolor="${escape(c)}20" align="center" valign="middle" width="26" height="26" style="background:${escape(c)}20;color:${escape(c)};font-weight:800;font-size:12px;border-radius:13px;width:26px;height:26px;line-height:26px;text-align:center;font-family:Arial,Helvetica,sans-serif;">${i+1}</td>
+                </tr></table>
+              </td>
+              <td valign="top" style="padding:9px 0 7px;${i<S.bullets.length-1?`border-bottom:1px solid ${escape(c)}15;`:''}font-size:13px;color:${escape(darkColor)};line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${escape(b)}</td>
+            </tr>`;
+          }).join('')}
+        </table>
+      </td></tr>
+    </table>` : ''}
+
+    ${S.socialProof ? `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;">
+      <tr><td bgcolor="#f0fdf4" style="background:#f0fdf4;padding:16px 20px;border-left:4px solid #4ade80;border-radius:0 10px 10px 0;font-size:13px;color:#4B5563;font-style:italic;line-height:1.6;font-family:Georgia,'Times New Roman',serif;">
+        <span style="font-size:20px;color:#4ade80;font-style:normal;font-weight:800;font-family:Georgia,serif;">&ldquo;</span>${nl2br(escape(S.socialProof))}
+      </td></tr>
+    </table>` : ''}
+
+    <!-- CTA -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border-top:2px solid ${escape(accentColor)}20;">
+      <tr><td style="padding:24px 0 4px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          ${senderPhoto ? `<td width="88" valign="middle" style="padding-right:16px;"><img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="68" height="68" style="display:block;width:68px;height:68px;border-radius:50%;border:3px solid ${escape(accentColor)};outline:none;" /></td>` : ''}
+          <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;">
+            <div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">Ready to explore this?</div>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 10px;"><tr>
+              <td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;">
+                <a href="${escape(ctaLink)}" style="display:inline-block;padding:12px 26px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(S.ctaText)} &rarr;</a>
+              </td>
+            </tr></table>
+            <div style="font-size:13px;color:${escape(darkColor)};font-weight:700;">${escape(senderName)}</div>
+            ${senderTitle ? `<div style="font-size:11px;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</div>` : ''}
+          </td>
+        </tr></table>
+      </td></tr>
+    </table>
+
+  </td></tr>
+
+  <!-- Footer -->
+  <tr><td bgcolor="${escape(darkColor)}" align="center" style="background:${escape(darkColor)};padding:20px 36px;text-align:center;border-radius:0 0 16px 16px;">
+    <div style="font-size:12px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;">
+      <strong style="color:#ffffff;">${escape(senderName)}</strong>${senderEmail ? ` &middot; <a href="mailto:${escape(senderEmail)}" style="color:${escape(accentColor)};text-decoration:none;">${escape(senderEmail)}</a>` : ''}
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:#9CA3AF;letter-spacing:1px;font-family:Arial,Helvetica,sans-serif;">
+      Powered by <a href="https://oike.app" style="color:${escape(accentColor)};text-decoration:none;font-weight:700;">OIKE</a> &middot; SALES INTELLIGENCE
+    </div>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body></html>`;
+
+          setEmailTplHtml(html);
           setEmailTplDirty(true);
           setPreviewTpl(true);
         } catch(e) {
