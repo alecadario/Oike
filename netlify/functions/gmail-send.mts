@@ -134,11 +134,16 @@ async function logSentActivity(
     'Logged By':      loggedBy,
   };
   if (accountIds.length > 0) fields['Account'] = accountIds;
-  await fetch(`${AIRTABLE_BASE}/${baseId}/${outreachTableId}`, {
+  const logRes = await fetch(`${AIRTABLE_BASE}/${baseId}/${outreachTableId}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ records: [{ fields }], typecast: true }),
   });
+  if (!logRes.ok) {
+    const err = await logRes.text().catch(() => '?');
+    console.error('[gmail-send] logSentActivity failed:', logRes.status, err);
+    throw new Error(`Failed to log activity in Airtable: ${logRes.status} — ${err}`);
+  }
 }
 
 // ── Advance stakeholder status (only forward, respects protected states) ──
@@ -249,11 +254,18 @@ export default async (req: Request, context: Context) => {
         'Date': today, 'Logged By': payload.email || '',
       };
       if (accountIds?.length) fields['Account'] = accountIds;
-      await fetch(`${AIRTABLE_BASE}/${baseId}/${outreachTableId}`, {
+      const draftLogRes = await fetch(`${AIRTABLE_BASE}/${baseId}/${outreachTableId}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ records: [{ fields }], typecast: true }),
       });
+      if (!draftLogRes.ok) {
+        const err = await draftLogRes.text().catch(() => '?');
+        console.error('[gmail-send] draft log failed:', draftLogRes.status, err);
+        return new Response(JSON.stringify({ error: `Draft created in Gmail but failed to log in Airtable: ${draftLogRes.status} — ${err}` }), {
+          status: 500, headers: { 'Content-Type': 'application/json' },
+        });
+      }
       await advanceStakeholderStatus(baseId, stakeholderId, 'Contacted', airtableKey);
 
       return new Response(JSON.stringify({ ok: true, draft: true, gmailDraftId: draftGmailId }), {
@@ -287,7 +299,14 @@ export default async (req: Request, context: Context) => {
 
     // Log in Airtable as Sent + advance stakeholder status
     const today = new Date().toISOString().split('T')[0];
-    await logSentActivity(baseId, outreachTableId, stakeholderId, accountIds || [], subject, message, today, payload.email || '', sentGmailId, airtableKey);
+    try {
+      await logSentActivity(baseId, outreachTableId, stakeholderId, accountIds || [], subject, message, today, payload.email || '', sentGmailId, airtableKey);
+    } catch (logErr: any) {
+      console.error('[gmail-send] Email sent but activity log failed:', logErr.message);
+      return new Response(JSON.stringify({ error: `Email sent but failed to log in Airtable: ${logErr.message}` }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      });
+    }
     await advanceStakeholderStatus(baseId, stakeholderId, 'Contacted', airtableKey);
 
     return new Response(JSON.stringify({ ok: true, gmailMessageId: sentGmailId }), {
