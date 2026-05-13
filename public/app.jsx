@@ -13735,8 +13735,11 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const _br         = loadBranding();
         const accentColor = _br.accentColor  || COMPANY_PROFILE.accentColor || '#5bbfb5';
         const darkColor   = _br.darkColor    || COMPANY_PROFILE.darkColor   || '#1a1a2e';
-        const senderLogo  = _br.senderLogo   || COMPANY_PROFILE.senderLogo  || '';
-        const senderPhoto = _br.senderPhoto  || COMPANY_PROFILE.senderPhoto || '';
+        const _rawLogo    = _br.senderLogo   || COMPANY_PROFILE.senderLogo  || '';
+        const _rawPhoto   = _br.senderPhoto  || COMPANY_PROFILE.senderPhoto || '';
+        // data: URIs are stripped by Gmail — only use hosted URLs in email
+        const senderLogo  = _rawLogo.startsWith('data:')  ? '' : _rawLogo;
+        const senderPhoto = _rawPhoto.startsWith('data:') ? '' : _rawPhoto;
         const senderTitle = _br.senderTitle  || COMPANY_PROFILE.senderTitle || '';
         const senderName  = _br.senderName   || COMPANY_PROFILE.senderName  || 'Ale';
         const senderCo    = COMPANY_PROFILE.companyName || 'Oike';
@@ -13770,7 +13773,7 @@ ${contentMeta}
 <tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:620px;background:#ffffff;border-radius:16px;border-collapse:separate;">
   <tr><td bgcolor="${escape(darkColor)}" align="center" style="background:${escape(darkColor)};padding:40px 36px 36px;text-align:center;border-bottom:4px solid ${escape(accentColor)};border-radius:16px 16px 0 0;">
-    ${senderLogo ? `<img src="${escape(senderLogo)}" alt="Logo" width="auto" height="44" style="display:block;max-height:44px;max-width:160px;margin:0 auto 20px;border:0;outline:none;" />` : ''}
+    ${senderLogo ? `<img src="${escape(senderLogo)}" alt="${escape(senderCo)}" width="auto" height="44" style="display:block;max-height:44px;max-width:160px;margin:0 auto 20px;border:0;outline:none;" />` : `<div style="display:inline-block;background:${escape(accentColor)};color:${escape(darkColor)};font-size:18px;font-weight:900;letter-spacing:1px;padding:8px 18px;border-radius:10px;margin:0 auto 20px;font-family:Arial,Helvetica,sans-serif;">${escape(senderCo)}</div>`}
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 14px;"><tr><td bgcolor="${escape(accentColor)}25" style="background:${escape(accentColor)}25;border:1px solid ${escape(accentColor)}66;border-radius:20px;padding:4px 14px;color:${escape(accentColor)};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${escape(campaignType)} &middot; ${escape(senderCo)}</td></tr></table>
     <h1 style="margin:0;font-size:28px;color:#ffffff;font-weight:800;line-height:1.2;letter-spacing:-0.5px;font-family:Arial,Helvetica,sans-serif;">${escape(campaignName)}</h1>
     <p style="margin:12px 0 0;font-size:14px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;">Prepared for <strong style="color:${escape(accentColor)};">{{first_name}} at {{company}}</strong></p>
