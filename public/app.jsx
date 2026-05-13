@@ -2242,6 +2242,54 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const handleSaveDraft = async () => {
         if (!currentMessage.trim() || !selectedChannel) return;
         setSavingDraft(true);
+
+        // Parse subject/body for Email
+        const lines = currentMessage.split('\n');
+        const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
+        const subject = subjectLine ? subjectLine.replace(/^subject:\s*/i, '').trim() : `[DRAFT] Email to ${sName}`;
+        const bodyStart = lines.findIndex(l => l.toLowerCase().startsWith('subject:'));
+        const messageBody = bodyStart >= 0 ? lines.slice(bodyStart + 1).join('\n').replace(/^\s*\n/, '').trim() : currentMessage.trim();
+        const stakeholderEmail = F(stakeholder, 'Email') || '';
+        const ccList = (selectedChannel === 'Email' && ccPartner && cpEmails.length > 0) ? cpEmails : [];
+
+        // If Email + Gmail connected → save as real Gmail draft
+        if (selectedChannel === 'Email' && gmailConnected && stakeholderEmail) {
+          try {
+            const lastReceived = sOutreach.find(o => ['Received', 'Replied'].includes(F(o, 'Status') || ''));
+            const lastNotes = lastReceived ? (F(lastReceived, 'Notes') || '') : '';
+            const threadMatch = lastNotes.match(/\[gthread:([^\]]+)\]/);
+            const inReplyTo   = lastNotes.match(/\[gmsgid:([^\]]+)\]/)?.[1];
+
+            const res = await fetch('/api/gmail/send', {
+              method: 'POST',
+              headers: getAuthHeaders(),
+              body: JSON.stringify({
+                to: stakeholderEmail,
+                subject,
+                message: messageBody,
+                cc: ccList.length ? ccList : undefined,
+                threadId:  threadMatch ? threadMatch[1] : undefined,
+                inReplyTo: inReplyTo || undefined,
+                stakeholderId: stakeholder.id,
+                accountIds: accountIds || [],
+                baseId: AIRTABLE_BASE_ID,
+                outreachTableId: TABLE_IDS.outreach,
+                draft: true,
+              }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Draft failed');
+            alert('✅ Draft saved to Gmail Borradores!');
+            if (onSuccess) onSuccess();
+            onClose();
+          } catch (e) {
+            alert('Failed to save Gmail draft: ' + (e.message || 'unknown error'));
+          }
+          setSavingDraft(false);
+          return;
+        }
+
+        // Fallback: save to Airtable only
         try {
           const a = new AirtableAPI();
           await a.createRecord(TABLE_IDS.outreach, {
@@ -2257,7 +2305,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
-          alert('Draft saved! Run "create-gmail-drafts" task to push to Gmail.');
+          alert('Draft saved to Airtable.');
           onClose();
         } catch (e) {
           console.error('Save draft failed:', e);
