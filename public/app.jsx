@@ -13807,7 +13807,13 @@ ${contentMeta}
     ${S.pain ? `<div style="margin-bottom:28px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr><td valign="middle" width="6" style="background:${escape(accentColor)};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td><td valign="middle" style="padding-left:10px;font-size:18px;font-weight:800;color:${escape(darkColor)};font-family:Arial,Helvetica,sans-serif;">${escape(S.painHeading||'')}</td></tr></table><div style="font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(S.pain))}</div></div>` : ''}
     ${S.value ? `<div style="margin-bottom:24px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr><td valign="middle" width="6" style="background:#a78bfa;border-radius:3px;font-size:0;line-height:0;">&nbsp;</td><td valign="middle" style="padding-left:10px;font-size:18px;font-weight:800;color:${escape(darkColor)};font-family:Arial,Helvetica,sans-serif;">${escape(S.valueHeading||'')}</td></tr></table><div style="font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(S.value))}</div></div>` : ''}
     ${bullets.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;"><tr><td bgcolor="#FAFAFA" style="background:#FAFAFA;padding:18px 20px;border-radius:12px;border:1px solid ${escape(accentColor)}22;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${bullets.map((b,i)=>{const c=[accentColor,'#a78bfa','#60a5fa',accentColor][i%4];const last=i===bullets.length-1;return `<tr><td valign="top" width="38" style="padding:7px 12px 7px 0;${last?'':`border-bottom:1px solid ${escape(c)}15;`}"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${escape(c)}20" align="center" valign="middle" width="26" height="26" style="background:${escape(c)}20;color:${escape(c)};font-weight:800;font-size:12px;border-radius:13px;width:26px;height:26px;line-height:26px;text-align:center;font-family:Arial,Helvetica,sans-serif;">${i+1}</td></tr></table></td><td valign="top" style="padding:9px 0 7px;${last?'':`border-bottom:1px solid ${escape(c)}15;`}font-size:13px;color:${escape(darkColor)};line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${escape(b)}</td></tr>`;}).join('')}</table></td></tr></table>` : ''}
-    ${S.socialProof ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;"><tr><td bgcolor="#f0fdf4" style="background:#f0fdf4;padding:16px 20px;border-left:4px solid #4ade80;border-radius:0 10px 10px 0;font-size:13px;color:#4B5563;font-style:italic;line-height:1.6;font-family:Georgia,'Times New Roman',serif;"><span style="font-size:20px;color:#4ade80;font-style:normal;font-weight:800;font-family:Georgia,serif;">&ldquo;</span>${nl2br(escape(S.socialProof))}</td></tr></table>` : ''}
+    ${S.socialProof ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;"><tr><td bgcolor="${escape(accentColor)}12" style="background:${escape(accentColor)}12;border:1px solid ${escape(accentColor)}33;border-radius:12px;padding:18px 22px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:10px;border-collapse:separate;"><tr>
+        <td bgcolor="${escape(accentColor)}" align="center" valign="middle" width="28" height="28" style="background:${escape(accentColor)};border-radius:8px;width:28px;height:28px;text-align:center;line-height:28px;font-size:14px;">💡</td>
+        <td style="padding-left:10px;font-size:11px;font-weight:800;color:${escape(accentColor)};text-transform:uppercase;letter-spacing:1.5px;font-family:Arial,Helvetica,sans-serif;">${tplLanguage === 'es' ? 'Acción concreta' : tplLanguage === 'pt' ? 'Ação prática' : 'Actionable tip'}</td>
+      </tr></table>
+      <div style="font-size:14px;color:${escape(darkColor)};line-height:1.65;font-family:Arial,Helvetica,sans-serif;font-weight:500;">${nl2br(escape(S.socialProof))}</div>
+    </td></tr></table>` : ''}
     ${evName ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;">
       <tr><td bgcolor="${escape(accentColor)}08" style="background:${escape(accentColor)}08;border:1px solid ${escape(accentColor)}33;border-radius:12px;padding:20px 22px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -13884,7 +13890,7 @@ Return a JSON object with these exact keys (all strings):
   "valueHeading": "4-6 word heading for the insight/shift section. E.g. 'What leading teams are doing differently' or 'The move that changes the dynamic'",
   "value": "3-4 sentences. Share specific, concrete approaches that work — what high-performing teams do differently, what patterns lead to better outcomes. Can reference ${senderCo}'s perspective naturally but NOT as a pitch.",
   "bullets": ["Specific, actionable insight or data point — concrete, under 18 words", "insight 2", "insight 3", "insight 4", "insight 5"],
-  "socialProof": "1-2 sentences. A specific result or shift observed — reference a type of company or role without naming names. Or empty string if forced."
+  "socialProof": "1-2 sentences. A concrete, actionable tip the reader can apply immediately — something specific they can do this week to address the challenge described. Not a quote, not social proof. A real recommendation."
 }
 
 LANGUAGE: Write ALL content in ${tplLanguage === 'es' ? 'Spanish (Latin American)' : tplLanguage === 'pt' ? 'Brazilian Portuguese' : 'English'}.
@@ -14660,8 +14666,9 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           ))}
                           <button className="action-btn btn-ghost" style={{ fontSize: 10, marginBottom: 10 }} onClick={addBullet}>+ Add bullet</button>
 
-                          <label style={labelStyle}>Social proof / quote (optional)</label>
-                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 48, resize: 'vertical', fontSize: 12 }}
+                          <label style={labelStyle}>💡 Actionable tip (optional)</label>
+                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
+                            placeholder="A concrete action or recommendation the reader can apply right now..."
                             value={C.socialProof || ''} onChange={e => updateContent('socialProof', e.target.value)} />
 
                           <div style={{ borderTop: '1px solid var(--globant-border)', margin: '10px 0 12px', paddingTop: 12 }}>
