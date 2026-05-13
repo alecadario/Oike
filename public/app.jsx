@@ -13029,6 +13029,11 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [bulkMsgs, setBulkMsgs] = useState({}); // {[id]: {msg, status, error}}
       const [bulkSending, setBulkSending] = useState(false);
       const [bulkResult, setBulkResult] = useState(null); // {sent, errors}
+      const [showSeq, setShowSeq] = useState(false);
+      const [seqSteps, setSeqSteps] = useState([]);
+      const [seqDirty, setSeqDirty] = useState(false);
+      const [savingSeq, setSavingSeq] = useState(false);
+      const [enrolling, setEnrolling] = useState(false);
 
       const addContactToCampaign = async (stakeholderId) => {
         if (!selectedCampaign) return;
@@ -13184,6 +13189,68 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         setBulkSending(false);
         setBulkResult({ sent, errors });
         if (onLogActivity) onLogActivity();
+      };
+
+      // ── Sequence helpers ──
+      const parseSeqSteps = (c) => { try { return JSON.parse(F(c,'Sequence Steps') || '[]'); } catch { return []; } };
+      const parseSeqEnrollments = (c) => { try { return JSON.parse(F(c,'Sequence Enrollments') || '{}'); } catch { return {}; } };
+
+      // Sync local seqSteps when campaign changes
+      useEffect(() => {
+        if (selectedCampaign) setSeqSteps(parseSeqSteps(selectedCampaign));
+        setSeqDirty(false);
+      }, [selectedId]);
+
+      const addSeqStep = () => {
+        const last = seqSteps[seqSteps.length - 1];
+        setSeqSteps(prev => [...prev, { waitDays: last ? (last.waitDays + 3) : 0, channel: 'Email', condition: prev.length === 0 ? 'always' : 'no_reply', note: '' }]);
+        setSeqDirty(true);
+      };
+      const removeSeqStep = (i) => { setSeqSteps(prev => prev.filter((_,idx) => idx !== i)); setSeqDirty(true); };
+      const updateSeqStep = (i, key, val) => { setSeqSteps(prev => prev.map((s,idx) => idx===i ? {...s,[key]:val} : s)); setSeqDirty(true); };
+
+      const saveSeqSteps = async () => {
+        if (!selectedCampaign) return;
+        setSavingSeq(true);
+        const json = JSON.stringify(seqSteps);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Steps': json });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Steps': json });
+          setSeqDirty(false);
+        } catch(e) { alert('Failed to save sequence: ' + e.message); }
+        setSavingSeq(false);
+      };
+
+      const enrollInSequence = async () => {
+        if (!selectedCampaign || seqSteps.length === 0) return;
+        setEnrolling(true);
+        const senderEmail = CURRENT_USER?.email || '';
+        const today = new Date().toISOString().split('T')[0];
+        const current = parseSeqEnrollments(selectedCampaign);
+        const toEnroll = pendingEmailContacts.filter(s => !current[s.id] || current[s.id].status === 'completed');
+        if (toEnroll.length === 0) { setEnrolling(false); alert('No pending email contacts to enroll.'); return; }
+        const firstStep = seqSteps[0];
+        const nextDate = firstStep.waitDays === 0 ? today : (() => { const d = new Date(); d.setDate(d.getDate() + firstStep.waitDays); return d.toISOString().split('T')[0]; })();
+        toEnroll.forEach(s => { current[s.id] = { step: 0, nextDate, status: 'active', senderEmail, enrolledDate: today }; });
+        const json = JSON.stringify(current);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': json });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
+          alert(`✅ ${toEnroll.length} contact${toEnroll.length>1?'s':''} enrolled in sequence.`);
+        } catch(e) { alert('Enrollment failed: ' + e.message); }
+        setEnrolling(false);
+      };
+
+      const unenrollFromSequence = async (stakeholderId) => {
+        if (!selectedCampaign) return;
+        const current = parseSeqEnrollments(selectedCampaign);
+        delete current[stakeholderId];
+        const json = JSON.stringify(current);
+        const a = api || new AirtableAPI();
+        await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': json });
+        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
       };
 
       // Available contacts to add (not yet assigned, filtered by search)
@@ -13495,6 +13562,120 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Sequence */}
+            <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid #a78bfa', padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 1 }}>🗓️ Drip Sequence</div>
+                <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setShowSeq(!showSeq)}>
+                  {showSeq ? '▲ Collapse' : (seqSteps.length > 0 ? `▼ ${seqSteps.length} step${seqSteps.length>1?'s':''} defined` : '▼ Set up sequence')}
+                </button>
+              </div>
+              {showSeq && (() => {
+                const enrollments = parseSeqEnrollments(selectedCampaign);
+                const enrolledIds = Object.keys(enrollments);
+                const activeCount = enrolledIds.filter(id => enrollments[id].status === 'active').length;
+                const completedCount = enrolledIds.filter(id => enrollments[id].status === 'completed').length;
+                const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    {/* Step builder */}
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Steps</div>
+                    {seqSteps.length === 0 && (
+                      <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 10 }}>No steps yet — click "Add Step" to define the sequence.</div>
+                    )}
+                    {seqSteps.map((step, i) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '28px 90px 110px 120px 1fr 28px', gap: 6, alignItems: 'center', marginBottom: 8, padding: '8px 10px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textAlign: 'center' }}>#{i+1}</span>
+                        <div>
+                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>WAIT DAYS</div>
+                          <input type="number" min="0" className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                            value={step.waitDays} onChange={e => updateSeqStep(i, 'waitDays', parseInt(e.target.value)||0)} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CHANNEL</div>
+                          <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                            value={step.channel} onChange={e => updateSeqStep(i, 'channel', e.target.value)}>
+                            <option value="Email">Email</option>
+                            <option value="LinkedIn">LinkedIn</option>
+                            <option value="WhatsApp">WhatsApp</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CONDITION</div>
+                          <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                            value={step.condition} onChange={e => updateSeqStep(i, 'condition', e.target.value)}>
+                            <option value="always">Always</option>
+                            <option value="no_reply">Only if no reply</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>STEP NOTE (optional)</div>
+                          <input className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                            placeholder="e.g. Follow-up, Breakup email..."
+                            value={step.note} onChange={e => updateSeqStep(i, 'note', e.target.value)} />
+                        </div>
+                        <button onClick={() => removeSeqStep(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: 0 }}>✕</button>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={addSeqStep}>+ Add Step</button>
+                      {seqDirty && (
+                        <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={saveSeqSteps} disabled={savingSeq}>
+                          {savingSeq ? '⏳ Saving...' : '💾 Save Sequence'}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Enrollment controls */}
+                    {seqSteps.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Enrollments</div>
+                        <div style={{ display: 'flex', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Active: <strong style={{ color: '#4ade80' }}>{activeCount}</strong></span>
+                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Replied: <strong style={{ color: '#60a5fa' }}>{repliedCount}</strong></span>
+                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Completed: <strong style={{ color: 'var(--globant-muted)' }}>{completedCount}</strong></span>
+                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Pending to enroll: <strong style={{ color: '#fbbf24' }}>{pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed').length}</strong></span>
+                        </div>
+                        <button className="action-btn btn-primary" style={{ fontSize: 11, marginBottom: 12 }}
+                          onClick={enrollInSequence} disabled={enrolling || pendingEmailContacts.length === 0}>
+                          {enrolling ? '⏳ Enrolling...' : `🗓️ Enroll pending contacts (${pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed').length})`}
+                        </button>
+                        {enrolledIds.length > 0 && (
+                          <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--globant-border)', borderRadius: 6 }}>
+                            {enrolledIds.map(stkId => {
+                              const en = enrollments[stkId];
+                              const stk = stakeholders.find(s => s.id === stkId);
+                              if (!stk) return null;
+                              const stepLabel = en.step < seqSteps.length ? `Step ${en.step+1}${seqSteps[en.step]?.note ? ` — ${seqSteps[en.step].note}` : ''}` : 'All steps done';
+                              const STATUS_C = { active: '#fbbf24', completed: 'var(--globant-muted)', replied: '#60a5fa', paused: '#a78bfa' };
+                              return (
+                                <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
+                                  <div>
+                                    <span style={{ fontWeight: 600 }}>{F(stk,'Name')}{F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}</span>
+                                    <span style={{ color: 'var(--globant-muted)', marginLeft: 8 }}>{stepLabel} · next: {en.nextDate}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: STATUS_C[en.status]||'var(--globant-muted)', padding: '2px 7px', borderRadius: 10, background: `${STATUS_C[en.status]||'#666'}20`, border: `1px solid ${STATUS_C[en.status]||'#666'}40` }}>{en.status}</span>
+                                    <button onClick={() => unenrollFromSequence(stkId)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }} title="Remove from sequence">✕</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(167,139,250,0.08)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
+                          <div style={{ fontSize: 11, color: '#a78bfa', fontWeight: 600, marginBottom: 3 }}>ℹ️ How the sequence runner works</div>
+                          <div style={{ fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>
+                            A scheduled job runs daily at 8am UTC. It checks all active enrollments, generates a personalized AI message for each due contact, and sends it via your connected Gmail. Contacts with a reply skip steps marked "Only if no reply".
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Stats */}
