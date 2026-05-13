@@ -1108,6 +1108,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             }}
             onClose={() => setShowAIGenerator(false)}
             onSend={(s, ch, msg, cc, evId) => { if (onSend) onSend(s, ch, msg, cc, evId); setShowAIGenerator(false); if (onRefresh) onRefresh(); }}
+            onSuccess={() => { setShowAIGenerator(false); if (onRefresh) onRefresh(); }}
             data={{ ...allData, outreach: allData?.outreach || [] }}
           />
         )}
@@ -1841,7 +1842,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
     }
 
     // ============ AI MESSAGE MODAL ============
-    function AIMessageModal({ stakeholder, onClose, onSend, data }) {
+    function AIMessageModal({ stakeholder, onClose, onSend, onSuccess, data }) {
       const [tab, setTab] = useState(() => {
         const touchCount = (data.outreach || []).filter(o => linkedIds(o, 'Stakeholder').includes(stakeholder.id)).length;
         return touchCount >= 5 ? 'breakup' : touchCount >= 1 ? 'followup' : 'first';
@@ -2220,6 +2221,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             setSendingGmail(false);
             return;
           }
+          if (onSuccess) onSuccess();
           onClose();
         } catch (e) {
           // Network error — fall back to Gmail compose
@@ -3651,6 +3653,7 @@ Output ONLY the message, nothing else.`;
               stakeholder={selectedStakeholder}
               onClose={() => setSelectedStakeholder(null)}
               onSend={useMessage}
+              onSuccess={() => { setSelectedStakeholder(null); if (onLogActivity) onLogActivity(); }}
               data={data}
             />
           )}
@@ -4485,7 +4488,7 @@ Output ONLY the message, nothing else.`;
           </div>
 
           {selectedStakeholder && (
-            <AIMessageModal stakeholder={selectedStakeholder} onClose={() => setSelectedStakeholder(null)} onSend={useMessage} data={data} />
+            <AIMessageModal stakeholder={selectedStakeholder} onClose={() => setSelectedStakeholder(null)} onSend={useMessage} onSuccess={() => { setSelectedStakeholder(null); if (onLogActivity) onLogActivity(); }} data={data} />
           )}
           {historyStakeholder && (
             <StakeholderHistoryModal
@@ -7250,6 +7253,7 @@ Rules:
               stakeholder={cpSelectedStakeholder}
               onClose={() => setCpSelectedStakeholder(null)}
               onSend={cpUseMessage}
+              onSuccess={() => { setCpSelectedStakeholder(null); if (onLogActivity) onLogActivity(); }}
               data={data}
             />
           )}
@@ -8965,6 +8969,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 stakeholder={evSelectedStakeholder}
                 onClose={() => setEvSelectedStakeholder(null)}
                 onSend={(s, ch, msg, cc, evId) => evUseMessage(s, ch, msg, cc, evId || selectedEventId)}
+                onSuccess={() => { setEvSelectedStakeholder(null); if (onLogActivity) onLogActivity(); }}
                 data={data}
               />
             )}
