@@ -13738,9 +13738,9 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const darkColor   = _br.darkColor    || COMPANY_PROFILE.darkColor   || '#1a1a2e';
         const _rawLogo    = _br.senderLogo   || COMPANY_PROFILE.senderLogo  || '';
         const _rawPhoto   = _br.senderPhoto  || COMPANY_PROFILE.senderPhoto || '';
-        // data: URIs are stripped by Gmail — only use hosted URLs in email
-        const senderLogo  = _rawLogo.startsWith('data:')  ? '' : _rawLogo;
-        const senderPhoto = _rawPhoto.startsWith('data:') ? '' : _rawPhoto;
+        // Prefer explicit public URLs for email (Gmail blocks data: URIs)
+        const senderLogo  = _br.senderLogoUrl  || (_rawLogo.startsWith('data:')  ? '' : _rawLogo);
+        const senderPhoto = _br.senderPhotoUrl || (_rawPhoto.startsWith('data:') ? '' : _rawPhoto);
         const senderTitle = _br.senderTitle  || COMPANY_PROFILE.senderTitle || '';
         const senderName  = _br.senderName   || COMPANY_PROFILE.senderName  || 'Ale';
         const senderCo    = COMPANY_PROFILE.companyName || 'Oike';
@@ -20015,12 +20015,14 @@ Return ONLY valid JSON.`;
       const [branding, setBranding] = useState(() => {
         const b = loadBranding();
         return {
-          senderName:  b.senderName  || CLIENT_CONFIG.name || '',
-          senderEmail: b.senderEmail || CURRENT_USER?.email || '',
-          senderLogo:  b.senderLogo  || CLIENT_CONFIG.logo  || '',
-          senderPhoto: b.senderPhoto || '',
-          senderTitle: b.senderTitle || '',
-          calendarLink: b.calendarLink || '',
+          senderName:     b.senderName     || CLIENT_CONFIG.name || '',
+          senderEmail:    b.senderEmail    || CURRENT_USER?.email || '',
+          senderLogo:     b.senderLogo     || CLIENT_CONFIG.logo  || '',
+          senderLogoUrl:  b.senderLogoUrl  || '',
+          senderPhoto:    b.senderPhoto    || '',
+          senderPhotoUrl: b.senderPhotoUrl || '',
+          senderTitle:    b.senderTitle    || '',
+          calendarLink:   b.calendarLink   || '',
           accentColor:    b.accentColor    || '#5BBFB5', // Primary
           secondaryColor: b.secondaryColor || '#A78BFA', // Secondary
           tertiaryColor:  b.tertiaryColor  || '#FBBF24', // Tertiary / highlight
@@ -20204,8 +20206,16 @@ Return ONLY valid JSON.`;
                           reader.readAsDataURL(file);
                         }} />
                       </label>
+                      <input
+                        className="input-field"
+                        style={{ fontSize:11 }}
+                        placeholder="🔗 Public logo URL (required for emails)"
+                        value={branding.senderLogoUrl || ''}
+                        onChange={e => setBranding(p=>({...p, senderLogoUrl: e.target.value.trim()}))}
+                      />
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic' }}>Upload = app/proposals. URL = emails.</div>
                       {branding.senderLogo && (
-                        <button onClick={() => setBranding(p=>({...p,senderLogo:''}))}
+                        <button onClick={() => setBranding(p=>({...p,senderLogo:'',senderLogoUrl:''}))}
                           style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer' }}>
                           🗑 Remove logo
                         </button>
@@ -20227,7 +20237,7 @@ Return ONLY valid JSON.`;
                     <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
                       <label style={{ display:'block', cursor:'pointer' }}>
                         <div style={{ padding:'9px 14px', borderRadius:7, border:'1px dashed var(--globant-border)', background:'var(--globant-darker)', fontSize:12, color:'var(--globant-muted)', textAlign:'center', cursor:'pointer' }}>
-                          📸 Upload your photo (square works best)
+                          📸 Upload photo (for app display)
                         </div>
                         <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => {
                           const file = e.target.files?.[0];
@@ -20237,9 +20247,19 @@ Return ONLY valid JSON.`;
                           reader.readAsDataURL(file);
                         }} />
                       </label>
-                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic' }}>Shown next to the CTA in Landings, Proposals and Reports. Square photo works best (rendered as circle).</div>
+                      <input
+                        className="input-field"
+                        style={{ fontSize:11 }}
+                        placeholder="🔗 Public photo URL (required for emails)"
+                        value={branding.senderPhotoUrl || ''}
+                        onChange={e => setBranding(p=>({...p, senderPhotoUrl: e.target.value.trim()}))}
+                      />
+                      <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic', lineHeight:1.4 }}>
+                        Upload = shown in the app. Public URL = shown in emails (Gmail blocks embedded images).<br/>
+                        Get your URL from LinkedIn, Google Drive (share → copy link), or any image host.
+                      </div>
                       {branding.senderPhoto && (
-                        <button onClick={() => setBranding(p=>({...p,senderPhoto:''}))}
+                        <button onClick={() => setBranding(p=>({...p,senderPhoto:'',senderPhotoUrl:''}))}
                           style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer', alignSelf:'flex-start' }}>
                           🗑 Remove photo
                         </button>
