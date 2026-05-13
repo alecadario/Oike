@@ -77,10 +77,18 @@ function textToHtml(text: string): string {
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
+function encodeSubject(subject: string): string {
+  if (!/[^\x00-\x7F]/.test(subject)) return subject;
+  const bytes = new TextEncoder().encode(subject);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return `=?UTF-8?B?${btoa(binary)}?=`;
+}
+
 function buildMime({ to, subject, body, signature, threadId }: { to: string; subject: string; body: string; signature?: string; threadId?: string }): string {
   const reSubject = threadId && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
   const htmlBody = `<div style="font-family:sans-serif;font-size:14px;">${textToHtml(body)}</div>${signature ? `<br><div>${signature}</div>` : ''}`;
-  const raw = [`To: ${to}`, `Subject: ${reSubject}`, 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', '', htmlBody].join('\r\n');
+  const raw = [`To: ${to}`, `Subject: ${encodeSubject(reSubject)}`, 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', '', htmlBody].join('\r\n');
   const bytes = new TextEncoder().encode(raw);
   let binary = '';
   bytes.forEach(b => binary += String.fromCharCode(b));

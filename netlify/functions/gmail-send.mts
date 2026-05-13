@@ -77,6 +77,15 @@ function textToHtml(text: string): string {
     .replace(/\n/g, '<br>');
 }
 
+// ── RFC 2047 encode subject for non-ASCII characters ──
+function encodeSubject(subject: string): string {
+  if (!/[^\x00-\x7F]/.test(subject)) return subject;
+  const bytes = new TextEncoder().encode(subject);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return `=?UTF-8?B?${btoa(binary)}?=`;
+}
+
 // ── Build base64url-encoded MIME message (HTML with signature) ──
 function buildMimeMessage({ to, subject, body, bodyHtml, signature, cc, inReplyTo, references }: {
   to: string; subject: string; body: string; bodyHtml?: string; signature?: string;
@@ -101,7 +110,7 @@ function buildMimeMessage({ to, subject, body, bodyHtml, signature, cc, inReplyT
   const lines = [
     `To: ${to}`,
     ...(cc && cc.length ? [`Cc: ${cc.join(', ')}`] : []),
-    `Subject: ${replySubject}`,
+    `Subject: ${encodeSubject(replySubject)}`,
     ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
     ...(references ? [`References: ${references} ${inReplyTo || ''}`.trim()] : inReplyTo ? [`References: ${inReplyTo}`] : []),
     'MIME-Version: 1.0',
