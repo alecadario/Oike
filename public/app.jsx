@@ -20123,9 +20123,13 @@ Return ONLY valid JSON.`;
       const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
 
       const [ready, setReady] = useState(false);
+      const _isBDR = CURRENT_USER?.role === 'bdr';
+      const BDR_PAGES = new Set(['followup','accounts','contacts','campaigns','proposals']);
       const [page, setPage] = useState(() => {
         const urlV = new URLSearchParams(window.location.search).get('v');
-        return urlV || localStorage.getItem('oike_page') || 'overview';
+        const saved = urlV || localStorage.getItem('oike_page') || 'overview';
+        if (_isBDR && !BDR_PAGES.has(saved)) return 'followup';
+        return saved;
       });
       const setPageAndSave = useCallback((p) => {
         setPage(p);
@@ -20393,22 +20397,26 @@ Return ONLY valid JSON.`;
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
       };
 
-      const navItems = [
+      const isBDR = CURRENT_USER?.role === 'bdr';
+      const isAdmin = CURRENT_USER?.role === 'admin';
+
+      const allNavItems = [
+        { icon: '🎯', label: 'Mi día', key: 'followup', bdr: true },
+        { icon: '🏢', label: 'Accounts', key: 'accounts', bdr: true },
+        { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true },
+        { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true },
+        { icon: '📄', label: 'Proposals', key: 'proposals', bdr: true },
         { icon: '📊', label: 'Strategy Overview', key: 'overview' },
         { icon: '🎯', label: 'ICP', key: 'icp' },
         { icon: '🛠️', label: 'Offering Hub', key: 'solutionshub' },
-        { icon: '🏢', label: 'Accounts', key: 'accounts' },
-        { icon: '👤', label: 'Contacts', key: 'contacts' },
-        { icon: '✉️', label: 'Follow-up Center', key: 'followup' },
         { icon: '🎪', label: 'Events', key: 'events' },
-        { icon: '📣', label: 'Campaigns', key: 'campaigns' },
         { icon: '✍️', label: 'Content Lab', key: 'contentlab' },
         { icon: '📨', label: 'Prospect Landings', key: 'landings' },
-        { icon: '📄', label: 'Proposals', key: 'proposals' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
         { icon: '📧', label: 'Reports', key: 'reports' },
       ];
+      const navItems = isBDR ? allNavItems.filter(i => i.bdr) : allNavItems;
 
       const currentPageLabel = (navItems.find(i => i.key === page) || {}).label || 'Overview';
 
@@ -20446,16 +20454,24 @@ Return ONLY valid JSON.`;
               </div>
             </div>
             <nav className="sidebar-nav">
-              {navItems.map(item => (
-                <div
-                  key={item.key}
-                  className={'nav-item ' + (page === item.key ? 'active' : '')}
-                  onClick={() => { setPageAndSave(item.key); setSidebarOpen(false); }}
-                >
-                  <span className="nav-icon">{item.icon}</span>
-                  <span>{item.label}</span>
-                </div>
-              ))}
+              {navItems.map((item, idx) => {
+                const prevItem = navItems[idx - 1];
+                const showDivider = !isBDR && idx > 0 && item.bdr === undefined && prevItem?.bdr === true;
+                return (
+                  <React.Fragment key={item.key}>
+                    {showDivider && (
+                      <div style={{ margin: '6px 12px', borderTop: '1px solid var(--globant-border)', opacity: 0.5 }} />
+                    )}
+                    <div
+                      className={'nav-item ' + (page === item.key ? 'active' : '')}
+                      onClick={() => { setPageAndSave(item.key); setSidebarOpen(false); }}
+                    >
+                      <span className="nav-icon">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
             </nav>
             <div style={{ flexShrink: 0, padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <button
