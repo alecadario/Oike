@@ -13776,7 +13776,7 @@ ${contentMeta}
     ${senderLogo ? `<img src="${escape(senderLogo)}" alt="${escape(senderCo)}" width="auto" height="44" style="display:block;max-height:44px;max-width:160px;margin:0 auto 20px;border:0;outline:none;" />` : `<div style="display:inline-block;background:${escape(accentColor)};color:${escape(darkColor)};font-size:18px;font-weight:900;letter-spacing:1px;padding:8px 18px;border-radius:10px;margin:0 auto 20px;font-family:Arial,Helvetica,sans-serif;">${escape(senderCo)}</div>`}
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 14px;"><tr><td bgcolor="${escape(accentColor)}25" style="background:${escape(accentColor)}25;border:1px solid ${escape(accentColor)}66;border-radius:20px;padding:4px 14px;color:${escape(accentColor)};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${escape(campaignType)} &middot; ${escape(senderCo)}</td></tr></table>
     <h1 style="margin:0;font-size:28px;color:#ffffff;font-weight:800;line-height:1.2;letter-spacing:-0.5px;font-family:Arial,Helvetica,sans-serif;">${escape(campaignName)}</h1>
-    <p style="margin:12px 0 0;font-size:14px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;">Prepared for <strong style="color:${escape(accentColor)};">{{first_name}} at {{company}}</strong></p>
+    <p style="margin:12px 0 0;font-size:13px;color:${escape(accentColor)};letter-spacing:0.5px;font-family:Arial,Helvetica,sans-serif;opacity:0.85;">{{company}}</p>
   </td></tr>
   <tr><td style="padding:36px 36px 28px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;"><tr><td bgcolor="${escape(accentColor)}10" style="background:${escape(accentColor)}10;padding:18px 22px;border-left:4px solid ${escape(accentColor)};border-radius:0 10px 10px 0;font-size:15px;line-height:1.6;color:${escape(darkColor)};font-weight:500;font-family:Arial,Helvetica,sans-serif;">{{ai_opener}}</td></tr></table>
@@ -13800,9 +13800,22 @@ ${contentMeta}
         </tr></table>
       </td></tr>
     </table>` : ''}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border-top:2px solid ${escape(accentColor)}20;"><tr><td style="padding:24px 0 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${senderPhoto?`<td width="88" valign="middle" style="padding-right:16px;"><img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="68" height="68" style="display:block;width:68px;height:68px;border-radius:50%;border:3px solid ${escape(accentColor)};outline:none;" /></td>`:''}
-    <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;"><div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">Ready to explore this?</div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 10px;border-collapse:separate;"><tr><td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;margin-right:8px;"><a href="${escape(ctaLink)}" style="display:inline-block;padding:12px 26px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(S.ctaText||'Let\'s connect')} &rarr;</a></td>${calendarLink?`<td width="12" style="font-size:0;line-height:0;">&nbsp;</td><td bgcolor="${escape(darkColor)}22" style="background:${escape(darkColor)}22;border-radius:10px;border:1px solid ${escape(accentColor)}55;"><a href="${escape(calendarLink)}" style="display:inline-block;padding:12px 20px;color:${escape(darkColor)};text-decoration:none;font-weight:700;font-size:13px;font-family:Arial,Helvetica,sans-serif;">&#128197; Agendar</a></td>`:''}</tr></table>
-    <div style="font-size:13px;color:${escape(darkColor)};font-weight:700;">${escape(senderName)}</div>${senderTitle?`<div style="font-size:11px;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</div>`:''}</td></tr></table></td></tr></table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px solid #E5E7EB;border-collapse:separate;"><tr><td style="padding:28px 0 0;">
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">Si algo de esto resuena con lo que está trabajando {{first_name}}, o querés profundizar en alguno de estos puntos, respondé este mail y lo charlamos.</p>
+      <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">Con gusto comparto más contexto o datos específicos para tu industria.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;border-collapse:separate;"><tr>
+        <td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;"><a href="mailto:${escape(senderEmail)}" style="display:inline-block;padding:11px 24px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">Responder &rarr;</a></td>
+        ${calendarLink?`<td width="10" style="font-size:0;line-height:0;">&nbsp;</td><td bgcolor="${escape(darkColor)}15" style="background:${escape(darkColor)}15;border-radius:10px;border:1px solid ${escape(accentColor)}44;"><a href="${escape(calendarLink)}" style="display:inline-block;padding:11px 20px;color:${escape(darkColor)};text-decoration:none;font-weight:700;font-size:13px;font-family:Arial,Helvetica,sans-serif;">&#128197; Agendemos 15 min</a></td>`:''}
+      </tr></table>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>
+        ${senderPhoto?`<td width="52" valign="middle" style="padding-right:12px;"><img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="44" height="44" style="display:block;width:44px;height:44px;border-radius:50%;border:2px solid ${escape(accentColor)};outline:none;" /></td>`:''}
+        <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;">
+          <div style="font-size:13px;font-weight:700;color:${escape(darkColor)};">${escape(senderName)}</div>
+          ${senderTitle?`<div style="font-size:11px;color:#6B7280;margin-top:1px;">${escape(senderTitle)}</div>`:''}
+          ${senderEmail?`<div style="font-size:11px;color:${escape(accentColor)};margin-top:2px;">${escape(senderEmail)}</div>`:''}
+        </td>
+      </tr></table>
+    </td></tr></table>
   </td></tr>
   <tr><td bgcolor="${escape(darkColor)}" align="center" style="background:${escape(darkColor)};padding:20px 36px;text-align:center;border-radius:0 0 16px 16px;">
     <div style="font-size:12px;color:#D1D5DB;font-family:Arial,Helvetica,sans-serif;"><strong style="color:#ffffff;">${escape(senderName)}</strong>${senderEmail?` &middot; <a href="mailto:${escape(senderEmail)}" style="color:${escape(accentColor)};text-decoration:none;">${escape(senderEmail)}</a>`:''}</div>
@@ -13835,22 +13848,24 @@ ${contentMeta}
           const industrySummary = industries.slice(0,5).join(', ') || 'various industries';
 
           // Step 1: generate content sections
-          const sectionsPrompt = `You are a B2B strategist. Generate a white-paper-style email campaign. Return a JSON object with these keys (all strings):
+          const sectionsPrompt = `You are a B2B industry analyst writing a thought leadership piece — NOT a salesperson. Your goal is to share genuine, useful insights that make the reader think "this is valuable, I want to talk to this person." Never pitch, never sell, never use phrases like "our solution" or "we offer". Write like someone who deeply understands the industry and is sharing what they're observing.
+
+Return a JSON object with these keys (all strings):
 {
-  "hook": "1-2 sentence insight that calls out a real pattern you're seeing across companies in their industry — specific, not generic. No question marks.",
-  "painHeading": "3-5 word heading for the pain section, e.g. 'The challenge most [industry] teams face'",
-  "pain": "2-3 sentences expanding on the main pain. Reference the industry/sector. Be specific and credible — this should read like an analyst observation.",
-  "valueHeading": "3-5 word heading for the solution section",
-  "value": "2-3 sentences on how ${senderCo} addresses this. Concrete, not fluffy.",
-  "bullets": ["bullet 1 — outcome-focused, under 15 words", "bullet 2", "bullet 3", "bullet 4"],
-  "socialProof": "1-2 sentence quote or result from a client or case (make it plausible and specific). Or leave empty string if not relevant.",
-  "ctaText": "Short CTA button text, e.g. 'See how it works' or 'Book 20 minutes'"
+  "hook": "1-2 sentences sharing a specific trend or pattern you're observing across companies in this industry right now. Data-grounded, surprising, not generic. No question marks.",
+  "painHeading": "3-5 word heading that names the core tension or challenge — phrased as an observation, not a pain point. E.g. 'Why most [industry] teams stall here'",
+  "pain": "2-3 sentences describing the challenge as an analyst would — specific to the industry, credible, acknowledges complexity. No blame, just observation.",
+  "valueHeading": "3-5 word heading for the insight/recommendation section — e.g. 'What's working in 2025' or 'The shift we're seeing'",
+  "value": "2-3 sentences sharing what's actually working for teams that get this right. Frame as industry insight, not a product pitch. ${senderCo} can appear naturally as context but is not the focus.",
+  "bullets": ["actionable insight or data point — specific, under 15 words", "insight 2", "insight 3", "insight 4"],
+  "socialProof": "1 sentence describing a concrete result or shift observed — can reference a type of company without naming names. Or empty string.",
+  "ctaText": ""
 }
 
 CAMPAIGN: "${campaignName}" (${campaignType})
 SENDER: ${senderName}, ${senderCo}
 TARGET INDUSTRIES: ${industrySummary}
-PAIN INTEL (from ${pains.length} prospects): ${painSummary}
+CONTEXT FROM PROSPECTS (${pains.length} contacts): ${painSummary}
 ${context ? `CAMPAIGN CONTEXT:\n${context}\n` : ''}${aiSummary ? `STRATEGIC BRIEF:\n${aiSummary}\n` : ''}${template ? `ANGLE: ${template}\n` : ''}
 
 Return ONLY the JSON. No markdown fences.`;
@@ -13863,11 +13878,10 @@ Return ONLY the JSON. No markdown fences.`;
             hook: sections.hook || '',
             painHeading: sections.painHeading || 'The challenge your team faces',
             pain: sections.pain || '',
-            valueHeading: sections.valueHeading || 'How we help',
+            valueHeading: sections.valueHeading || 'What\'s working in 2025',
             value: sections.value || '',
             bullets: Array.isArray(sections.bullets) ? sections.bullets.filter(Boolean) : [],
             socialProof: sections.socialProof || '',
-            ctaText: sections.ctaText || 'Let\'s connect',
           };
 
           // Step 2: render HTML via shared function
