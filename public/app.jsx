@@ -14505,8 +14505,14 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               {showEmailTpl && (
                 <div style={{ marginTop: 12 }}>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select value={tplLanguage} onChange={e => setTplLanguage(e.target.value)}
-                      style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: '#e5e7eb', cursor: 'pointer' }}>
+                    <select value={tplLanguage} onChange={e => {
+                      const lang = e.target.value;
+                      setTplLanguage(lang);
+                      if (emailTplContent && selectedCampaign) {
+                        setEmailTplHtml(renderCampaignEmail(emailTplContent, selectedCampaign, lang));
+                        setEmailTplDirty(true);
+                      }
+                    }} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: '#e5e7eb', cursor: 'pointer' }}>
                       <option value="en">🇬🇧 English</option>
                       <option value="es">🇦🇷 Español</option>
                       <option value="pt">🇧🇷 Português</option>
