@@ -245,6 +245,7 @@ export default async (req: Request, context: Context) => {
         headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ records: [{ fields }], typecast: true }),
       });
+      await advanceStakeholderStatus(baseId, stakeholderId, 'Contacted', airtableKey);
 
       return new Response(JSON.stringify({ ok: true, draft: true, gmailDraftId: draftGmailId }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
@@ -275,9 +276,10 @@ export default async (req: Request, context: Context) => {
       await markAsRead(readMessageId, accessToken).catch(() => {});
     }
 
-    // Log in Airtable as Sent
+    // Log in Airtable as Sent + advance stakeholder status
     const today = new Date().toISOString().split('T')[0];
     await logSentActivity(baseId, outreachTableId, stakeholderId, accountIds || [], subject, message, today, payload.email || '', sentGmailId, airtableKey);
+    await advanceStakeholderStatus(baseId, stakeholderId, 'Contacted', airtableKey);
 
     return new Response(JSON.stringify({ ok: true, gmailMessageId: sentGmailId }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
