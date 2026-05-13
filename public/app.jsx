@@ -14042,6 +14042,7 @@ Return ONLY the 1-2 sentences in ${langLabel}. No greeting, no subject line.`;
               };
               const accIds = linkedIds(s, 'Account');
               if (accIds.length) activityFields['Account'] = accIds;
+              if (selectedCampaign?.id) activityFields['Campaign'] = [selectedCampaign.id];
               // Create outreach record directly from frontend (reliable, same path as manual log)
               a.createRecord(TABLE_IDS.outreach, activityFields)
                 .then(rec => { if (onAddRecord && rec?.id) onAddRecord('outreach', activityFields, rec.id); })
@@ -15101,6 +15102,42 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 </div>
               )}
             </div>
+
+            {/* Campaign Activity Log */}
+            {(() => {
+              const campOutreach = outreach.filter(o => {
+                const linked = o.fields?.['Campaign'];
+                return Array.isArray(linked) && linked.includes(selectedCampaign.id);
+              }).sort((a,b) => (b.fields?.['Date']||'').localeCompare(a.fields?.['Date']||''));
+              if (campOutreach.length === 0) return null;
+              return (
+                <div className="card" style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10, color: 'var(--globant-text)' }}>📬 Activity Log ({campOutreach.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {campOutreach.map(o => {
+                      const stkId = (o.fields?.['Stakeholder']||[])[0];
+                      const stk = stakeholders.find(s => s.id === stkId);
+                      const sName = stk ? `${F(stk,'Name')||''}${F(stk,'Last name') ? ' '+F(stk,'Last name') : ''}`.trim() : '—';
+                      const date = o.fields?.['Date'] ? new Date(o.fields['Date']+'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+                      const status = o.fields?.['Status'] || '';
+                      const channel = o.fields?.['Channel'] || 'Email';
+                      const loggedBy = o.fields?.['Logged By'] || '';
+                      return (
+                        <div key={o.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'rgba(255,255,255,0.03)', borderRadius:6, border:'1px solid var(--globant-border)' }}>
+                          <span style={{ fontSize:13 }}>{channel==='Email'?'✉️':channel==='WhatsApp'?'💬':channel==='LinkedIn'?'🔗':'📋'}</span>
+                          <div style={{ flex:1 }}>
+                            <span style={{ fontSize:12, fontWeight:600 }}>{sName}</span>
+                            {loggedBy && <span style={{ fontSize:11, color:'var(--globant-muted)' }}> · {loggedBy}</span>}
+                          </div>
+                          {date && <span style={{ fontSize:11, color:'var(--globant-muted)' }}>{date}</span>}
+                          {status && <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:10, background: status==='Sent'?'rgba(74,222,128,0.12)':status==='Draft'?'rgba(251,191,36,0.12)':'rgba(91,191,181,0.12)', color: status==='Sent'?'#4ade80':status==='Draft'?'#fbbf24':'var(--globant-green)' }}>{status}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Edit modal (reuses create form) */}
             {showForm && (
