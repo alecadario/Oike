@@ -13478,6 +13478,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [previewTpl, setPreviewTpl] = useState(false);
       const [bulkUseHtml, setBulkUseHtml] = useState(false);
       const [emailTplContent, setEmailTplContent] = useState(null); // parsed sections for visual editor
+      const [tplLanguage, setTplLanguage] = useState('en');
 
       const addContactToCampaign = async (stakeholderId) => {
         if (!selectedCampaign) return;
@@ -13656,7 +13657,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           const savedContent = parseTplContent(savedHtml);
           setEmailTplContent(savedContent);
           // Re-render with current branding (restores photo/colors stripped at save time)
-          setEmailTplHtml(savedContent ? renderCampaignEmail(savedContent, selectedCampaign) : savedHtml);
+          setEmailTplHtml(savedContent ? renderCampaignEmail(savedContent, selectedCampaign, tplLanguage) : savedHtml);
         }
         setSeqDirty(false);
         setEmailTplDirty(false);
@@ -13731,7 +13732,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
       };
 
       // ── Render campaign email HTML from content sections ──
-      const renderCampaignEmail = (S, camp) => {
+      const renderCampaignEmail = (S, camp, lang = 'en') => {
         const _br         = loadBranding();
         const accentColor = _br.accentColor  || COMPANY_PROFILE.accentColor || '#5bbfb5';
         const darkColor   = _br.darkColor    || COMPANY_PROFILE.darkColor   || '#1a1a2e';
@@ -13758,6 +13759,22 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const evUrl    = eventRec ? (F(eventRec, 'URL') || '') : '';
         const evDesc   = eventRec ? (F(eventRec, 'Aditional context') || '').slice(0,180) : '';
         const contentMeta = `<!--oike-content:${JSON.stringify(S)}-->`;
+        const i18n = lang === 'es' ? {
+          closingLine1: 'Si algo de esto resuena con lo que está trabajando {{first_name}}, o querés profundizar en algún punto, respondé este mail y lo charlamos.',
+          closingLine2: 'Con gusto comparto más contexto o datos específicos para tu industria.',
+          replyBtn: 'Responder →',
+          calBtn: '📅 Agendemos 15 min',
+        } : lang === 'pt' ? {
+          closingLine1: 'Se algo aqui ressoa com o que {{first_name}} está trabalhando, ou quiser aprofundar algum ponto, responda este e-mail e conversamos.',
+          closingLine2: 'Fico feliz em compartilhar mais contexto ou dados específicos para o seu setor.',
+          replyBtn: 'Responder →',
+          calBtn: '📅 Agendar 15 min',
+        } : {
+          closingLine1: 'If any of this resonates with what {{first_name}} is working on, or you\'d like to dig deeper into any of these points, just reply to this email.',
+          closingLine2: 'Happy to share more context or data specific to your industry.',
+          replyBtn: 'Reply →',
+          calBtn: '📅 Book 15 min',
+        };
         return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
@@ -13801,11 +13818,11 @@ ${contentMeta}
       </td></tr>
     </table>` : ''}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px solid #E5E7EB;border-collapse:separate;"><tr><td style="padding:28px 0 0;">
-      <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">Si algo de esto resuena con lo que está trabajando {{first_name}}, o querés profundizar en alguno de estos puntos, respondé este mail y lo charlamos.</p>
-      <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">Con gusto comparto más contexto o datos específicos para tu industria.</p>
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${escape(i18n.closingLine1)}</p>
+      <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${escape(i18n.closingLine2)}</p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;border-collapse:separate;"><tr>
-        <td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;"><a href="mailto:${escape(senderEmail)}" style="display:inline-block;padding:11px 24px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">Responder &rarr;</a></td>
-        ${calendarLink?`<td width="10" style="font-size:0;line-height:0;">&nbsp;</td><td bgcolor="${escape(darkColor)}15" style="background:${escape(darkColor)}15;border-radius:10px;border:1px solid ${escape(accentColor)}44;"><a href="${escape(calendarLink)}" style="display:inline-block;padding:11px 20px;color:${escape(darkColor)};text-decoration:none;font-weight:700;font-size:13px;font-family:Arial,Helvetica,sans-serif;">&#128197; Agendemos 15 min</a></td>`:''}
+        <td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;"><a href="mailto:${escape(senderEmail)}" style="display:inline-block;padding:11px 24px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(i18n.replyBtn)}</a></td>
+        ${calendarLink?`<td width="10" style="font-size:0;line-height:0;">&nbsp;</td><td bgcolor="${escape(darkColor)}15" style="background:${escape(darkColor)}15;border-radius:10px;border:1px solid ${escape(accentColor)}44;"><a href="${escape(calendarLink)}" style="display:inline-block;padding:11px 20px;color:${escape(darkColor)};text-decoration:none;font-weight:700;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(i18n.calBtn)}</a></td>`:''}
       </tr></table>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>
         ${senderPhoto?`<td width="52" valign="middle" style="padding-right:12px;"><img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="44" height="44" style="display:block;width:44px;height:44px;border-radius:50%;border:2px solid ${escape(accentColor)};outline:none;" /></td>`:''}
@@ -13862,6 +13879,7 @@ Return a JSON object with these keys (all strings):
   "ctaText": ""
 }
 
+LANGUAGE: Write ALL content in ${tplLanguage === 'es' ? 'Spanish (Latin American)' : tplLanguage === 'pt' ? 'Brazilian Portuguese' : 'English'}.
 CAMPAIGN: "${campaignName}" (${campaignType})
 SENDER: ${senderName}, ${senderCo}
 TARGET INDUSTRIES: ${industrySummary}
@@ -13876,16 +13894,16 @@ Return ONLY the JSON. No markdown fences.`;
 
           const S = {
             hook: sections.hook || '',
-            painHeading: sections.painHeading || 'The challenge your team faces',
+            painHeading: sections.painHeading || (tplLanguage === 'es' ? 'El desafío más común' : tplLanguage === 'pt' ? 'O desafio mais comum' : 'The challenge most teams face'),
             pain: sections.pain || '',
-            valueHeading: sections.valueHeading || 'What\'s working in 2025',
+            valueHeading: sections.valueHeading || (tplLanguage === 'es' ? 'Lo que está funcionando en 2025' : tplLanguage === 'pt' ? 'O que está funcionando em 2025' : 'What\'s working in 2025'),
             value: sections.value || '',
             bullets: Array.isArray(sections.bullets) ? sections.bullets.filter(Boolean) : [],
             socialProof: sections.socialProof || '',
           };
 
           // Step 2: render HTML via shared function
-          const html = renderCampaignEmail(S, selectedCampaign);
+          const html = renderCampaignEmail(S, selectedCampaign, tplLanguage);
           setEmailTplContent(S);
           setEmailTplHtml(html);
           setEmailTplDirty(true);
@@ -14485,7 +14503,13 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               </div>
               {showEmailTpl && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select value={tplLanguage} onChange={e => setTplLanguage(e.target.value)}
+                      style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: '#e5e7eb', cursor: 'pointer' }}>
+                      <option value="en">🇬🇧 English</option>
+                      <option value="es">🇦🇷 Español</option>
+                      <option value="pt">🇧🇷 Português</option>
+                    </select>
                     <button className="action-btn btn-primary" style={{ fontSize: 11 }}
                       onClick={generateEmailTemplate} disabled={generatingTpl || bulkSending}>
                       {generatingTpl ? '⏳ Generating...' : emailTplHtml ? '🔄 Regenerate' : '✨ Generate Template'}
@@ -14522,7 +14546,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       const updateContent = (key, val) => {
                         const updated = { ...C, [key]: val };
                         setEmailTplContent(updated);
-                        setEmailTplHtml(renderCampaignEmail(updated, selectedCampaign));
+                        setEmailTplHtml(renderCampaignEmail(updated, selectedCampaign, tplLanguage));
                         setEmailTplDirty(true);
                       };
                       const updateBullet = (i, val) => {
