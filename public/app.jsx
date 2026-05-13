@@ -12847,7 +12847,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
     // ============ CAMPAIGNS HUB ============
     function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, campaignPrefill, clearCampaignPrefill }) {
-      const { campaigns = [], stakeholders = [], accounts = [], outreach = [] } = data;
+      const { campaigns = [], stakeholders = [], accounts = [], outreach = [], events = [] } = data;
 
       const [selectedId, setSelectedId] = useState(null);
       const [listSearch, setListSearch] = useState('');
