@@ -1857,6 +1857,9 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [selectedSolutionId, setSelectedSolutionId] = useState('');
       const [showAdvanced, setShowAdvanced] = useState(false);
       const [selectedLanguage, setSelectedLanguage] = useState('');
+      const [sendingGmail, setSendingGmail] = useState(false);
+
+      const gmailConnected = localStorage.getItem('oike_gmail_connected') === 'true';
 
       const currentMessage = generatedMessages[tab] || '';
 
@@ -2162,6 +2165,61 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         setLoadingAI(false);
       };
 
+      const handleSendViaGmail = async () => {
+        if (!currentMessage.trim()) return;
+        const stakeholderEmail = F(stakeholder, 'Email') || '';
+        if (!stakeholderEmail) { alert('This contact has no email address.'); return; }
+
+        // Parse subject from generated message (first line must be "Subject: ...")
+        const lines = currentMessage.split('\n');
+        const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
+        const subject = subjectLine ? subjectLine.replace(/^subject:\s*/i, '').trim() : '(no subject)';
+        const bodyStart = lines.findIndex(l => l.toLowerCase().startsWith('subject:'));
+        const messageBody = bodyStart >= 0
+          ? lines.slice(bodyStart + 1).join('\n').replace(/^\s*\n/, '').trim()
+          : currentMessage.trim();
+
+        // Find thread context from last received email
+        const lastReceived = sOutreach.find(o => ['Received', 'Replied'].includes(F(o, 'Status') || ''));
+        const lastNotes = lastReceived ? (F(lastReceived, 'Notes') || '') : '';
+        const threadMatch  = lastNotes.match(/\[gthread:([^\]]+)\]/);
+        const gmsgidMatch  = lastNotes.match(/\[gmsgid:([^\]]+)\]/);
+        const gmsgMatch    = lastNotes.match(/\[gmsg:([^\]]+)\]/);
+        const threadId     = threadMatch ? threadMatch[1] : null;
+        const inReplyTo    = gmsgidMatch ? gmsgidMatch[1] : null;
+        const readMsgId    = gmsgMatch   ? gmsgMatch[1]   : null;
+        const ccList = (ccPartner && cpEmails.length > 0) ? cpEmails : [];
+
+        setSendingGmail(true);
+        try {
+          const res = await fetch('/api/gmail/send', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              to: stakeholderEmail,
+              subject,
+              message: messageBody,
+              cc: ccList.length ? ccList : undefined,
+              threadId:      threadId   || undefined,
+              inReplyTo:     inReplyTo  || undefined,
+              readMessageId: readMsgId  || undefined,
+              stakeholderId: stakeholder.id,
+              accountIds: accountIds || [],
+              baseId: AIRTABLE_BASE_ID,
+              outreachTableId: TABLE_IDS.outreach,
+            }),
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.error || 'Send failed');
+          // Also log locally via onSend so the UI updates immediately
+          onSend(stakeholder, 'Email', messageBody, ccList, selectedEventId || null);
+          onClose();
+        } catch (e) {
+          alert('Failed to send: ' + (e.message || 'unknown error'));
+        }
+        setSendingGmail(false);
+      };
+
       const handleSend = (channel) => {
         if (!currentMessage.trim()) return;
         const ccList = (channel === 'Email' && ccPartner && cpEmails.length > 0) ? cpEmails : [];
@@ -2366,17 +2424,29 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="action-btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
               <button className="action-btn" style={{ flex: 1, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
                 onClick={handleSaveDraft} disabled={!selectedChannel || !currentMessage.trim() || savingDraft}>
                 {savingDraft ? 'Saving...' : '📝 Draft'}
               </button>
-              <button className="action-btn btn-primary" style={{ flex: 1 }}
-                onClick={() => selectedChannel && handleSend(selectedChannel)} disabled={!selectedChannel || !currentMessage.trim()}>
-                Send {selectedChannel ? `via ${selectedChannel}` : ''}{selectedChannel === 'Email' && ccPartner && cpEmails.length > 0 ? ' + CC' : ''}
-              </button>
+              {selectedChannel === 'Email' && gmailConnected ? (
+                <button className="action-btn" style={{ flex: 2, background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)', fontWeight: 700 }}
+                  onClick={handleSendViaGmail} disabled={!currentMessage.trim() || sendingGmail}>
+                  {sendingGmail ? '⏳ Sending...' : '✉️ Send via Gmail'}
+                </button>
+              ) : (
+                <button className="action-btn btn-primary" style={{ flex: 1 }}
+                  onClick={() => selectedChannel && handleSend(selectedChannel)} disabled={!selectedChannel || !currentMessage.trim()}>
+                  Send {selectedChannel ? `via ${selectedChannel}` : ''}{selectedChannel === 'Email' && ccPartner && cpEmails.length > 0 ? ' + CC' : ''}
+                </button>
+              )}
             </div>
+            {selectedChannel === 'Email' && !gmailConnected && (
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6, textAlign: 'center' }}>
+                Connect Gmail in Settings to send directly from the app
+              </div>
+            )}
           </div>
         </div>
       );
@@ -2411,6 +2481,54 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [fuNewInfluence, setFuNewInfluence] = useState('');
       const [fuNewAccountId, setFuNewAccountId] = useState('');
       const [fuCreating, setFuCreating] = useState(false);
+
+      // Gmail sync state for Follow-up Center
+      const [gmailSyncing, setGmailSyncing] = useState(false);
+      const [gmailSyncMsg, setGmailSyncMsg] = useState('');
+      const gmailConnectedFC = localStorage.getItem('oike_gmail_connected') === 'true';
+
+      const handleGmailSyncFC = async () => {
+        setGmailSyncing(true);
+        setGmailSyncMsg('');
+        try {
+          const res = await fetch('/api/gmail/sync', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ baseId: AIRTABLE_BASE_ID, stakeholdersTableId: TABLE_IDS.stakeholders, outreachTableId: TABLE_IDS.outreach, daysBack: 7 }),
+          });
+          const d = await res.json();
+          setGmailSyncMsg(d.message || (res.ok ? 'Sync complete' : d.error || 'Sync failed'));
+          if (res.ok && d.synced > 0 && onLogActivity) onLogActivity();
+        } catch (e) {
+          setGmailSyncMsg('Sync error. Try again.');
+        }
+        setGmailSyncing(false);
+      };
+
+      // Stakeholders who replied to you (last touch is Received) and you haven't responded since
+      const repliedToYou = useMemo(() => {
+        const results = [];
+        stakeholders.forEach(s => {
+          const sOutreach = outreach
+            .filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+          if (sOutreach.length === 0) return;
+          const latest = sOutreach[0];
+          const latestStatus = String(F(latest, 'Status') || '').toLowerCase();
+          if (latestStatus !== 'received' && latestStatus !== 'replied') return;
+          // Apply filters
+          if (accountSearch) {
+            const term = accountSearch.toLowerCase();
+            const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+            if (!accNames.some(n => n.toLowerCase().includes(term))) return;
+          }
+          if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return;
+          if (searchName && !(F(s, 'Name') || '').toLowerCase().includes(searchName.toLowerCase())) return;
+          const daysSince = Math.floor((Date.now() - new Date(latest.fields?.['Date'] || 0)) / (1000*60*60*24));
+          results.push({ s, lastOutreach: latest, daysSince });
+        });
+        return results.sort((a, b) => a.daysSince - b.daysSince);
+      }, [stakeholders, outreach, accounts, accountSearch, selectedInfluence, searchName]);
 
       // Stakeholders contacted in last 3 days (hidden from Ready/Needs groups)
       const recentlyContacted = useMemo(() => {
@@ -3263,6 +3381,61 @@ Output ONLY the message, nothing else.`;
                           </div>
                         );
                       })()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Gmail sync bar */}
+          {gmailConnectedFC && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '8px 14px', background: 'rgba(91,191,181,0.06)', border: '1px solid rgba(91,191,181,0.15)', borderRadius: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--globant-muted)', flex: 1 }}>
+                {gmailSyncMsg || 'Sync Gmail inbox to capture new replies from your contacts.'}
+              </span>
+              <button className="action-btn" style={{ background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)', fontSize: 11, padding: '5px 12px', flexShrink: 0 }}
+                onClick={handleGmailSyncFC} disabled={gmailSyncing}>
+                {gmailSyncing ? '⏳ Syncing...' : '🔄 Sync inbox'}
+              </button>
+            </div>
+          )}
+
+          {/* Group 0: Replied to you */}
+          {repliedToYou.length > 0 && (
+            <div className="card" style={{ borderLeft: '3px solid #4ade80', marginBottom: 16 }}>
+              <div className="card-header">
+                <h3 style={{ color: '#4ade80' }}>📩 Replied to you ({repliedToYou.length})</h3>
+                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>They wrote back — your turn</span>
+              </div>
+              <div>
+                {repliedToYou.map(({ s, lastOutreach, daysSince }) => {
+                  const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+                  const email    = F(s, 'Email') || '';
+                  const phone    = F(s, 'Phone') || '';
+                  const linkedin = F(s, 'LinkedIn') || '';
+                  const notes    = F(lastOutreach, 'Notes') || '';
+                  const snippet  = notes.replace(/^\[g[^\]]+\]\s*/g, '').split('\n').slice(1).join(' ').slice(0, 120);
+                  return (
+                    <div key={s.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--globant-border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13 }}>{F(s, 'Name')} {F(s, 'Last name') || ''}</span>
+                          <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role') || ''}{accNames.length ? ` · ${accNames[0]}` : ''}</span>
+                          <span style={{ fontSize: 11, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 8px', borderRadius: 20 }}>
+                            {daysSince === 0 ? 'today' : `${daysSince}d ago`}
+                          </span>
+                        </div>
+                        {snippet && <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 2, fontStyle: 'italic' }}>"{snippet}"</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                        {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }}
+                          onClick={() => setSelectedStakeholder(s)}>✉️ Reply</button>}
+                        {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }}
+                          onClick={() => { window.open(`https://wa.me/${phone.replace(/\D/g,'')}`, '_blank'); }}>💬 WhatsApp</button>}
+                        {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }}
+                          onClick={() => window.open(linkedin, '_blank')}>🔗 LinkedIn</button>}
+                      </div>
                     </div>
                   );
                 })}
