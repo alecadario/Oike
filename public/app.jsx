@@ -576,6 +576,7 @@
         localStorage.getItem(LINKEDIN_CACHE_KEY) ||
         F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '');
       const [quickAction, setQuickAction] = useState(''); // 'bounced' | 'reply' | 'meeting' | 'notinterested' | ''
+      const [quickReplyChannel, setQuickReplyChannel] = useState('Email');
       const [quickNote, setQuickNote] = useState('');
       const [quickDate, setQuickDate] = useState('');
       const [savingQuick, setSavingQuick] = useState(false);
@@ -998,7 +999,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                       color: quickAction === act.key ? act.color : 'var(--globant-text)',
                       fontWeight: quickAction === act.key ? 700 : 400,
                     }}
-                    onClick={() => { setQuickAction(quickAction === act.key ? '' : act.key); setQuickNote(''); }}>
+                    onClick={() => { setQuickAction(quickAction === act.key ? '' : act.key); setQuickNote(''); setQuickReplyChannel('Email'); }}>
                     {act.label}
                   </button>
                 ))}
@@ -1013,6 +1014,31 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 const act = actions[quickAction];
                 return (
                   <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {quickAction === 'reply' && (
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 6 }}>Reply came via</label>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {[
+                            { ch: 'Email', icon: '📧' },
+                            { ch: 'LinkedIn', icon: '💼' },
+                            { ch: 'WhatsApp', icon: '💬' },
+                            { ch: 'Phone', icon: '📞' },
+                            { ch: 'SMS', icon: '📱' },
+                          ].map(({ ch, icon }) => (
+                            <button key={ch}
+                              onClick={() => setQuickReplyChannel(ch)}
+                              style={{ fontSize: 11, padding: '5px 11px', borderRadius: 6, cursor: 'pointer',
+                                background: quickReplyChannel === ch ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.04)',
+                                border: `1px solid ${quickReplyChannel === ch ? '#4ade80' : 'rgba(255,255,255,0.1)'}`,
+                                color: quickReplyChannel === ch ? '#4ade80' : 'var(--globant-text)',
+                                fontWeight: quickReplyChannel === ch ? 700 : 400,
+                              }}>
+                              {icon} {ch}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {quickAction === 'meeting' && (
                       <div style={{ marginBottom: 8 }}>
                         <label style={{ fontSize: 11, color: 'var(--globant-muted)', display: 'block', marginBottom: 4 }}>Meeting date & time</label>
@@ -1035,7 +1061,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                               'Activity Name': `${act.label} — ${sName} — ${new Date().toLocaleDateString('en-US')}`,
                               'Account': accountIds,
                               'Stakeholder': [stakeholder.id],
-                              'Channel': quickAction === 'meeting' ? 'Calendar' : 'Email',
+                              'Channel': quickAction === 'meeting' ? 'Calendar' : quickAction === 'reply' ? quickReplyChannel : 'Email',
                               'Date': (quickAction === 'meeting' && quickDate) ? new Date(quickDate).toISOString() : new Date().toISOString(),
                               'Status': act.status,
                               ...(quickNote ? { 'Notes': quickNote } : {}),
