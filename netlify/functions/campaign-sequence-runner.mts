@@ -241,7 +241,7 @@ export default async () => {
       const accountsTableId     = T.accounts;
 
       // Fetch campaigns with sequence steps
-      const campaigns = await getAllRecords(baseId, campaignsTableId, airtableKey, ['Name','Type','Status','Sequence Steps','Sequence Enrollments','Message Template','Asset URL','Context','AI Summary']);
+      const campaigns = await getAllRecords(baseId, campaignsTableId, airtableKey, ['Name','Type','Status','Sequence Steps','Sequence Enrollments','Sequence Config','Message Template','Asset URL','Context','AI Summary']);
       const activeCampaigns = campaigns.filter(c => {
         if (F(c,'Status') === 'Paused' || F(c,'Status') === 'Completed') return false;
         const steps = F(c,'Sequence Steps');
@@ -264,11 +264,26 @@ export default async () => {
       for (const campaign of activeCampaigns) {
         let steps: SeqStep[];
         let enrollments: Enrollments;
+        let seqCfg: { sendHour: number; timezone: string };
         try {
           steps = JSON.parse(F(campaign,'Sequence Steps') || '[]');
           enrollments = JSON.parse(F(campaign,'Sequence Enrollments') || '{}');
+          seqCfg = { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', ...JSON.parse(F(campaign,'Sequence Config') || '{}') };
         } catch { continue; }
         if (steps.length === 0) continue;
+
+        // Check if current hour in campaign's configured timezone matches the send hour
+        try {
+          const nowInTz = new Intl.DateTimeFormat('en-US', { timeZone: seqCfg.timezone, hour: 'numeric', hour12: false }).format(new Date());
+          const currentHour = parseInt(nowInTz);
+          if (currentHour !== seqCfg.sendHour) {
+            console.log(`[seq-runner] Campaign "${F(campaign,'Name')}": current hour ${currentHour} != configured ${seqCfg.sendHour} in ${seqCfg.timezone} — skipping`);
+            continue;
+          }
+        } catch(e) {
+          console.warn(`[seq-runner] Invalid timezone "${seqCfg.timezone}" — defaulting to UTC`);
+          if (new Date().getUTCHours() !== seqCfg.sendHour) continue;
+        }
 
         let enrollmentsChanged = false;
 
@@ -370,5 +385,5 @@ export default async () => {
 };
 
 export const config: Config = {
-  schedule: '0 8 * * *', // Daily at 8am UTC
+  schedule: '0 * * * *', // Every hour — each campaign filters by its own configured send time + timezone
 };
