@@ -13295,18 +13295,20 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
 
       // ── Render campaign email HTML from content sections ──
       const renderCampaignEmail = (S, camp) => {
-        const accentColor = COMPANY_PROFILE.accentColor || '#5bbfb5';
-        const darkColor   = COMPANY_PROFILE.darkColor   || '#1a1a2e';
-        const senderLogo  = COMPANY_PROFILE.senderLogo  || '';
-        const senderPhoto = COMPANY_PROFILE.senderPhoto || '';
-        const senderTitle = COMPANY_PROFILE.senderTitle || '';
-        const senderName  = COMPANY_PROFILE.senderName  || 'Ale';
+        const _br         = loadBranding();
+        const accentColor = _br.accentColor  || COMPANY_PROFILE.accentColor || '#5bbfb5';
+        const darkColor   = _br.darkColor    || COMPANY_PROFILE.darkColor   || '#1a1a2e';
+        const senderLogo  = _br.senderLogo   || COMPANY_PROFILE.senderLogo  || '';
+        const senderPhoto = _br.senderPhoto  || COMPANY_PROFILE.senderPhoto || '';
+        const senderTitle = _br.senderTitle  || COMPANY_PROFILE.senderTitle || '';
+        const senderName  = _br.senderName   || COMPANY_PROFILE.senderName  || 'Ale';
         const senderCo    = COMPANY_PROFILE.companyName || 'Oike';
-        const senderEmail = CURRENT_USER?.email || '';
+        const senderEmail = _br.senderEmail  || CURRENT_USER?.email || '';
+        const calendarLink= _br.calendarLink || '';
         const assetUrl    = F(camp,'Asset URL') || '';
         const campaignName= F(camp,'Name') || '';
         const campaignType= F(camp,'Type') || '';
-        const ctaLink     = assetUrl || `mailto:${senderEmail}`;
+        const ctaLink     = assetUrl || calendarLink || `mailto:${senderEmail}`;
         const escape = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         const nl2br  = t => String(t||'').replace(/\n/g,'<br/>');
         const bullets = Array.isArray(S.bullets) ? S.bullets.filter(Boolean) : [];
@@ -13339,7 +13341,7 @@ ${contentMeta}
     ${bullets.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;"><tr><td bgcolor="#FAFAFA" style="background:#FAFAFA;padding:18px 20px;border-radius:12px;border:1px solid ${escape(accentColor)}22;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${bullets.map((b,i)=>{const c=[accentColor,'#a78bfa','#60a5fa',accentColor][i%4];const last=i===bullets.length-1;return `<tr><td valign="top" width="38" style="padding:7px 12px 7px 0;${last?'':`border-bottom:1px solid ${escape(c)}15;`}"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${escape(c)}20" align="center" valign="middle" width="26" height="26" style="background:${escape(c)}20;color:${escape(c)};font-weight:800;font-size:12px;border-radius:13px;width:26px;height:26px;line-height:26px;text-align:center;font-family:Arial,Helvetica,sans-serif;">${i+1}</td></tr></table></td><td valign="top" style="padding:9px 0 7px;${last?'':`border-bottom:1px solid ${escape(c)}15;`}font-size:13px;color:${escape(darkColor)};line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${escape(b)}</td></tr>`;}).join('')}</table></td></tr></table>` : ''}
     ${S.socialProof ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;"><tr><td bgcolor="#f0fdf4" style="background:#f0fdf4;padding:16px 20px;border-left:4px solid #4ade80;border-radius:0 10px 10px 0;font-size:13px;color:#4B5563;font-style:italic;line-height:1.6;font-family:Georgia,'Times New Roman',serif;"><span style="font-size:20px;color:#4ade80;font-style:normal;font-weight:800;font-family:Georgia,serif;">&ldquo;</span>${nl2br(escape(S.socialProof))}</td></tr></table>` : ''}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border-top:2px solid ${escape(accentColor)}20;"><tr><td style="padding:24px 0 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${senderPhoto?`<td width="88" valign="middle" style="padding-right:16px;"><img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="68" height="68" style="display:block;width:68px;height:68px;border-radius:50%;border:3px solid ${escape(accentColor)};outline:none;" /></td>`:''}
-    <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;"><div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">Ready to explore this?</div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 10px;"><tr><td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;"><a href="${escape(ctaLink)}" style="display:inline-block;padding:12px 26px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(S.ctaText||'Let\'s connect')} &rarr;</a></td></tr></table>
+    <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;"><div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">Ready to explore this?</div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 10px;border-collapse:separate;"><tr><td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;margin-right:8px;"><a href="${escape(ctaLink)}" style="display:inline-block;padding:12px 26px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(S.ctaText||'Let\'s connect')} &rarr;</a></td>${calendarLink?`<td width="12" style="font-size:0;line-height:0;">&nbsp;</td><td bgcolor="${escape(darkColor)}22" style="background:${escape(darkColor)}22;border-radius:10px;border:1px solid ${escape(accentColor)}55;"><a href="${escape(calendarLink)}" style="display:inline-block;padding:12px 20px;color:${escape(darkColor)};text-decoration:none;font-weight:700;font-size:13px;font-family:Arial,Helvetica,sans-serif;">&#128197; Agendar</a></td>`:''}</tr></table>
     <div style="font-size:13px;color:${escape(darkColor)};font-weight:700;">${escape(senderName)}</div>${senderTitle?`<div style="font-size:11px;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</div>`:''}</td></tr></table></td></tr></table>
   </td></tr>
   <tr><td bgcolor="${escape(darkColor)}" align="center" style="background:${escape(darkColor)};padding:20px 36px;text-align:center;border-radius:0 0 16px 16px;">
