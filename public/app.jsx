@@ -2210,12 +2210,23 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             }),
           });
           const result = await res.json();
-          if (!res.ok) throw new Error(result.error || 'Send failed');
+          if (!res.ok) {
+            // Scope not granted yet — fall back to Gmail compose with subject pre-filled
+            const ccParam = ccList.length > 0 ? `&cc=${encodeURIComponent(ccList.join(','))}` : '';
+            window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(stakeholderEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(messageBody)}${ccParam}`, '_blank');
+            if (result.error?.includes('connect') || result.error?.includes('scope') || result.error?.includes('auth')) {
+              alert('Reconnect Gmail in Settings → Integrations to send directly from the app. Opening Gmail compose instead.');
+            }
+            setSendingGmail(false);
+            return;
+          }
           // Also log locally via onSend so the UI updates immediately
           onSend(stakeholder, 'Email', messageBody, ccList, selectedEventId || null);
           onClose();
         } catch (e) {
-          alert('Failed to send: ' + (e.message || 'unknown error'));
+          // Network error — fall back to Gmail compose
+          const ccParam = ccList.length > 0 ? `&cc=${encodeURIComponent(ccList.join(','))}` : '';
+          window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(stakeholderEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(messageBody)}${ccParam}`, '_blank');
         }
         setSendingGmail(false);
       };
