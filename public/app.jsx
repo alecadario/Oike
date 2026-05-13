@@ -3812,6 +3812,7 @@ Output ONLY the message, nothing else.`;
       const [filterSource, setFilterSource] = useState('');
       const [filterStatus, setFilterStatus] = useState('');
       const [filterCountry, setFilterCountry] = useState('');
+      const [bulkPainProgress, setBulkPainProgress] = useState(null); // {done, total} or null
       const STAKEHOLDER_STATUS_OPTIONS = ['Not Contacted', 'Contacted', 'Replied', 'Meeting Booked', 'Not Interested', 'DNC', 'Bounced', 'Left Company', 'Nurture'];
       const [showContactImport, setShowContactImport] = useState(false);
       const [contactCsvRows, setContactCsvRows] = useState([]);
@@ -4229,6 +4230,40 @@ Output ONLY the message, nothing else.`;
         return true;
       }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || '')), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, filterStatus, filterCountry, accounts]);
 
+      const bulkGeneratePains = async (targets) => {
+        if (bulkPainProgress) return;
+        const pending = targets.filter(s => !(F(s,'Pain Points (Generated)') || '').trim());
+        if (pending.length === 0) { alert('Todos los contactos filtrados ya tienen pains generados.'); return; }
+        setBulkPainProgress({ done: 0, total: pending.length });
+        const a = api || new AirtableAPI();
+        for (let i = 0; i < pending.length; i++) {
+          const s = pending[i];
+          const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+          const role = F(s,'Role') || '';
+          const accId = linkedIds(s,'Account')[0];
+          const acc = accId ? accounts.find(ac => ac.id === accId) : null;
+          const accName = acc ? F(acc,'Account Name') : '';
+          const industry = acc ? F(acc,'Industry') : '';
+          const news = acc ? (F(acc,'Recent News')||'').slice(0,300) : '';
+          try {
+            const prompt = `B2B sales analyst. Generate 3-5 specific pain points for this stakeholder.
+PERSON: ${sName} | ${role}
+COMPANY: ${accName}${industry ? ` | ${industry}` : ''}
+${news ? `COMPANY NEWS: ${news}` : ''}
+SELLER: ${COMPANY_PROFILE.companyName} — ${COMPANY_PROFILE.services}
+
+Pain points must be specific to their role, reference industry challenges, and connect to where ${COMPANY_PROFILE.companyName} can help. Bullet points, 1-2 sentences each. Write ONLY the pain points.`;
+            const result = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 350 });
+            await a.updateRecord(TABLE_IDS.stakeholders, s.id, { 'Pain Points (Generated)': result });
+            if (onUpdateRecord) onUpdateRecord('stakeholders', s.id, { 'Pain Points (Generated)': result });
+          } catch(e) { console.error('Pain gen failed for', sName, e); }
+          setBulkPainProgress({ done: i + 1, total: pending.length });
+          if (i < pending.length - 1) await new Promise(r => setTimeout(r, 800));
+        }
+        setBulkPainProgress(null);
+        if (onLogActivity) onLogActivity();
+      };
+
       return (
         <div>
           <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -4239,6 +4274,9 @@ Output ONLY the message, nothing else.`;
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowContactImport(!showContactImport); setContactImportResult(null); }}>
                 {showContactImport ? '✕ Close Import' : '📥 Import CSV'}
+              </button>
+              <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => bulkGeneratePains(filtered)} disabled={!!bulkPainProgress}>
+                {bulkPainProgress ? `⏳ ${bulkPainProgress.done}/${bulkPainProgress.total} pains...` : '✨ Generate Pains'}
               </button>
               <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => setShowNewContact(!showNewContact)}>
                 {showNewContact ? '✕ Close' : '➕ New Contact'}
