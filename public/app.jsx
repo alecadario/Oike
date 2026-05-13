@@ -12894,7 +12894,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
     // ============ CAMPAIGNS HUB ============
     function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, campaignPrefill, clearCampaignPrefill }) {
-      const { campaigns = [], stakeholders = [], accounts = [], outreach = [], events = [] } = data;
+      const { campaigns = [], stakeholders = [], accounts = [], outreach = [], events = [], landings = [] } = data;
 
       const [selectedId, setSelectedId] = useState(null);
       const [listSearch, setListSearch] = useState('');
@@ -13084,6 +13084,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [savingSeq, setSavingSeq] = useState(false);
       const [enrolling, setEnrolling] = useState(false);
       const [showEmailTpl, setShowEmailTpl] = useState(false);
+      const [showCampaignLandings, setShowCampaignLandings] = useState(false);
       const [emailTplHtml, setEmailTplHtml] = useState('');
       const [emailTplDirty, setEmailTplDirty] = useState(false);
       const [generatingTpl, setGeneratingTpl] = useState(false);
@@ -14416,6 +14417,76 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Prospect Landings — filtered to campaign contacts */}
+            {(() => {
+              const campaignLandings = landings.filter(l => {
+                const stkIds = linkedIds(l, 'Stakeholder');
+                return stkIds.some(id => assignedIds.includes(id));
+              });
+              return (
+                <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid #a78bfa', padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 1 }}>
+                      📨 Prospect Landings {campaignLandings.length > 0 && <span style={{ marginLeft: 6, background: 'rgba(167,139,250,0.2)', borderRadius: 10, padding: '1px 7px', fontSize: 10 }}>{campaignLandings.length}</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
+                        onClick={() => {
+                          try { sessionStorage.setItem('oike_landing_prefill_stakeholder', assignedIds[0] || ''); } catch {}
+                          window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }));
+                        }}>
+                        ➕ New Landing
+                      </button>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
+                        onClick={() => setShowCampaignLandings(v => !v)}>
+                        {showCampaignLandings ? '▲ Collapse' : (campaignLandings.length > 0 ? `▼ View ${campaignLandings.length}` : '▼ Expand')}
+                      </button>
+                    </div>
+                  </div>
+                  {showCampaignLandings && (
+                    <div style={{ marginTop: 12 }}>
+                      {campaignLandings.length === 0 ? (
+                        <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', textAlign: 'center', padding: '16px 0' }}>
+                          No landings yet for contacts in this campaign. Click <strong>➕ New Landing</strong> to create one.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                          {campaignLandings.map(l => {
+                            const status = F(l, 'Status') || 'Draft';
+                            const stkId = linkedIds(l, 'Stakeholder')[0];
+                            const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
+                            const sColor = { Draft: '#a78bfa', Sent: '#4ade80', Archived: '#6b7280' }[status] || '#a78bfa';
+                            return (
+                              <div key={l.id} className="card" style={{ cursor: 'pointer', borderTop: `3px solid ${sColor}`, padding: '10px 12px' }}
+                                onClick={() => {
+                                  try { sessionStorage.setItem('oike_landing_prefill_stakeholder', stkId || ''); } catch {}
+                                  window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }));
+                                }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                  <div style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 700, fontFamily: 'monospace' }}>/{F(l, 'Slug') || '—'}</div>
+                                  <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: `${sColor}20`, color: sColor, fontWeight: 700 }}>{status}</span>
+                                </div>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                  {stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : '—'}
+                                </div>
+                                {F(l, 'Hook') && <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4, fontStyle: 'italic', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>"{F(l, 'Hook')}"</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div style={{ marginTop: 10, textAlign: 'right' }}>
+                        <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
+                          onClick={() => window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }))}>
+                          View all landings →
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -20411,7 +20482,6 @@ Return ONLY valid JSON.`;
         { icon: '🛠️', label: 'Offering Hub', key: 'solutionshub' },
         { icon: '🎪', label: 'Events', key: 'events' },
         { icon: '✍️', label: 'Content Lab', key: 'contentlab' },
-        { icon: '📨', label: 'Prospect Landings', key: 'landings' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
         { icon: '📧', label: 'Reports', key: 'reports' },
