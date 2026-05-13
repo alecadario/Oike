@@ -13759,7 +13759,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const evUrl    = eventRec ? (F(eventRec, 'URL') || '') : '';
         const evDesc   = eventRec ? (F(eventRec, 'Aditional context') || '').slice(0,180) : '';
         const contentMeta = `<!--oike-content:${JSON.stringify(S)}-->`;
-        const i18n = lang === 'es' ? {
+        const i18nDefaults = lang === 'es' ? {
           closingLine1: 'Si algo de esto resuena con lo que está trabajando {{first_name}}, o querés profundizar en algún punto, respondé este mail y lo charlamos.',
           closingLine2: 'Con gusto comparto más contexto o datos específicos para tu industria.',
           replyBtn: 'Responder →',
@@ -13774,6 +13774,12 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           closingLine2: 'Happy to share more context or data specific to your industry.',
           replyBtn: 'Reply →',
           calBtn: '📅 Book 15 min',
+        };
+        const i18n = {
+          closingLine1: S.closingLine1 || i18nDefaults.closingLine1,
+          closingLine2: S.closingLine2 || i18nDefaults.closingLine2,
+          replyBtn: S.replyBtn || i18nDefaults.replyBtn,
+          calBtn: S.calBtn || i18nDefaults.calBtn,
         };
         return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -13895,6 +13901,12 @@ Be specific. Use the campaign context and strategic brief as the primary source 
           let sections = {};
           try { sections = JSON.parse(sectionsRaw.replace(/^```json\n?|```$/g,'')); } catch { sections = {}; }
 
+          const langClosing = tplLanguage === 'es'
+            ? { line1: 'Si algo de esto resuena con lo que está trabajando {{first_name}}, o querés profundizar en algún punto, respondé este mail y lo charlamos.', line2: 'Con gusto comparto más contexto o datos específicos para tu industria.', reply: 'Responder →', cal: '📅 Agendemos 15 min' }
+            : tplLanguage === 'pt'
+            ? { line1: 'Se algo aqui ressoa com o que {{first_name}} está trabalhando, ou quiser aprofundar algum ponto, responda este e-mail e conversamos.', line2: 'Fico feliz em compartilhar mais contexto ou dados específicos para o seu setor.', reply: 'Responder →', cal: '📅 Agendar 15 min' }
+            : { line1: 'If any of this resonates with what {{first_name}} is working on, or you\'d like to dig deeper into any of these points, just reply to this email.', line2: 'Happy to share more context or data specific to your industry.', reply: 'Reply →', cal: '📅 Book 15 min' };
+
           const S = {
             subtitle: '{{company}}',
             hook: sections.hook || '',
@@ -13904,6 +13916,10 @@ Be specific. Use the campaign context and strategic brief as the primary source 
             value: sections.value || '',
             bullets: Array.isArray(sections.bullets) ? sections.bullets.filter(Boolean) : [],
             socialProof: sections.socialProof || '',
+            closingLine1: langClosing.line1,
+            closingLine2: langClosing.line2,
+            replyBtn: langClosing.reply,
+            calBtn: langClosing.cal,
           };
 
           // Step 2: render HTML via shared function
@@ -14647,6 +14663,28 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           <label style={labelStyle}>Social proof / quote (optional)</label>
                           <textarea className="input-field" style={{ ...fieldStyle, minHeight: 48, resize: 'vertical', fontSize: 12 }}
                             value={C.socialProof || ''} onChange={e => updateContent('socialProof', e.target.value)} />
+
+                          <div style={{ borderTop: '1px solid var(--globant-border)', margin: '10px 0 12px', paddingTop: 12 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Closing section</div>
+                            <label style={labelStyle}>Line 1</label>
+                            <textarea className="input-field" style={{ ...fieldStyle, minHeight: 52, resize: 'vertical', fontSize: 12 }}
+                              value={C.closingLine1 || ''} onChange={e => updateContent('closingLine1', e.target.value)} />
+                            <label style={labelStyle}>Line 2</label>
+                            <input className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
+                              value={C.closingLine2 || ''} onChange={e => updateContent('closingLine2', e.target.value)} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                              <div>
+                                <label style={labelStyle}>Reply button</label>
+                                <input className="input-field" style={{ width: '100%', fontSize: 12 }}
+                                  value={C.replyBtn || ''} onChange={e => updateContent('replyBtn', e.target.value)} />
+                              </div>
+                              <div>
+                                <label style={labelStyle}>Calendar button</label>
+                                <input className="input-field" style={{ width: '100%', fontSize: 12 }}
+                                  value={C.calBtn || ''} onChange={e => updateContent('calBtn', e.target.value)} />
+                              </div>
+                            </div>
+                          </div>
 
                           <label style={labelStyle}>Evento (opcional)</label>
                           <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
