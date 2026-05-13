@@ -7999,8 +7999,22 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
             <div className="card" style={{ textAlign: 'center', padding: '18px 12px', borderBottom: `3px solid ${replyBench.color}` }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: replyBench.color, lineHeight: 1 }}>{replyRate}%</div>
               <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>Reply Rate</div>
-              <div style={{ fontSize: 9, color: replyBench.color, marginTop: 4, fontWeight: 600 }}>{replyBench.icon} {replyBench.label}</div>
-              <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>{`Benchmark: ${BENCH_REPLY_LOW}–${BENCH_REPLY_HIGH}%`}</div>
+              {(() => {
+                const tracked = channelReplyStats.filter(r => r.count >= 5 && r.bench);
+                if (tracked.length === 0) {
+                  return <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 4 }}>All-channel target: {BENCH_REPLY_LOW}–{BENCH_REPLY_HIGH}%</div>;
+                }
+                return (
+                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {tracked.slice(0, 3).map(r => (
+                      <div key={r.ch} style={{ fontSize: 9, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                        <span style={{ color: 'var(--globant-muted)' }}>{channelIcon[r.ch] || ''} {r.ch}</span>
+                        <span style={{ color: r.benchColor, fontWeight: 700 }}>{r.rate}% {r.bench ? `(ok: ${r.bench.acceptable}%+)` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <div className="card" style={{ textAlign: 'center', padding: '18px 12px', borderBottom: `3px solid ${meetingBench.color}` }}>
               <div style={{ fontSize: 32, fontWeight: 800, color: meetingBench.color, lineHeight: 1 }}>{meetingRate}%</div>
