@@ -13038,6 +13038,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [bulkMsgs, setBulkMsgs] = useState({}); // {[id]: {msg, status, error}}
       const [bulkSending, setBulkSending] = useState(false);
       const [bulkResult, setBulkResult] = useState(null); // {sent, errors}
+      const [bulkDraftMode, setBulkDraftMode] = useState(false);
       const [showSeq, setShowSeq] = useState(false);
       const [seqSteps, setSeqSteps] = useState([]);
       const [seqConfig, setSeqConfig] = useState({ sendHour: 9, timezone: 'America/Argentina/Buenos_Aires' });
@@ -13180,10 +13181,10 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
             const res = await fetch('/api/gmail/send', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ to: email, subject, message: body, stakeholderId: s.id, accountIds: linkedIds(s,'Account'), baseId: AIRTABLE_BASE_ID, outreachTableId: TABLE_IDS.outreach }),
+              body: JSON.stringify({ to: email, subject, message: body, stakeholderId: s.id, accountIds: linkedIds(s,'Account'), baseId: AIRTABLE_BASE_ID, outreachTableId: TABLE_IDS.outreach, draft: bulkDraftMode }),
             });
             if (res.ok) {
-              setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: bulkDraftMode ? 'draft' : 'sent' } }));
               // Mark as reached on campaign
               const currentReached = linkedIds(selectedCampaign, 'Stakeholders Reached');
               const currentAssigned = linkedIds(selectedCampaign, 'Assigned Stakeholders');
@@ -13535,11 +13536,12 @@ Return ONLY the 1-2 sentences. No greeting, no subject line.`;
                 to: email, subject, message: opener, bodyHtml: personalizedHtml,
                 stakeholderId: s.id, accountIds: linkedIds(s,'Account'),
                 baseId: AIRTABLE_BASE_ID, outreachTableId: TABLE_IDS.outreach,
+                draft: bulkDraftMode,
               }),
             });
 
             if (res.ok) {
-              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: opener, status: 'sent', error: '' } }));
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: opener, status: bulkDraftMode ? 'draft' : 'sent', error: '' } }));
               const currentReached = linkedIds(selectedCampaign,'Stakeholders Reached');
               const currentAssigned = linkedIds(selectedCampaign,'Assigned Stakeholders');
               const a = api || new AirtableAPI();
@@ -14292,13 +14294,15 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                   {bulkResult && (
                     <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: bulkResult.errors === 0 ? 'rgba(74,222,128,0.1)' : 'rgba(251,191,36,0.1)', border: `1px solid ${bulkResult.errors === 0 ? 'rgba(74,222,128,0.3)' : 'rgba(251,191,36,0.3)'}` }}>
                       <span style={{ fontSize: 12, color: bulkResult.errors === 0 ? '#4ade80' : '#fbbf24', fontWeight: 700 }}>
-                        {bulkResult.errors === 0 ? `✅ All ${bulkResult.sent} emails sent successfully!` : `⚠️ ${bulkResult.sent} sent, ${bulkResult.errors} failed — check errors below and retry`}
+                        {bulkResult.errors === 0
+                          ? (bulkDraftMode ? `📝 ${bulkResult.sent} drafts saved to Gmail Borradores!` : `✅ All ${bulkResult.sent} emails sent successfully!`)
+                          : `⚠️ ${bulkResult.sent} ${bulkDraftMode?'drafted':'sent'}, ${bulkResult.errors} failed — check errors below and retry`}
                       </span>
                     </div>
                   )}
-                  {/* Mode toggle — only show HTML option when template exists */}
+                  {/* Content mode toggle */}
                   {emailTplHtml && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                       {[{val:false,label:'🤖 AI text per contact'},{val:true,label:'📧 HTML template + AI opener'}].map(opt => (
                         <button key={String(opt.val)} onClick={() => { setBulkUseHtml(opt.val); setBulkMsgs({}); setBulkResult(null); }}
                           style={{ flex:1, padding:'6px 10px', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight: bulkUseHtml===opt.val ? 700 : 400,
@@ -14310,6 +14314,18 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       ))}
                     </div>
                   )}
+                  {/* Send / Draft mode toggle */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                    {[{val:false,label:'📤 Send directly'},{val:true,label:'📝 Save as draft'}].map(opt => (
+                      <button key={String(opt.val)} onClick={() => { setBulkDraftMode(opt.val); setBulkMsgs({}); setBulkResult(null); }}
+                        style={{ flex:1, padding:'6px 10px', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight: bulkDraftMode===opt.val ? 700 : 400,
+                          background: bulkDraftMode===opt.val ? 'rgba(251,191,36,0.15)' : 'rgba(0,0,0,0.15)',
+                          color: bulkDraftMode===opt.val ? '#fbbf24' : 'var(--globant-muted)',
+                          border: `1px solid ${bulkDraftMode===opt.val ? 'rgba(251,191,36,0.4)' : 'var(--globant-border)'}` }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                     {!bulkUseHtml && (
                       <button className="action-btn btn-primary" style={{ fontSize: 11 }}
@@ -14319,14 +14335,14 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       </button>
                     )}
                     {bulkUseHtml ? (
-                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)', fontWeight: 700 }}
+                      <button className="action-btn" style={{ fontSize: 11, background: bulkDraftMode ? 'rgba(251,191,36,0.15)' : 'rgba(96,165,250,0.15)', color: bulkDraftMode ? '#fbbf24' : '#60a5fa', border: `1px solid ${bulkDraftMode ? 'rgba(251,191,36,0.3)' : 'rgba(96,165,250,0.3)'}`, fontWeight: 700 }}
                         disabled={bulkSending || !gmailConn} onClick={executeBulkSendHtml}>
-                        {bulkSending ? '⏳ Sending...' : `📧 Send HTML to all (${pendingEmailContacts.filter(s=>!!F(s,'Email')).length})`}
+                        {bulkSending ? '⏳ Processing...' : bulkDraftMode ? `📝 Draft all (${pendingEmailContacts.filter(s=>!!F(s,'Email')).length})` : `📧 Send HTML to all (${pendingEmailContacts.filter(s=>!!F(s,'Email')).length})`}
                       </button>
                     ) : readyCount > 0 && (
-                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)', fontWeight: 700 }}
+                      <button className="action-btn" style={{ fontSize: 11, background: bulkDraftMode ? 'rgba(251,191,36,0.15)' : 'rgba(91,191,181,0.15)', color: bulkDraftMode ? '#fbbf24' : 'var(--globant-green)', border: `1px solid ${bulkDraftMode ? 'rgba(251,191,36,0.3)' : 'rgba(91,191,181,0.3)'}`, fontWeight: 700 }}
                         disabled={bulkSending || !gmailConn} onClick={executeBulkSend}>
-                        {bulkSending ? '⏳ Sending...' : `✉️ Send All (${readyCount})`}
+                        {bulkSending ? '⏳ Processing...' : bulkDraftMode ? `📝 Draft All (${readyCount})` : `✉️ Send All (${readyCount})`}
                       </button>
                     )}
                     {!gmailConn && <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>Connect Gmail in Settings to send</span>}
@@ -14337,7 +14353,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         const bm = bulkMsgs[s.id] || {};
                         const accId = linkedIds(s,'Account')[0];
                         const acc = accId ? accounts.find(a => a.id === accId) : null;
-                        const STATUS_BADGE = { generating: ['#fbbf24','⏳ Generating'], ready: ['var(--globant-green)','✅ Ready'], sending: ['#60a5fa','📤 Sending...'], sent: ['#4ade80','✅ Sent'], error: ['#ef4444','❌ Error'] };
+                        const STATUS_BADGE = { generating: ['#fbbf24','⏳ Generating'], ready: ['var(--globant-green)','✅ Ready'], sending: ['#60a5fa','📤 Sending...'], sent: ['#4ade80','✅ Sent'], draft: ['#fbbf24','📝 Draft saved'], error: ['#ef4444','❌ Error'] };
                         const [badgeColor, badgeLabel] = STATUS_BADGE[bm.status] || ['var(--globant-muted)','—'];
                         return (
                           <div key={s.id} style={{ background: 'rgba(0,0,0,0.15)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--globant-border)' }}>
