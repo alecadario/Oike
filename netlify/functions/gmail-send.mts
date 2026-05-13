@@ -54,14 +54,40 @@ async function getUserRefreshToken(email: string, airtableKey: string): Promise<
   return data.records?.[0]?.fields?.['Gmail Refresh Token'] || null;
 }
 
-// ── Build base64url-encoded MIME message ──
-function buildMimeMessage({ to, subject, body, cc, inReplyTo, references }: {
-  to: string; subject: string; body: string;
+// ── Fetch Gmail signature for the user's default send-as address ──
+async function getGmailSignature(accessToken: string): Promise<string> {
+  try {
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs', {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const sendAs: any[] = data.sendAs || [];
+    const primary = sendAs.find(s => s.isDefault || s.isPrimary) || sendAs[0];
+    return primary?.signature || '';
+  } catch { return ''; }
+}
+
+// ── Convert plain text to HTML (preserves line breaks) ──
+function textToHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+}
+
+// ── Build base64url-encoded MIME message (HTML with signature) ──
+function buildMimeMessage({ to, subject, body, signature, cc, inReplyTo, references }: {
+  to: string; subject: string; body: string; signature?: string;
   cc?: string[]; inReplyTo?: string; references?: string;
 }): string {
   const replySubject = inReplyTo && !subject.toLowerCase().startsWith('re:')
     ? `Re: ${subject}`
     : subject;
+
+  const htmlBody = `<div style="font-family:sans-serif;font-size:14px;">${textToHtml(body)}</div>`
+    + (signature ? `<br><div>${signature}</div>` : '');
 
   const lines = [
     `To: ${to}`,
@@ -70,9 +96,9 @@ function buildMimeMessage({ to, subject, body, cc, inReplyTo, references }: {
     ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
     ...(references ? [`References: ${references} ${inReplyTo || ''}`.trim()] : inReplyTo ? [`References: ${inReplyTo}`] : []),
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
+    'Content-Type: text/html; charset=utf-8',
     '',
-    body,
+    htmlBody,
   ];
 
   const raw = lines.join('\r\n');
@@ -157,8 +183,9 @@ export default async (req: Request, context: Context) => {
       return new Response(JSON.stringify({ error: 'Could not refresh Gmail access. Please reconnect Gmail.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // 3. Build and send MIME message
-    const raw = buildMimeMessage({ to, subject, body: message, cc, inReplyTo, references });
+    // 3. Fetch Gmail signature + build MIME message
+    const signature = await getGmailSignature(accessToken);
+    const raw = buildMimeMessage({ to, subject, body: message, signature, cc, inReplyTo, references });
     const sendBody: Record<string, any> = { raw };
     if (threadId) sendBody.threadId = threadId;
 
