@@ -14,7 +14,7 @@ const T = {
 };
 
 // ── Types ──
-interface SeqStep   { waitDays: number; channel: string; condition: 'always' | 'no_reply'; note: string; }
+interface SeqStep   { waitDays: number; channel: string; condition: 'always' | 'no_reply'; note: string; mode?: 'send' | 'draft'; }
 interface Enrollment { step: number; nextDate: string; status: 'active' | 'paused' | 'completed' | 'replied'; senderEmail: string; enrolledDate: string; }
 type Enrollments = Record<string, Enrollment>;
 
@@ -99,6 +99,19 @@ async function sendGmail(to: string, subject: string, body: string, accessToken:
   return data.id || null;
 }
 
+async function createGmailDraft(to: string, subject: string, body: string, accessToken: string): Promise<string | null> {
+  const signature = await getGmailSignature(accessToken);
+  const raw = buildMime({ to, subject, body, signature });
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: { raw } }),
+  });
+  if (!res.ok) { console.error('[seq-runner] Gmail draft failed:', res.status, await res.text()); return null; }
+  const data = await res.json();
+  return data.id || null;
+}
+
 // ── OpenAI message generation ──
 async function generateMessage(stk: any, campaign: any, step: SeqStep, acc: any | null, recentOutreach: any[]): Promise<string> {
   const openaiKey = Netlify.env.get('OPENAI_API_KEY');
@@ -149,14 +162,15 @@ function hasReplied(stkId: string, outreach: any[], enrolledDate: string): boole
 }
 
 // ── Log sent email to Airtable outreach table ──
-async function logActivity(baseId: string, outreachTableId: string, stk: any, campaign: any, subject: string, body: string, gmailId: string, senderEmail: string, key: string): Promise<void> {
+async function logActivity(baseId: string, outreachTableId: string, stk: any, campaign: any, subject: string, body: string, gmailId: string, senderEmail: string, key: string, isDraft = false): Promise<void> {
   const sName = `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim();
   const today = new Date().toISOString().split('T')[0];
+  const prefix = isDraft ? '[DRAFT] ' : '';
   await atFetch(`/${baseId}/${outreachTableId}`, key, {
     method: 'POST',
     body: JSON.stringify({ records: [{ fields: {
-      'Channel': 'Email', 'Status': 'Sent',
-      'Activity Name': `[Sequence] ${F(campaign,'Name')} — ${sName} — ${today}`,
+      'Channel': 'Email', 'Status': isDraft ? 'Draft' : 'Sent',
+      'Activity Name': `${prefix}[Sequence] ${F(campaign,'Name')} — ${sName} — ${today}`,
       'Notes': `[gmsg:${gmailId}]\n${subject}\n\n${body.slice(0,300)}`,
       'Message': body, 'Stakeholder': [stk.id],
       'Account': linkedIds(stk,'Account'),
@@ -301,14 +315,18 @@ export default async () => {
             let body = msg;
             if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
 
-            const gmailId = await sendGmail(email, subject, body, accessToken);
+            const isDraft = (step.mode || 'send') === 'draft';
+            const gmailId = isDraft
+              ? await createGmailDraft(email, subject, body, accessToken)
+              : await sendGmail(email, subject, body, accessToken);
             if (gmailId) {
-              await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey);
-              await advanceStatus(baseId, stkId, airtableKey);
+              await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
+              if (!isDraft) await advanceStatus(baseId, stkId, airtableKey);
               totalSent++;
+              console.log(`[seq-runner] ${isDraft ? 'Draft created' : 'Sent'} for ${email}`);
             } else {
               totalErrors++;
-              console.error(`[seq-runner] Send failed for ${email}`);
+              console.error(`[seq-runner] ${isDraft ? 'Draft' : 'Send'} failed for ${email}`);
             }
 
             // Advance to next step
