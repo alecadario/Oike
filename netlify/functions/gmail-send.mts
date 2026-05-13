@@ -132,6 +132,29 @@ async function logSentActivity(
   });
 }
 
+// ── Advance stakeholder status (only forward, respects protected states) ──
+const STAKEHOLDER_STATUS_PRIORITY: Record<string, number> = { '': 0, 'Not Contacted': 0, 'Contacted': 1, 'Replied': 2, 'Meeting Booked': 3 };
+const STAKEHOLDER_STATUS_PROTECTED = ['DNC', 'Left Company', 'Not Interested', 'Nurture', 'Bounced'];
+const STAKEHOLDERS_TABLE = 'tblwwNrPg6q2jYxfv';
+
+async function advanceStakeholderStatus(baseId: string, stakeholderId: string, targetStatus: string, airtableKey: string): Promise<void> {
+  try {
+    const getRes = await fetch(`${AIRTABLE_BASE}/${baseId}/${STAKEHOLDERS_TABLE}/${stakeholderId}`, {
+      headers: { 'Authorization': `Bearer ${airtableKey}` },
+    });
+    if (!getRes.ok) return;
+    const rec = await getRes.json();
+    const current = String(rec?.fields?.['Status'] || '').trim();
+    if (STAKEHOLDER_STATUS_PROTECTED.includes(current)) return;
+    if ((STAKEHOLDER_STATUS_PRIORITY[targetStatus] ?? 0) <= (STAKEHOLDER_STATUS_PRIORITY[current] ?? 0)) return;
+    await fetch(`${AIRTABLE_BASE}/${baseId}/${STAKEHOLDERS_TABLE}/${stakeholderId}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Status': targetStatus }, typecast: true }),
+    });
+  } catch {}
+}
+
 // ── Mark a Gmail message as read ──
 async function markAsRead(messageId: string, accessToken: string): Promise<void> {
   await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`, {
@@ -164,7 +187,7 @@ export default async (req: Request, context: Context) => {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const { to, subject, message, cc, threadId, inReplyTo, references, readMessageId, stakeholderId, accountIds, baseId, outreachTableId } = body;
+  const { to, subject, message, cc, threadId, inReplyTo, references, readMessageId, stakeholderId, accountIds, baseId, outreachTableId, draft = false } = body;
 
   if (!to || !subject || !message || !stakeholderId || !baseId || !outreachTableId) {
     return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -186,6 +209,49 @@ export default async (req: Request, context: Context) => {
     // 3. Fetch Gmail signature + build MIME message
     const signature = await getGmailSignature(accessToken);
     const raw = buildMimeMessage({ to, subject, body: message, signature, cc, inReplyTo, references });
+
+    if (draft) {
+      // ── Create Gmail draft ──
+      const draftBody: Record<string, any> = { message: { raw } };
+      if (threadId) draftBody.message.threadId = threadId;
+
+      const draftRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftBody),
+      });
+
+      if (!draftRes.ok) {
+        const err = await draftRes.text();
+        console.error('[gmail-send] Draft failed:', draftRes.status, err);
+        return new Response(JSON.stringify({ error: `Gmail draft failed (${draftRes.status})` }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const draftData = await draftRes.json();
+      const draftGmailId = draftData.id || '';
+
+      // Log in Airtable as Draft
+      const today = new Date().toISOString().split('T')[0];
+      const fields: Record<string, any> = {
+        'Channel': 'Email', 'Status': 'Draft',
+        'Activity Name': `[DRAFT] Email — ${new Date().toLocaleDateString('en-US')}`,
+        'Notes': `[gmsg:${draftGmailId}]\n${subject}\n\n${message.slice(0, 300)}`,
+        'Message': message, 'Stakeholder': [stakeholderId],
+        'Date': today, 'Logged By': payload.email || '',
+      };
+      if (accountIds?.length) fields['Account'] = accountIds;
+      await fetch(`${AIRTABLE_BASE}/${baseId}/${outreachTableId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${airtableKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [{ fields }], typecast: true }),
+      });
+
+      return new Response(JSON.stringify({ ok: true, draft: true, gmailDraftId: draftGmailId }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── Send email ──
     const sendBody: Record<string, any> = { raw };
     if (threadId) sendBody.threadId = threadId;
 
@@ -204,12 +270,12 @@ export default async (req: Request, context: Context) => {
     const sentData = await sendRes.json();
     const sentGmailId = sentData.id || '';
 
-    // 4. Mark original email as read (if replying)
+    // Mark original email as read (if replying)
     if (readMessageId) {
       await markAsRead(readMessageId, accessToken).catch(() => {});
     }
 
-    // 5. Log in Airtable
+    // Log in Airtable as Sent
     const today = new Date().toISOString().split('T')[0];
     await logSentActivity(baseId, outreachTableId, stakeholderId, accountIds || [], subject, message, today, payload.email || '', sentGmailId, airtableKey);
 
