@@ -3811,6 +3811,7 @@ Output ONLY the message, nothing else.`;
       const [editingContact, setEditingContact] = useState(null);
       const [filterSource, setFilterSource] = useState('');
       const [filterStatus, setFilterStatus] = useState('');
+      const [filterCountry, setFilterCountry] = useState('');
       const STAKEHOLDER_STATUS_OPTIONS = ['Not Contacted', 'Contacted', 'Replied', 'Meeting Booked', 'Not Interested', 'DNC', 'Bounced', 'Left Company', 'Nurture'];
       const [showContactImport, setShowContactImport] = useState(false);
       const [contactCsvRows, setContactCsvRows] = useState([]);
@@ -4220,12 +4221,13 @@ Output ONLY the message, nothing else.`;
         }
         if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return false;
         if (filterSource && F(s, 'Source') !== filterSource) return false;
+        if (filterCountry && (F(s, 'Country') || '').toLowerCase() !== filterCountry.toLowerCase()) return false;
         if (filterStatus) {
           const sStatus = F(s, 'Status') || 'Not Contacted';
           if (sStatus !== filterStatus) return false;
         }
         return true;
-      }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || '')), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, filterStatus, accounts]);
+      }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || '')), [stakeholders, searchName, searchAccount, selectedInfluence, filterSource, filterStatus, filterCountry, accounts]);
 
       return (
         <div>
@@ -4258,6 +4260,10 @@ Output ONLY the message, nothing else.`;
             <select className="input-field" style={{ maxWidth: 200 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">All Statuses</option>
               {STAKEHOLDER_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select className="input-field" style={{ maxWidth: 180 }} value={filterCountry} onChange={e => setFilterCountry(e.target.value)}>
+              <option value="">All Countries</option>
+              {[...new Set(stakeholders.map(s => F(s,'Country')).filter(Boolean))].sort().map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 
