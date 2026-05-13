@@ -193,31 +193,38 @@ export default async () => {
   try { users = await getAllRecords(USERS_BASE_ID, USERS_TABLE_ID, airtableKey, ['Email', 'TABLE_IDS', 'Gmail Refresh Token']); }
   catch(e) { console.error('[seq-runner] Failed to fetch users:', e); return; }
 
-  // Build map: baseId → {refreshToken, senderEmail}
-  const baseMap: Record<string, { refreshToken: string; senderEmail: string }> = {};
+  // Build maps: email → refreshToken, and set of unique baseIds to process
+  const userRefreshMap: Record<string, string> = {}; // email → refreshToken
+  const baseIds = new Set<string>();
   for (const u of users) {
     const email = F(u,'Email');
     const baseId = F(u,'TABLE_IDS');
     const refreshToken = F(u,'Gmail Refresh Token');
-    if (baseId && refreshToken && email && !baseMap[baseId]) {
-      baseMap[baseId] = { refreshToken, senderEmail: email };
-    }
+    if (email && refreshToken) userRefreshMap[email] = refreshToken;
+    if (baseId) baseIds.add(baseId);
+  }
+
+  // Cache access tokens per sender email to avoid redundant refreshes
+  const accessTokenCache: Record<string, string> = {};
+  async function getTokenFor(senderEmail: string): Promise<string | null> {
+    if (accessTokenCache[senderEmail]) return accessTokenCache[senderEmail];
+    const refreshToken = userRefreshMap[senderEmail];
+    if (!refreshToken) return null;
+    const token = await getAccessToken(refreshToken);
+    if (token) accessTokenCache[senderEmail] = token;
+    return token;
   }
 
   let totalSent = 0, totalSkipped = 0, totalErrors = 0;
 
   // 2. Process each tenant base
-  for (const [baseId, { refreshToken, senderEmail }] of Object.entries(baseMap)) {
-    console.log(`[seq-runner] Processing base ${baseId} for ${senderEmail}`);
+  for (const baseId of baseIds) {
+    console.log(`[seq-runner] Processing base ${baseId}`);
     try {
       const campaignsTableId    = T.campaigns;
       const outreachTableId     = T.outreach;
       const stakeholdersTableId = T.stakeholders;
       const accountsTableId     = T.accounts;
-
-      // Get access token for this user's Gmail
-      const accessToken = await getAccessToken(refreshToken);
-      if (!accessToken) { console.warn(`[seq-runner] Could not get Gmail token for ${senderEmail}`); continue; }
 
       // Fetch campaigns with sequence steps
       const campaigns = await getAllRecords(baseId, campaignsTableId, airtableKey, ['Name','Type','Status','Sequence Steps','Sequence Enrollments','Message Template','Asset URL','Context','AI Summary']);
@@ -272,8 +279,15 @@ export default async () => {
           }
           if (step.condition === 'no_reply' && replied) continue;
 
-          // Generate and send
-          console.log(`[seq-runner] Sending step ${en.step+1} to ${email} (campaign: ${F(campaign,'Name')})`);
+          // Generate and send using the email stored at enrollment time
+          const senderEmail = en.senderEmail;
+          console.log(`[seq-runner] Sending step ${en.step+1} to ${email} from ${senderEmail} (campaign: ${F(campaign,'Name')})`);
+          const accessToken = await getTokenFor(senderEmail);
+          if (!accessToken) {
+            console.warn(`[seq-runner] No Gmail token for ${senderEmail} — skipping`);
+            totalSkipped++;
+            continue;
+          }
           const accId = (Array.isArray(stk.fields?.['Account']) ? stk.fields['Account'][0] : null);
           const acc = accId ? accMap[accId] : null;
           const recentOutreach = outreach.filter(o => linkedIds(o,'Stakeholder').includes(stkId))
@@ -287,7 +301,6 @@ export default async () => {
             let body = msg;
             if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
 
-            // Use sender email from enrollment if it matches this base's user, otherwise use base user
             const gmailId = await sendGmail(email, subject, body, accessToken);
             if (gmailId) {
               await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey);
