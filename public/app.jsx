@@ -13314,6 +13314,11 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const escape = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         const nl2br  = t => String(t||'').replace(/\n/g,'<br/>');
         const bullets = Array.isArray(S.bullets) ? S.bullets.filter(Boolean) : [];
+        const eventRec = S.eventId ? (events || []).find(e => e.id === S.eventId) : null;
+        const evName   = eventRec ? F(eventRec, 'Event Name') : '';
+        const evDate   = eventRec?.fields?.['Starting'] ? new Date(eventRec.fields['Starting']).toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) : '';
+        const evUrl    = eventRec ? (F(eventRec, 'URL') || '') : '';
+        const evDesc   = eventRec ? (F(eventRec, 'Aditional context') || '').slice(0,180) : '';
         const contentMeta = `<!--oike-content:${JSON.stringify(S)}-->`;
         return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -13342,6 +13347,21 @@ ${contentMeta}
     ${S.value ? `<div style="margin-bottom:24px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr><td valign="middle" width="6" style="background:#a78bfa;border-radius:3px;font-size:0;line-height:0;">&nbsp;</td><td valign="middle" style="padding-left:10px;font-size:18px;font-weight:800;color:${escape(darkColor)};font-family:Arial,Helvetica,sans-serif;">${escape(S.valueHeading||'')}</td></tr></table><div style="font-size:14px;color:#374151;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(S.value))}</div></div>` : ''}
     ${bullets.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border-collapse:separate;"><tr><td bgcolor="#FAFAFA" style="background:#FAFAFA;padding:18px 20px;border-radius:12px;border:1px solid ${escape(accentColor)}22;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${bullets.map((b,i)=>{const c=[accentColor,'#a78bfa','#60a5fa',accentColor][i%4];const last=i===bullets.length-1;return `<tr><td valign="top" width="38" style="padding:7px 12px 7px 0;${last?'':`border-bottom:1px solid ${escape(c)}15;`}"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${escape(c)}20" align="center" valign="middle" width="26" height="26" style="background:${escape(c)}20;color:${escape(c)};font-weight:800;font-size:12px;border-radius:13px;width:26px;height:26px;line-height:26px;text-align:center;font-family:Arial,Helvetica,sans-serif;">${i+1}</td></tr></table></td><td valign="top" style="padding:9px 0 7px;${last?'':`border-bottom:1px solid ${escape(c)}15;`}font-size:13px;color:${escape(darkColor)};line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${escape(b)}</td></tr>`;}).join('')}</table></td></tr></table>` : ''}
     ${S.socialProof ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;"><tr><td bgcolor="#f0fdf4" style="background:#f0fdf4;padding:16px 20px;border-left:4px solid #4ade80;border-radius:0 10px 10px 0;font-size:13px;color:#4B5563;font-style:italic;line-height:1.6;font-family:Georgia,'Times New Roman',serif;"><span style="font-size:20px;color:#4ade80;font-style:normal;font-weight:800;font-family:Georgia,serif;">&ldquo;</span>${nl2br(escape(S.socialProof))}</td></tr></table>` : ''}
+    ${evName ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;">
+      <tr><td bgcolor="${escape(accentColor)}08" style="background:${escape(accentColor)}08;border:1px solid ${escape(accentColor)}33;border-radius:12px;padding:20px 22px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td valign="top" style="padding-right:16px;">
+            <div style="font-size:10px;font-weight:700;color:${escape(accentColor)};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;font-family:Arial,Helvetica,sans-serif;">&#128197; Evento</div>
+            <div style="font-size:17px;font-weight:800;color:${escape(darkColor)};margin-bottom:4px;font-family:Arial,Helvetica,sans-serif;">${escape(evName)}</div>
+            ${evDate ? `<div style="font-size:12px;color:#6B7280;margin-bottom:${evDesc?'8':'0'}px;font-family:Arial,Helvetica,sans-serif;">${escape(evDate)}</div>` : ''}
+            ${evDesc ? `<div style="font-size:12px;color:#374151;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">${nl2br(escape(evDesc))}</div>` : ''}
+          </td>
+          ${evUrl ? `<td valign="middle" width="120" align="right" style="white-space:nowrap;">
+            <a href="${escape(evUrl)}" style="display:inline-block;padding:10px 18px;background:${escape(accentColor)};color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:12px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;">Ver evento &rarr;</a>
+          </td>` : ''}
+        </tr></table>
+      </td></tr>
+    </table>` : ''}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;border-top:2px solid ${escape(accentColor)}20;"><tr><td style="padding:24px 0 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${senderPhoto?`<td width="88" valign="middle" style="padding-right:16px;"><img src="${escape(senderPhoto)}" alt="${escape(senderName)}" width="68" height="68" style="display:block;width:68px;height:68px;border-radius:50%;border:3px solid ${escape(accentColor)};outline:none;" /></td>`:''}
     <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;"><div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">Ready to explore this?</div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 10px;border-collapse:separate;"><tr><td bgcolor="${escape(accentColor)}" style="background:${escape(accentColor)};border-radius:10px;margin-right:8px;"><a href="${escape(ctaLink)}" style="display:inline-block;padding:12px 26px;color:${escape(darkColor)};text-decoration:none;font-weight:800;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escape(S.ctaText||'Let\'s connect')} &rarr;</a></td>${calendarLink?`<td width="12" style="font-size:0;line-height:0;">&nbsp;</td><td bgcolor="${escape(darkColor)}22" style="background:${escape(darkColor)}22;border-radius:10px;border:1px solid ${escape(accentColor)}55;"><a href="${escape(calendarLink)}" style="display:inline-block;padding:12px 20px;color:${escape(darkColor)};text-decoration:none;font-weight:700;font-size:13px;font-family:Arial,Helvetica,sans-serif;">&#128197; Agendar</a></td>`:''}</tr></table>
     <div style="font-size:13px;color:${escape(darkColor)};font-weight:700;">${escape(senderName)}</div>${senderTitle?`<div style="font-size:11px;color:#6B7280;margin-top:2px;">${escape(senderTitle)}</div>`:''}</td></tr></table></td></tr></table>
@@ -14113,6 +14133,22 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           <label style={labelStyle}>CTA button text</label>
                           <input className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
                             value={C.ctaText || ''} onChange={e => updateContent('ctaText', e.target.value)} />
+
+                          <label style={labelStyle}>Evento (opcional)</label>
+                          <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
+                            value={C.eventId || ''}
+                            onChange={e => updateContent('eventId', e.target.value || null)}>
+                            <option value="">— Sin evento —</option>
+                            {(events || []).sort((a,b) => (b.fields?.['Starting']||'').localeCompare(a.fields?.['Starting']||'')).map(ev => {
+                              const evD = ev.fields?.['Starting'] ? new Date(ev.fields['Starting']).toLocaleDateString('es-AR', { day:'numeric', month:'short' }) : '';
+                              return <option key={ev.id} value={ev.id}>{F(ev,'Event Name')}{evD ? ` (${evD})` : ''}</option>;
+                            })}
+                          </select>
+                          {C.eventId && (
+                            <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: -6, marginBottom: 10 }}>
+                              Aparece como bloque de invitación antes del CTA.
+                            </div>
+                          )}
                         </div>
                       );
                     })()
