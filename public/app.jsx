@@ -3786,7 +3786,7 @@ Output ONLY the message, nothing else.`;
 
     // ============ CONTACTS SECTION ============
     function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, goToAccount }) {
-      const { accounts, stakeholders, outreach, campaigns = [] } = data;
+      const { accounts, stakeholders, outreach, campaigns = [], sources = [] } = data;
       const [searchName, setSearchName] = useState('');
       const [searchAccount, setSearchAccount] = useState('');
       const [selectedInfluence, setSelectedInfluence] = useState('');
@@ -4500,19 +4500,22 @@ Output ONLY the message, nothing else.`;
                           return <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: colors.bg, color: colors.fg, fontWeight: 700, whiteSpace: 'nowrap' }}>{status}</span>;
                         })()}</td>
                         <td><span className="badge badge-accent">{F(s, 'Level of Influence') || '—'}</span></td>
-                        <td>
-                          {F(s, 'Source') ? (
-                            <span style={{
-                              fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10,
-                              background: isInbound(F(s, 'Source')) ? 'rgba(124,58,237,0.15)' : 'rgba(91,191,181,0.15)',
-                              color: isInbound(F(s, 'Source')) ? '#a78bfa' : 'var(--globant-green)',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {F(s, 'Source')}
-                            </span>
-                          ) : <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>—</span>}
-                          {F(s, 'Campaign') && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{F(s, 'Campaign')}</div>}
-                        </td>
+                        <td>{(() => {
+                          const rawSrc = s.fields?.['Source'];
+                          const srcIds = Array.isArray(rawSrc) ? rawSrc : (rawSrc && String(rawSrc).startsWith('rec') ? [rawSrc] : []);
+                          const srcRec = srcIds.length ? sources.find(r => r.id === srcIds[0]) : null;
+                          const srcName = srcRec ? (F(srcRec,'Source Name') || F(srcRec,'Source') || srcIds[0]) : (typeof rawSrc === 'string' && rawSrc && !rawSrc.startsWith('rec') ? rawSrc : null);
+                          const rawCamp = s.fields?.['Campaign'];
+                          const campIds = Array.isArray(rawCamp) ? rawCamp : (rawCamp && String(rawCamp).startsWith('rec') ? [rawCamp] : []);
+                          const campRec = campIds.length ? campaigns.find(c => c.id === campIds[0]) : null;
+                          const campName = campRec ? F(campRec,'Name') : (typeof rawCamp === 'string' && rawCamp && !rawCamp.startsWith('rec') ? rawCamp : null);
+                          return (<>
+                            {srcName ? (
+                              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10, background: isInbound(srcName) ? 'rgba(124,58,237,0.15)' : 'rgba(91,191,181,0.15)', color: isInbound(srcName) ? '#a78bfa' : 'var(--globant-green)', whiteSpace: 'nowrap' }}>{srcName}</span>
+                            ) : <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>—</span>}
+                            {campName && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{campName}</div>}
+                          </>);
+                        })()}</td>
                         <td style={{ textAlign: 'center', fontSize: 13 }}>
                           {touches > 0 ? <span style={{ color: 'var(--globant-green)', fontWeight: 700 }}>{touches}</span> : <span style={{ color: 'var(--globant-muted)' }}>—</span>}
                         </td>
