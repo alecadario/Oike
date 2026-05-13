@@ -15,7 +15,7 @@ const T = {
 
 // ── Types ──
 interface SeqStep   { waitDays: number; channel: string; condition: 'always' | 'no_reply'; note: string; mode?: 'send' | 'draft'; }
-interface Enrollment { step: number; nextDate: string; status: 'active' | 'paused' | 'completed' | 'replied'; senderEmail: string; enrolledDate: string; }
+interface Enrollment { step: number; nextDate: string; status: 'active' | 'paused' | 'completed' | 'replied'; senderEmail: string; enrolledDate: string; gmailThreadId?: string; gmailSubject?: string; }
 type Enrollments = Record<string, Enrollment>;
 
 // ── Airtable helpers ──
@@ -77,35 +77,41 @@ function textToHtml(text: string): string {
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
-function buildMime({ to, subject, body, signature }: { to: string; subject: string; body: string; signature?: string }): string {
+function buildMime({ to, subject, body, signature, threadId }: { to: string; subject: string; body: string; signature?: string; threadId?: string }): string {
+  const reSubject = threadId && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
   const htmlBody = `<div style="font-family:sans-serif;font-size:14px;">${textToHtml(body)}</div>${signature ? `<br><div>${signature}</div>` : ''}`;
-  const raw = [`To: ${to}`, `Subject: ${subject}`, 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', '', htmlBody].join('\r\n');
+  const raw = [`To: ${to}`, `Subject: ${reSubject}`, 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', '', htmlBody].join('\r\n');
   const bytes = new TextEncoder().encode(raw);
   let binary = '';
   bytes.forEach(b => binary += String.fromCharCode(b));
   return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
-async function sendGmail(to: string, subject: string, body: string, accessToken: string): Promise<string | null> {
+// Returns { gmailMsgId, gmailThreadId } or null on failure
+async function sendGmail(to: string, subject: string, body: string, accessToken: string, threadId?: string): Promise<{ gmailMsgId: string; gmailThreadId: string } | null> {
   const signature = await getGmailSignature(accessToken);
-  const raw = buildMime({ to, subject, body, signature });
+  const raw = buildMime({ to, subject, body, signature, threadId });
+  const payload: Record<string, any> = { raw };
+  if (threadId) payload.threadId = threadId;
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) { console.error('[seq-runner] Gmail send failed:', res.status, await res.text()); return null; }
   const data = await res.json();
-  return data.id || null;
+  return data.id ? { gmailMsgId: data.id, gmailThreadId: data.threadId || data.id } : null;
 }
 
-async function createGmailDraft(to: string, subject: string, body: string, accessToken: string): Promise<string | null> {
+async function createGmailDraft(to: string, subject: string, body: string, accessToken: string, threadId?: string): Promise<string | null> {
   const signature = await getGmailSignature(accessToken);
-  const raw = buildMime({ to, subject, body, signature });
+  const raw = buildMime({ to, subject, body, signature, threadId });
+  const msgPayload: Record<string, any> = { raw };
+  if (threadId) msgPayload.threadId = threadId;
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: { raw } }),
+    body: JSON.stringify({ message: msgPayload }),
   });
   if (!res.ok) { console.error('[seq-runner] Gmail draft failed:', res.status, await res.text()); return null; }
   const data = await res.json();
@@ -326,19 +332,38 @@ export default async () => {
             const msg = await generateMessage(stk, campaign, step, acc, recentOutreach);
             const lines = msg.split('\n');
             const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
-            let subject = `${F(campaign,'Name')} — ${F(stk,'Name')||''}`;
+            // For follow-ups: reuse original subject so Gmail threads correctly
+            let subject = en.gmailSubject || `${F(campaign,'Name')} — ${F(stk,'Name')||''}`;
             let body = msg;
-            if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+            if (si !== -1) {
+              // Only use AI subject on step 0; keep original subject for follow-ups so thread stays intact
+              if (!en.gmailThreadId) subject = lines[si].replace(/^subject:\s*/i,'').trim();
+              body = lines.slice(si+1).join('\n').trim();
+            }
 
             const isDraft = (step.mode || 'send') === 'draft';
-            const gmailId = isDraft
-              ? await createGmailDraft(email, subject, body, accessToken)
-              : await sendGmail(email, subject, body, accessToken);
+            const existingThreadId = en.gmailThreadId;
+
+            let gmailId: string | null = null;
+            if (isDraft) {
+              gmailId = await createGmailDraft(email, subject, body, accessToken, existingThreadId);
+            } else {
+              const result = await sendGmail(email, subject, body, accessToken, existingThreadId);
+              if (result) {
+                gmailId = result.gmailMsgId;
+                // Save threadId from first send so follow-ups go into the same thread
+                if (!en.gmailThreadId) {
+                  en.gmailThreadId = result.gmailThreadId;
+                  en.gmailSubject = subject;
+                }
+              }
+            }
+
             if (gmailId) {
               await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
               if (!isDraft) await advanceStatus(baseId, stkId, airtableKey);
               totalSent++;
-              console.log(`[seq-runner] ${isDraft ? 'Draft created' : 'Sent'} for ${email}`);
+              console.log(`[seq-runner] ${isDraft ? 'Draft created' : 'Sent'} step ${en.step + 1} for ${email}${existingThreadId ? ' (in thread)' : ' (new thread)'}`);
             } else {
               totalErrors++;
               console.error(`[seq-runner] ${isDraft ? 'Draft' : 'Send'} failed for ${email}`);
