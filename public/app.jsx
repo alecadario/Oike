@@ -20401,7 +20401,7 @@ Return ONLY valid JSON.`;
       const isAdmin = CURRENT_USER?.role === 'admin';
 
       const allNavItems = [
-        { icon: '🎯', label: 'Mi día', key: 'followup', bdr: true },
+        { icon: '🎯', label: 'My Day', key: 'followup', bdr: true },
         { icon: '🏢', label: 'Accounts', key: 'accounts', bdr: true },
         { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true },
         { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true },
