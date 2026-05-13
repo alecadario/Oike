@@ -116,7 +116,7 @@ async function fetchRecentEmails(accessToken: string, daysBack = 30): Promise<an
   const messages = await Promise.all(
     listData.messages.map(async (m: { id: string }) => {
       const msgRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID&metadataHeaders=References`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
       if (!msgRes.ok) return null;
@@ -170,12 +170,18 @@ async function logEmailActivity(
   date: string,
   direction: 'sent' | 'received',
   loggedBy: string,
-  airtableKey: string
+  airtableKey: string,
+  threadId?: string,
+  gmailMessageId?: string
 ): Promise<boolean> {
+  const threadMeta = [
+    threadId    ? `[gthread:${threadId}]`    : '',
+    gmailMessageId ? `[gmsgid:${gmailMessageId}]` : '',
+  ].filter(Boolean).join('');
   const fields: Record<string, any> = {
     'Channel':     'Email',
     'Status':      direction === 'sent' ? 'Sent' : 'Received',
-    'Notes':       `[gmsg:${messageId}]\n${subject}\n\n${snippet}`,
+    'Notes':       `[gmsg:${messageId}]${threadMeta}\n${subject}\n\n${snippet}`,
     'Stakeholder': [stakeholderId],
     'Date':        date,
     'Logged By':   loggedBy,
@@ -311,11 +317,13 @@ export default async (req: Request, context: Context) => {
       if (syncedIds.has(msg.id)) { skipped++; continue; }
 
       const headers = msg.payload?.headers || [];
-      const from    = getHeader(headers, 'From');
-      const to      = getHeader(headers, 'To');
-      const subject = getHeader(headers, 'Subject') || '(no subject)';
-      const dateStr = getHeader(headers, 'Date');
-      const snippet = (msg.snippet || '').slice(0, 300);
+      const from         = getHeader(headers, 'From');
+      const to           = getHeader(headers, 'To');
+      const subject      = getHeader(headers, 'Subject') || '(no subject)';
+      const dateStr      = getHeader(headers, 'Date');
+      const snippet      = (msg.snippet || '').slice(0, 300);
+      const gmailMsgId   = getHeader(headers, 'Message-ID');
+      const threadId     = msg.threadId || '';
 
       const fromEmails = extractEmails(from);
       const toEmails   = extractEmails(to);
@@ -355,7 +363,9 @@ export default async (req: Request, context: Context) => {
         isoDate,
         direction,
         payload.email || '',
-        airtableKey
+        airtableKey,
+        threadId,
+        gmailMsgId
       );
       if (logged) {
         synced++;

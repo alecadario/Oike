@@ -26,7 +26,7 @@ function getJwtSecret(): string {
 }
 
 const REDIRECT_URI = 'https://oike.app/api/gmail/callback';
-const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
+const SCOPES = 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
 
 export default async (req: Request, context: Context) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 204 });
