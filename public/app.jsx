@@ -2220,8 +2220,6 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             setSendingGmail(false);
             return;
           }
-          // Also log locally via onSend so the UI updates immediately
-          onSend(stakeholder, 'Email', messageBody, ccList, selectedEventId || null);
           onClose();
         } catch (e) {
           // Network error — fall back to Gmail compose
