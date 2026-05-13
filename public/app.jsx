@@ -13944,7 +13944,8 @@ Return ONLY the JSON. No markdown fences.`;
         const aiSummary = (F(selectedCampaign,'AI Summary') || '').slice(0,300);
         const context = (F(selectedCampaign,'Context') || '').slice(0,300);
 
-        const prompt = `Write 1-2 sentences that open a B2B email to ${firstName} at ${accName || 'their company'}. The sentence must:
+        const langLabel = tplLanguage === 'es' ? 'Spanish (Latin American)' : tplLanguage === 'pt' ? 'Brazilian Portuguese' : 'English';
+        const prompt = `Write 1-2 sentences in ${langLabel} that open a B2B email to ${firstName} at ${accName || 'their company'}. The sentence must:
 - Reference something specific about them or their company (use pain, LinkedIn news, or company news if available)
 - Connect naturally to the campaign angle below
 - Sound like a human wrote it, not a template
@@ -13955,7 +13956,7 @@ CONTACT: ${firstName} | ${role} | ${accName}${industry ? ` (${industry})` : ''}
 ${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : ''}${accNews ? `\nNews: ${accNews}` : ''}
 CAMPAIGN ANGLE: ${aiSummary || context || campaignName}
 
-Return ONLY the 1-2 sentences. No greeting, no subject line.`;
+Return ONLY the 1-2 sentences in ${langLabel}. No greeting, no subject line.`;
 
         const opener = await callOpenAI({ prompt, temperature: 0.8, max_tokens: 80 });
         return opener.trim();
