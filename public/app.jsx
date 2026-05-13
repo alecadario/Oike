@@ -13586,37 +13586,54 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 10 }}>No steps yet — click "Add Step" to define the sequence.</div>
                     )}
                     {seqSteps.map((step, i) => (
-                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '28px 90px 110px 120px 1fr 28px', gap: 6, alignItems: 'center', marginBottom: 8, padding: '8px 10px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textAlign: 'center' }}>#{i+1}</span>
-                        <div>
-                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>WAIT DAYS</div>
-                          <input type="number" min="0" className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                            value={step.waitDays} onChange={e => updateSeqStep(i, 'waitDays', parseInt(e.target.value)||0)} />
+                      <div key={i} style={{ marginBottom: 8, padding: '10px 12px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '28px 90px 110px 120px 1fr 28px', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textAlign: 'center' }}>#{i+1}</span>
+                          <div>
+                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>WAIT DAYS</div>
+                            <input type="number" min="0" className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                              value={step.waitDays} onChange={e => updateSeqStep(i, 'waitDays', parseInt(e.target.value)||0)} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CHANNEL</div>
+                            <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                              value={step.channel} onChange={e => updateSeqStep(i, 'channel', e.target.value)}>
+                              <option value="Email">Email</option>
+                              <option value="LinkedIn">LinkedIn</option>
+                              <option value="WhatsApp">WhatsApp</option>
+                            </select>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CONDITION</div>
+                            <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                              value={step.condition} onChange={e => updateSeqStep(i, 'condition', e.target.value)}>
+                              <option value="always">Always</option>
+                              <option value="no_reply">Only if no reply</option>
+                            </select>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>STEP NOTE (optional)</div>
+                            <input className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
+                              placeholder="e.g. Follow-up, Breakup email..."
+                              value={step.note} onChange={e => updateSeqStep(i, 'note', e.target.value)} />
+                          </div>
+                          <button onClick={() => removeSeqStep(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: 0 }}>✕</button>
                         </div>
-                        <div>
-                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CHANNEL</div>
-                          <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                            value={step.channel} onChange={e => updateSeqStep(i, 'channel', e.target.value)}>
-                            <option value="Email">Email</option>
-                            <option value="LinkedIn">LinkedIn</option>
-                            <option value="WhatsApp">WhatsApp</option>
-                          </select>
+                        {/* Send mode toggle */}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {[{val:'send', label:'🤖 Auto-send', desc:'AI generates and sends directly'}, {val:'draft', label:'📝 Draft first', desc:'Creates Gmail draft for your review'}].map(opt => (
+                            <button key={opt.val}
+                              onClick={() => updateSeqStep(i, 'mode', opt.val)}
+                              style={{ flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: (step.mode||'send') === opt.val ? 700 : 400,
+                                background: (step.mode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.18)' : 'rgba(251,191,36,0.18)') : 'rgba(0,0,0,0.15)',
+                                color: (step.mode||'send') === opt.val ? (opt.val === 'send' ? 'var(--globant-green)' : '#fbbf24') : 'var(--globant-muted)',
+                                border: `1px solid ${(step.mode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.4)' : 'rgba(251,191,36,0.4)') : 'var(--globant-border)'}`,
+                              }}>
+                              {opt.label}
+                              <span style={{ display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 }}>{opt.desc}</span>
+                            </button>
+                          ))}
                         </div>
-                        <div>
-                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CONDITION</div>
-                          <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                            value={step.condition} onChange={e => updateSeqStep(i, 'condition', e.target.value)}>
-                            <option value="always">Always</option>
-                            <option value="no_reply">Only if no reply</option>
-                          </select>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>STEP NOTE (optional)</div>
-                          <input className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                            placeholder="e.g. Follow-up, Breakup email..."
-                            value={step.note} onChange={e => updateSeqStep(i, 'note', e.target.value)} />
-                        </div>
-                        <button onClick={() => removeSeqStep(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: 0 }}>✕</button>
                       </div>
                     ))}
                     <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
