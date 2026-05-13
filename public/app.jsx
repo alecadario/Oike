@@ -1238,6 +1238,10 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
       const [kpiForm, setKpiForm] = useState({ meetings: '', deals: '' });
       const [savingKpi, setSavingKpi] = useState(false);
 
+      // ─── AI EXECUTIVE SUMMARY ───
+      const [aiSummary, setAiSummary] = useState('');
+      const [loadingAiSummary, setLoadingAiSummary] = useState(false);
+
       // ─── GOAL VALUES ───
       const goalName = strategyRecord ? (F(strategyRecord, 'Goal Name') || '') : '';
       const goalTarget = strategyRecord ? (strategyRecord.fields?.['Target Amount'] || 0) : 0;
@@ -1437,6 +1441,78 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
         return { a, score, daysSince, reason, openOppCount, hasReply, hasMeeting };
       }).sort((a, b) => b.score - a.score).slice(0, 3);
 
+      // ─── OUTREACH VELOCITY (this week vs last week) ───
+      const startOfThisWeek = new Date(); startOfThisWeek.setDate(startOfThisWeek.getDate() - startOfThisWeek.getDay()); startOfThisWeek.setHours(0,0,0,0);
+      const startOfLastWeek = new Date(startOfThisWeek); startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+      const thisWeekTouches = outreach.filter(o => { const d = o.fields?.['Date']; return d && new Date(d) >= startOfThisWeek; }).length;
+      const lastWeekTouches = outreach.filter(o => { const d = o.fields?.['Date']; return d && new Date(d) >= startOfLastWeek && new Date(d) < startOfThisWeek; }).length;
+      const velocityDelta = thisWeekTouches - lastWeekTouches;
+      const velocityPct = lastWeekTouches > 0 ? Math.round((velocityDelta / lastWeekTouches) * 100) : null;
+
+      // ─── REPLY RATE (all time, overview level) ───
+      const overviewReplied = outreach.filter(o => F(o, 'Status') === 'Replied').length;
+      const overviewReplyRate = outreach.length > 0 ? Math.round((overviewReplied / outreach.length) * 100) : 0;
+      const replyRateBenchColor = overviewReplyRate >= BENCH_REPLY_HIGH ? '#4ade80' : overviewReplyRate >= BENCH_REPLY_LOW ? '#fbbf24' : '#ef4444';
+
+      // ─── PIPELINE AT RISK ───
+      const atRiskOpps = activeOpps.filter(opp => {
+        const accIds = linkedIds(opp, 'Account');
+        const lastAct = outreach.filter(o => accIds.some(id => linkedIds(o, 'Account').includes(id)))
+          .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0))[0];
+        const daysSince = lastAct ? Math.floor((new Date() - new Date(lastAct.fields?.['Date'])) / 86400000) : 999;
+        const isOverdue = opp.fields?.['Close date'] && new Date(opp.fields['Close date']) < new Date();
+        return daysSince > 21 || isOverdue;
+      });
+      const atRiskValue = atRiskOpps.reduce((s, o) => s + (o.fields?.['Value'] || 0), 0);
+
+      // ─── ACCOUNT COVERAGE QUALITY ───
+      const accsWithNews = mappedAccounts.filter(a => F(a, 'Recent News'));
+      const accsWithPlan = mappedAccounts.filter(a => F(a, 'Inside sales plan'));
+      const coverageItems = [
+        { label: 'Solutions mapped', count: accountsWithSolutions.length, color: '#60a5fa' },
+        { label: 'Has recent news', count: accsWithNews.length, color: '#fbbf24' },
+        { label: 'Has sales plan', count: accsWithPlan.length, color: '#4ade80' },
+        { label: 'Has stakeholders', count: mappedAccounts.length, color: '#a78bfa' },
+      ];
+
+      // ─── MONTHLY TREND (last 4 months) ───
+      const monthlyTrend = Array.from({ length: 4 }, (_, i) => {
+        const d = new Date(); d.setMonth(d.getMonth() - (3 - i));
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-US', { month: 'short' });
+        const count = outreach.filter(o => (o.fields?.['Date'] || '').startsWith(key)).length;
+        const replied = outreach.filter(o => (o.fields?.['Date'] || '').startsWith(key) && F(o, 'Status') === 'Replied').length;
+        return { key, label, count, replied };
+      });
+      const monthlyMax = Math.max(...monthlyTrend.map(m => m.count), 1);
+
+      // ─── AI EXECUTIVE SUMMARY GENERATOR ───
+      const generateAiSummary = async () => {
+        setLoadingAiSummary(true);
+        try {
+          const atRiskNames = atRiskOpps.slice(0, 3).map(o => `${F(o,'Deal/Opp name') || '?'} (${resolveLinked(o,'Account',accounts,'Account Name')[0] || '?'})`).join(', ');
+          const prompt = `You are a B2B sales director. Write a concise executive summary of the current inside sales situation. Use exactly 5 bullet points. Be direct, data-driven, and actionable. No fluff. Highlight what's working AND what needs urgent attention.
+
+Data:
+- Goal: ${goalName || 'not set'} · Target: ${goalTarget > 0 ? formatCurrency(goalTarget) : 'not set'} · ${daysRemaining !== null ? `${daysRemaining} days left` : ''}
+- Pipeline: ${formatCurrency(activePipeline)} (${progressPct}% of target) · Won: ${formatCurrency(wonValue)}
+- Meetings booked: ${allMeetings.length} · Active opps: ${activeOpps.length} · At-risk opps: ${atRiskOpps.length}${atRiskOpps.length > 0 ? ` (${atRiskNames})` : ''}
+- Reply rate: ${overviewReplyRate}% (benchmark: ${BENCH_REPLY_LOW}–${BENCH_REPLY_HIGH}%)
+- This week touches: ${thisWeekTouches} vs last week: ${lastWeekTouches} (${velocityDelta >= 0 ? '+' : ''}${velocityDelta})
+- Accounts: ${accounts.length} total · ${mappedAccounts.length} mapped · ${activeAccounts.length} active · ${unmappedAccounts.length} unmapped
+- Coverage: ${accountsWithSolutions.length}/${mappedAccounts.length} have solutions · ${accsWithNews.length}/${mappedAccounts.length} have news · ${accsWithPlan.length}/${mappedAccounts.length} have sales plan
+- Monthly trend: ${monthlyTrend.map(m => `${m.label}: ${m.count} touches`).join(' · ')}
+
+Write 5 bullets: start each with an emoji that reflects urgency/status (🟢 good, 🟡 attention needed, 🔴 critical, 📈 trending up, 📉 trending down). Be specific with numbers.`;
+          const result = await callOpenAI({ prompt, max_tokens: 350, temperature: 0.5 });
+          setAiSummary(result);
+        } catch (e) {
+          setAiSummary('Could not generate summary. Try again.');
+        } finally {
+          setLoadingAiSummary(false);
+        }
+      };
+
       // ─── HELPERS ───
       const kpiPct = (actual, target) => target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : null;
       const kpiColor = (pct) => pct === null ? 'var(--globant-muted)' : pct >= 100 ? '#4ade80' : pct >= 60 ? '#fbbf24' : '#ef4444';
@@ -1521,6 +1597,98 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 </div>
               </div>
             )}
+          </div>
+
+          {/* ─── AI EXECUTIVE SUMMARY ─── */}
+          <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid #a78bfa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: aiSummary ? 12 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>🧠</span>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#a78bfa' }}>AI Executive Summary</span>
+              </div>
+              <button className="action-btn" style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                onClick={generateAiSummary} disabled={loadingAiSummary}>
+                {loadingAiSummary ? '⏳ Analyzing...' : aiSummary ? '🔄 Refresh' : '✨ Generate Summary'}
+              </button>
+            </div>
+            {aiSummary && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {aiSummary.split('\n').filter(l => l.trim()).map((line, i) => (
+                  <div key={i} style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--globant-text)', padding: '4px 0',
+                    borderBottom: i < aiSummary.split('\n').filter(l => l.trim()).length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                    {line.replace(/^[-•*]\s*/, '')}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!aiSummary && !loadingAiSummary && (
+              <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 8 }}>
+                Click "Generate Summary" to get an AI-written executive brief of where things stand right now.
+              </div>
+            )}
+          </div>
+
+          {/* ─── VELOCITY + REPLY RATE + AT RISK ─── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+            <div className="card" style={{ padding: '16px', borderLeft: `3px solid ${velocityDelta >= 0 ? '#4ade80' : '#ef4444'}` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>⚡ Outreach Velocity</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: velocityDelta >= 0 ? '#4ade80' : '#ef4444', lineHeight: 1 }}>{thisWeekTouches}</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>touches this week</div>
+              <div style={{ fontSize: 11, marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ color: velocityDelta >= 0 ? '#4ade80' : '#ef4444', fontWeight: 700 }}>
+                  {velocityDelta >= 0 ? '↑' : '↓'} {Math.abs(velocityDelta)} {velocityPct !== null ? `(${velocityPct > 0 ? '+' : ''}${velocityPct}%)` : ''}
+                </span>
+                <span style={{ color: 'var(--globant-muted)' }}>vs last week ({lastWeekTouches})</span>
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', gap: 3, alignItems: 'flex-end', height: 32 }}>
+                {monthlyTrend.map(m => (
+                  <div key={m.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <div style={{ width: '100%', height: Math.max(4, Math.round((m.count / monthlyMax) * 28)), background: '#a78bfa', borderRadius: '2px 2px 0 0', opacity: 0.7 }} />
+                    <div style={{ fontSize: 8, color: 'var(--globant-muted)' }}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '16px', borderLeft: `3px solid ${replyRateBenchColor}` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>💬 Reply Rate</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: replyRateBenchColor, lineHeight: 1 }}>{overviewReplyRate}%</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>{overviewReplied} replies / {outreach.length} touches</div>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3 }}>
+                  <span>vs benchmark</span>
+                  <span>{BENCH_REPLY_LOW}–{BENCH_REPLY_HIGH}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: 'var(--globant-darker)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, (overviewReplyRate / BENCH_REPLY_HIGH) * 100)}%`, background: replyRateBenchColor, borderRadius: 3, transition: 'width 0.5s' }} />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: replyRateBenchColor }}>
+                {overviewReplyRate >= BENCH_REPLY_HIGH ? '🟢 Above benchmark' : overviewReplyRate >= BENCH_REPLY_LOW ? '🟡 On benchmark' : '🔴 Below benchmark'}
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '16px', borderLeft: `3px solid ${atRiskOpps.length > 0 ? '#ef4444' : '#4ade80'}` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>⚠️ Pipeline at Risk</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: atRiskOpps.length > 0 ? '#ef4444' : '#4ade80', lineHeight: 1 }}>{atRiskOpps.length}</div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 4 }}>
+                {atRiskOpps.length > 0 ? `${formatCurrency(atRiskValue)} at risk` : 'All deals active'}
+              </div>
+              {atRiskOpps.length > 0 && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {atRiskOpps.slice(0, 3).map(o => {
+                    const accName = resolveLinked(o, 'Account', accounts, 'Account Name')[0] || '?';
+                    const isOverdue = o.fields?.['Close date'] && new Date(o.fields['Close date']) < new Date();
+                    return (
+                      <div key={o.id} style={{ fontSize: 10, color: 'var(--globant-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{F(o, 'Deal/Opp name') || accName}</span>
+                        <span style={{ color: isOverdue ? '#ef4444' : '#fbbf24', fontWeight: 600 }}>{isOverdue ? '⏰ Overdue' : '😴 Stale'}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ─── COMPANY KPIs ─── */}
@@ -1786,6 +1954,93 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               )}
             </div>
           </div>
+
+          {/* ─── Coverage Quality + Monthly Trend ─── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div className="card" style={{ borderLeft: '3px solid #60a5fa' }}>
+              <div className="card-header"><h3>🗺️ Account Coverage Quality</h3></div>
+              <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 12 }}>{mappedAccounts.length} mapped accounts</div>
+              {coverageItems.map(item => {
+                const pct = mappedAccounts.length > 0 ? Math.round((item.count / mappedAccounts.length) * 100) : 0;
+                return (
+                  <div key={item.label} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                      <span style={{ color: 'var(--globant-muted)' }}>{item.label}</span>
+                      <span style={{ fontWeight: 700, color: item.color }}>{item.count} <span style={{ color: 'var(--globant-muted)', fontWeight: 400 }}>({pct}%)</span></span>
+                    </div>
+                    <div style={{ height: 8, borderRadius: 4, background: 'var(--globant-darker)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: item.color, borderRadius: 4, opacity: 0.8, transition: 'width 0.5s' }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {mappedAccounts.length === 0 && <p style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No mapped accounts yet.</p>}
+            </div>
+
+            <div className="card" style={{ borderLeft: '3px solid #fbbf24' }}>
+              <div className="card-header"><h3>📅 Monthly Outreach Trend</h3></div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', height: 120, padding: '0 4px' }}>
+                {monthlyTrend.map(m => {
+                  const barH = Math.max(4, Math.round((m.count / monthlyMax) * 90));
+                  const replyBarH = m.count > 0 ? Math.round((m.replied / m.count) * barH) : 0;
+                  return (
+                    <div key={m.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-text)' }}>{m.count}</div>
+                      <div style={{ width: '100%', height: barH, borderRadius: '4px 4px 0 0', background: 'rgba(96,165,250,0.25)', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', bottom: 0, width: '100%', height: replyBarH, background: '#4ade80', opacity: 0.7 }} />
+                        <div style={{ position: 'absolute', top: 0, width: '100%', height: barH - replyBarH, background: '#60a5fa', opacity: 0.4 }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>{m.label}</div>
+                      {m.replied > 0 && <div style={{ fontSize: 9, color: '#4ade80', fontWeight: 600 }}>{m.replied}💬</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', gap: 12, fontSize: 10, color: 'var(--globant-muted)' }}>
+                <span><span style={{ color: '#60a5fa' }}>█</span> Touches</span>
+                <span><span style={{ color: '#4ade80' }}>█</span> Replies</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Pipeline at Risk (full table, only if any) ─── */}
+          {atRiskOpps.length > 0 && (
+            <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid #ef4444' }}>
+              <div className="card-header">
+                <h3>⚠️ Pipeline at Risk ({atRiskOpps.length})</h3>
+                <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>{formatCurrency(atRiskValue)} needs attention</span>
+              </div>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th><th>Account</th><th>Stage</th><th>Value</th><th>Issue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {atRiskOpps.map(o => {
+                    const accName = resolveLinked(o, 'Account', accounts, 'Account Name')[0] || '—';
+                    const isOverdue = o.fields?.['Close date'] && new Date(o.fields['Close date']) < new Date();
+                    const accIds = linkedIds(o, 'Account');
+                    const lastAct = outreach.filter(act => accIds.some(id => linkedIds(act, 'Account').includes(id)))
+                      .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0))[0];
+                    const daysSince = lastAct ? Math.floor((new Date() - new Date(lastAct.fields?.['Date'])) / 86400000) : null;
+                    return (
+                      <tr key={o.id}>
+                        <td style={{ fontWeight: 600 }}>{F(o, 'Deal/Opp name') || '—'}</td>
+                        <td>{accName}</td>
+                        <td><span className="badge badge-blue">{F(o, 'Stage') || '—'}</span></td>
+                        <td>{formatCurrency(o.fields?.['Value'])}</td>
+                        <td>
+                          {isOverdue && <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>⏰ Close date passed</span>}
+                          {!isOverdue && daysSince !== null && <span style={{ fontSize: 11, color: '#fbbf24', fontWeight: 600 }}>😴 {daysSince}d no activity</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* ─── Status Breakdown + Upcoming Events ─── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
