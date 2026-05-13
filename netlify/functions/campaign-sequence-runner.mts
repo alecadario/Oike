@@ -339,6 +339,5 @@ export default async () => {
 };
 
 export const config: Config = {
-  path: '/api/internal/sequence-runner',
   schedule: '0 8 * * *', // Daily at 8am UTC
 };
