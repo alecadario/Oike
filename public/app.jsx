@@ -13013,6 +13013,11 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
         return (F(a,'Name')||'').localeCompare(F(b,'Name')||'');
       }) : [];
 
+      // Contacts pending outreach that have an email (for bulk send)
+      const pendingEmailContacts = useMemo(() => (selectedCampaign
+        ? detailContacts.filter(s => !reachedIds.includes(s.id) && !!F(s,'Email'))
+        : []), [selectedCampaign, detailContacts, reachedIds]);
+
       // ── Add / Remove contacts from campaign ──
       const [showAddContacts, setShowAddContacts] = useState(false);
       const [addContactsSearch, setAddContactsSearch] = useState('');
@@ -13020,6 +13025,10 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [selectedToAdd, setSelectedToAdd] = useState(new Set()); // bulk selection
       const [bulkAdding, setBulkAdding] = useState(false);
       const [campaignHistoryStk, setCampaignHistoryStk] = useState(null); // for StakeholderHistoryModal
+      const [bulkMode, setBulkMode] = useState(false);
+      const [bulkMsgs, setBulkMsgs] = useState({}); // {[id]: {msg, status, error}}
+      const [bulkSending, setBulkSending] = useState(false);
+      const [bulkResult, setBulkResult] = useState(null); // {sent, errors}
 
       const addContactToCampaign = async (stakeholderId) => {
         if (!selectedCampaign) return;
@@ -13077,6 +13086,104 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
           });
         } catch (e) { console.error('Remove contact from campaign failed:', e); }
         setAddingContactId(null);
+      };
+
+      // ── Bulk Email: generate AI messages for all pending email contacts ──
+      const generateBulkMessages = async (contacts) => {
+        const init = {};
+        contacts.forEach(s => { init[s.id] = { msg: '', status: 'generating', error: '' }; });
+        setBulkMsgs(init);
+        setBulkResult(null);
+        const BATCH = 3;
+        for (let i = 0; i < contacts.length; i += BATCH) {
+          const batch = contacts.slice(i, i + BATCH);
+          await Promise.all(batch.map(async (s) => {
+            try {
+              const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+              const role = F(s,'Role') || '';
+              const influence = F(s,'Level of Influence') || '';
+              const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,300);
+              const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,200);
+              const accId = linkedIds(s,'Account')[0];
+              const acc = accounts.find(a => a.id === accId);
+              const accName = acc ? F(acc,'Account Name') : '';
+              const industry = acc ? F(acc,'Industry') : '';
+              const accNews = acc ? (F(acc,'Recent News')||'').slice(0,150) : '';
+              const sOut = outreach
+                .filter(o => linkedIds(o,'Stakeholder').includes(s.id))
+                .sort((a,b) => new Date(b.fields?.['Date']||0) - new Date(a.fields?.['Date']||0))
+                .slice(0,2).map(o => `[${F(o,'Channel')||'?'} · ${o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'}] ${(F(o,'Message')||'').slice(0,100)}`).join('\n');
+              const campaignName = F(selectedCampaign,'Name') || '';
+              const campaignType = F(selectedCampaign,'Type') || '';
+              const template = F(selectedCampaign,'Message Template') || '';
+              const assetUrl = F(selectedCampaign,'Asset URL') || '';
+              const campaignContext = (F(selectedCampaign,'Context') || '').slice(0, 600);
+              const campaignAiSummary = (F(selectedCampaign,'AI Summary') || '').slice(0, 600);
+              const prompt = `B2B sales rep. Write ONE personalized email for this campaign. Start with "Subject: [subject]", blank line, body. Max 3 sentences. No fluff.
+
+CONTACT: ${sName} | ${role}${influence ? ` (${influence})` : ''} | ${accName}${industry ? ` — ${industry}` : ''}
+${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : ''}${accNews ? `\nCompany news: ${accNews}` : ''}
+History: ${sOut || 'First contact'}
+CAMPAIGN: "${campaignName}" (${campaignType})
+${campaignContext ? `CAMPAIGN CONTEXT:\n${campaignContext}\n` : ''}${campaignAiSummary ? `STRATEGIC BRIEF:\n${campaignAiSummary}\n` : ''}${template ? `Angle (rewrite for this person, DO NOT copy verbatim): "${template.slice(0,300)}"` : ''}${assetUrl ? `\nAsset: ${assetUrl}` : ''}
+Sender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}
+BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.`;
+              const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: msg.trim(), status: 'ready', error: '' } }));
+            } catch(e) {
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'error', error: e.message || 'Generation failed' } }));
+            }
+          }));
+        }
+      };
+
+      // ── Bulk Email: send all ready messages via Gmail API ──
+      const executeBulkSend = async () => {
+        setBulkSending(true);
+        setBulkResult(null);
+        let sent = 0, errors = 0;
+        const readyContacts = pendingEmailContacts.filter(s => bulkMsgs[s.id]?.status === 'ready');
+        for (let i = 0; i < readyContacts.length; i++) {
+          const s = readyContacts[i];
+          const { msg } = bulkMsgs[s.id];
+          const email = F(s,'Email') || '';
+          const lines = msg.split('\n');
+          const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          let subject = `${F(selectedCampaign,'Name')||'Campaign'} — ${F(s,'Name')||''}`;
+          let body = msg;
+          if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+          setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sending' } }));
+          try {
+            const res = await fetch('/api/gmail/send', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to: email, subject, message: body, stakeholderId: s.id, accountIds: linkedIds(s,'Account'), baseId: AIRTABLE_BASE_ID, outreachTableId: TABLE_IDS.outreach }),
+            });
+            if (res.ok) {
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
+              // Mark as reached on campaign
+              const currentReached = linkedIds(selectedCampaign, 'Stakeholders Reached');
+              const currentAssigned = linkedIds(selectedCampaign, 'Assigned Stakeholders');
+              const a = api || new AirtableAPI();
+              await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+                'Stakeholders Reached': [...new Set([...currentReached, s.id])],
+                'Assigned Stakeholders': [...new Set([...currentAssigned, s.id])],
+              }).catch(() => {});
+              sent++;
+            } else {
+              const err = await res.json().catch(() => ({}));
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'error', error: err.error || 'Send failed' } }));
+              errors++;
+            }
+          } catch(e) {
+            setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'error', error: e.message || 'Send failed' } }));
+            errors++;
+          }
+          if (i < readyContacts.length - 1) await new Promise(r => setTimeout(r, 1500));
+        }
+        setBulkSending(false);
+        setBulkResult({ sent, errors });
+        if (onLogActivity) onLogActivity();
       };
 
       // Available contacts to add (not yet assigned, filtered by search)
@@ -13492,6 +13599,85 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               </select>
             </div>
 
+            {/* Bulk Email Panel */}
+            {bulkMode && (() => {
+              const gmailConn = localStorage.getItem('oike_gmail_connected') === 'true';
+              const allStatuses = pendingEmailContacts.map(s => bulkMsgs[s.id]?.status);
+              const generating = allStatuses.some(st => st === 'generating');
+              const readyCount = allStatuses.filter(st => st === 'ready').length;
+              const sentCount = allStatuses.filter(st => st === 'sent').length;
+              const errorCount = allStatuses.filter(st => st === 'error').length;
+              const hasMessages = Object.keys(bulkMsgs).length > 0;
+              return (
+                <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid var(--globant-green)', padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)' }}>📣 Bulk Email — {F(selectedCampaign,'Name')}</div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 3 }}>
+                        {pendingEmailContacts.length} pending contact{pendingEmailContacts.length !== 1 ? 's' : ''} with email
+                        {hasMessages && ` · ${readyCount} ready · ${sentCount} sent${errorCount ? ` · ${errorCount} errors` : ''}`}
+                      </div>
+                    </div>
+                    <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setBulkMode(false); setBulkMsgs({}); setBulkResult(null); }}>✕ Close</button>
+                  </div>
+                  {bulkResult && (
+                    <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: bulkResult.errors === 0 ? 'rgba(74,222,128,0.1)' : 'rgba(251,191,36,0.1)', border: `1px solid ${bulkResult.errors === 0 ? 'rgba(74,222,128,0.3)' : 'rgba(251,191,36,0.3)'}` }}>
+                      <span style={{ fontSize: 12, color: bulkResult.errors === 0 ? '#4ade80' : '#fbbf24', fontWeight: 700 }}>
+                        {bulkResult.errors === 0 ? `✅ All ${bulkResult.sent} emails sent successfully!` : `⚠️ ${bulkResult.sent} sent, ${bulkResult.errors} failed — check errors below and retry`}
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                      disabled={generating || bulkSending || pendingEmailContacts.length === 0}
+                      onClick={() => generateBulkMessages(pendingEmailContacts)}>
+                      {generating ? '⏳ Generating...' : hasMessages ? '🔄 Regenerate All' : '✨ Generate Messages'}
+                    </button>
+                    {readyCount > 0 && (
+                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)', fontWeight: 700 }}
+                        disabled={bulkSending || !gmailConn} onClick={executeBulkSend}>
+                        {bulkSending ? '⏳ Sending...' : `✉️ Send All (${readyCount})`}
+                      </button>
+                    )}
+                    {!gmailConn && <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>Connect Gmail in Settings to send</span>}
+                  </div>
+                  {hasMessages && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
+                      {pendingEmailContacts.map(s => {
+                        const bm = bulkMsgs[s.id] || {};
+                        const accId = linkedIds(s,'Account')[0];
+                        const acc = accId ? accounts.find(a => a.id === accId) : null;
+                        const STATUS_BADGE = { generating: ['#fbbf24','⏳ Generating'], ready: ['var(--globant-green)','✅ Ready'], sending: ['#60a5fa','📤 Sending...'], sent: ['#4ade80','✅ Sent'], error: ['#ef4444','❌ Error'] };
+                        const [badgeColor, badgeLabel] = STATUS_BADGE[bm.status] || ['var(--globant-muted)','—'];
+                        return (
+                          <div key={s.id} style={{ background: 'rgba(0,0,0,0.15)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--globant-border)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <div>
+                                <span style={{ fontSize: 12, fontWeight: 700 }}>{F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}</span>
+                                <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s,'Role')}{acc ? ` · ${F(acc,'Account Name')}` : ''}</span>
+                              </div>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: `${badgeColor}20`, color: badgeColor, border: `1px solid ${badgeColor}40` }}>{badgeLabel}</span>
+                            </div>
+                            {bm.status === 'error' && <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 4 }}>{bm.error}</div>}
+                            {bm.msg && bm.status !== 'sent' && (
+                              <textarea className="input-field"
+                                style={{ width: '100%', minHeight: 80, resize: 'vertical', fontSize: 12, lineHeight: 1.5, fontFamily: 'inherit' }}
+                                value={bm.msg}
+                                onChange={e => setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], msg: e.target.value } }))}
+                                disabled={bm.status === 'sending'} />
+                            )}
+                            {bm.status === 'sent' && bm.msg && (
+                              <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>{bm.msg.slice(0, 150)}...</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Contacts list */}
             <div className="card" style={{ padding:0, overflow:'hidden' }}>
               <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--globant-border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -13499,9 +13685,17 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                   <span style={{ fontSize:13, fontWeight:700 }}>Assigned contacts ({detailContacts.length}{assignedIds.length !== detailContacts.length ? ` of ${assignedIds.length}` : ''})</span>
                   <span style={{ fontSize:11, color:'var(--globant-muted)' }}>✅ = reached · ⏳ = pending</span>
                 </div>
-                <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setShowAddContacts(!showAddContacts)}>
-                  {showAddContacts ? '✕ Cancel' : '➕ Add contacts'}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {pendingEmailContacts.length > 0 && (
+                    <button className="action-btn" style={{ fontSize: 11, background: bulkMode ? 'rgba(91,191,181,0.2)' : 'rgba(91,191,181,0.1)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)' }}
+                      onClick={() => { setBulkMode(!bulkMode); if (bulkMode) { setBulkMsgs({}); setBulkResult(null); } }}>
+                      {bulkMode ? '✕ Close Bulk' : `📣 Bulk Email (${pendingEmailContacts.length})`}
+                    </button>
+                  )}
+                  <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setShowAddContacts(!showAddContacts)}>
+                    {showAddContacts ? '✕ Cancel' : '➕ Add contacts'}
+                  </button>
+                </div>
               </div>
               {assignedIds.length === 0 ? (
                 <div style={{ padding: 32, textAlign:'center', color:'var(--globant-muted)', fontSize:13 }}>
