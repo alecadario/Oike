@@ -94,12 +94,42 @@
     const CLOSED_STAGES  = [...WON_STAGES, 'Closed Lost', 'Closed/Lost', 'Closed/Canceled', 'Cierre perdido'];
 
     // ============ PERFORMANCE BENCHMARKS ============
-    // Reply rate: ≥20% = above benchmark, ≥8% = on benchmark, <8% = below
+    // Source: Belkins + Reply.io + Expandi + Nooks, 2025 B2B outbound report (16.5M cold emails, 20M+ LinkedIn, 5M+ calls)
+    // Global reply rate (mixed channels): ≥10% = above benchmark, ≥5% = on benchmark, <5% = below
     // Meeting rate: ≥5% = above benchmark, ≥2% = on benchmark, <2% = below
-    const BENCH_REPLY_HIGH   = 20;
-    const BENCH_REPLY_LOW    = 8;
+    const BENCH_REPLY_HIGH   = 10;
+    const BENCH_REPLY_LOW    = 5;
     const BENCH_MEETING_HIGH = 5;
     const BENCH_MEETING_LOW  = 2;
+
+    // Per-channel benchmarks (reply rate %) — Belkins 2025 B2B cold outbound
+    const CHANNEL_BENCHMARKS = {
+      'Email': {
+        label: 'Cold Email', icon: '📧',
+        acceptable: 3, good: 6, excellent: 10,
+        note: 'Belkins 2025: 5.8% avg (down from 6.8% in 2023). Hyper-segmented (1–2 per account) reaches 7.8%.',
+      },
+      'LinkedIn': {
+        label: 'LinkedIn', icon: '💼',
+        acceptable: 5, good: 8, excellent: 15,
+        note: 'Cold/connection: 5–9%. With personalized msg: 9.36% vs 5.44% without. Warm/1st-degree/events: 10–12%+.',
+      },
+      'WhatsApp': {
+        label: 'WhatsApp', icon: '💬',
+        acceptable: 25, good: 40, excellent: 50,
+        note: 'Only valid for warm/opt-in contacts. Essential in LATAM. Not comparable to cold email.',
+      },
+      'Phone': {
+        label: 'Phone / Cold Call', icon: '📞',
+        acceptable: 2, good: 4, excellent: 6,
+        note: 'Measured as dial-to-meeting %, not reply rate. SalesHive avg: ~2.3–2.5%. Top teams: 5–8%. Europe (Cognism): 6% success rate.',
+      },
+      'SMS': {
+        label: 'SMS', icon: '📱',
+        acceptable: 25, good: 35, excellent: 45,
+        note: 'Warm/opt-in only. 45% response rate (general). For cold B2B: use only for confirmations or reactivation.',
+      },
+    };
     let COMPANY_PROFILE = (() => {
       const defaults = {
         companyName: 'Your Company',
@@ -7530,6 +7560,7 @@ Rules:
         setLoadingProjection(true);
         try {
           const deadlineDays = goalDeadline ? Math.ceil((new Date(goalDeadline) - new Date()) / (1000*60*60*24)) : null;
+          const chBenchContext = channelReplyStats.filter(r => r.count >= 5 && r.bench).map(r => `${r.ch}: ${r.rate}% reply (benchmark: ${r.bench.acceptable}–${r.bench.good}%+)`).join('; ');
           const prompt = `You are a B2B sales coach. Write a 3-4 sentence projection in English. Be direct, specific, data-driven and actionable. No fluff.
 
 Context:
@@ -7538,11 +7569,12 @@ Context:
 - Meetings target: ${viewMeetingsTarget} | Achieved: ${viewMeetings.length} | Gap: ${meetingsGap}
 - Deals target: ${viewDealsTarget} | Won: ${viewDealsWon} | Gap: ${dealsGap}
 - Activity velocity: ${activitiesPerWeek.toFixed(1)} activities/week (last 4 weeks)
-- Meeting conversion rate: ${(meetingConvRate * 100).toFixed(1)}%
+- Overall reply rate: ${(meetingConvRate * 100).toFixed(1)}%
+- Per-channel reply rates vs 2025 Belkins benchmarks: ${chBenchContext || 'insufficient data per channel'}
 - Activities needed to close meetings gap: ${activitiesNeeded ?? 'insufficient data'}
 - Weeks to hit meetings target at current pace: ${weeksToTarget !== null ? weeksToTarget.toFixed(1) : 'insufficient data'}
 
-Tell them: (1) whether they're on track or not, (2) the exact number to focus on this week, (3) whether to push volume or improve conversion rate.`;
+Tell them: (1) whether they're on track or not, (2) the exact number to focus on this week, (3) whether to push volume or improve conversion — and which channel specifically needs attention based on the benchmark data.`;
           const result = await callOpenAI({ prompt, max_tokens: 220, temperature: 0.6 });
           setAiProjection(result);
         } catch (e) {
@@ -7616,10 +7648,30 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
 
       // ─── OUTREACH ANALYSIS ───
       const byChannel = {};
-      filteredOutreach.forEach(a => { const ch = F(a, 'Channel'); byChannel[ch] = (byChannel[ch] || 0) + 1; });
+      const repliedByChannel = {};
+      filteredOutreach.forEach(a => {
+        const ch = F(a, 'Channel');
+        byChannel[ch] = (byChannel[ch] || 0) + 1;
+        if (F(a, 'Status') === 'Replied') repliedByChannel[ch] = (repliedByChannel[ch] || 0) + 1;
+      });
       const totalOutreach = filteredOutreach.length;
       const topChannel = Object.entries(byChannel).sort((a, b) => b[1] - a[1])[0];
       const weakChannel = Object.entries(byChannel).sort((a, b) => a[1] - b[1])[0];
+
+      // Per-channel reply rates with benchmark evaluation
+      const channelReplyStats = Object.entries(byChannel).map(([ch, count]) => {
+        const replied = repliedByChannel[ch] || 0;
+        const rate = count > 0 ? Math.round((replied / count) * 100) : 0;
+        const bench = CHANNEL_BENCHMARKS[ch] || null;
+        let benchLabel = null, benchColor = null;
+        if (bench && count >= 5) {
+          if (rate >= bench.excellent) { benchLabel = `🟢 Excellent (>${bench.excellent}%)`; benchColor = '#4ade80'; }
+          else if (rate >= bench.good) { benchLabel = `🟡 Good (${bench.good}–${bench.excellent}%)`; benchColor = '#fbbf24'; }
+          else if (rate >= bench.acceptable) { benchLabel = `🟠 Acceptable (${bench.acceptable}–${bench.good}%)`; benchColor = '#fb923c'; }
+          else { benchLabel = `🔴 Below baseline (<${bench.acceptable}%)`; benchColor = '#ef4444'; }
+        }
+        return { ch, count, replied, rate, bench, benchLabel, benchColor };
+      }).sort((a, b) => b.count - a.count);
 
       // Accounts with outreach (in period)
       const accountsWithOutreach = new Set();
@@ -8019,25 +8071,33 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
             </div>
           </div>
 
-          {/* Channel Breakdown */}
+          {/* Channel Breakdown + Benchmarks */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
 
             <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
               <div className="card-header"><h3>📡 Channel Breakdown {timePeriod !== 'all' ? `(${periodLabel})` : ''}</h3></div>
               <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--globant-muted)' }}>{totalOutreach} activities across {Object.keys(byChannel).length} channels</div>
-              {Object.entries(byChannel).sort((a, b) => b[1] - a[1]).map(([ch, count], i) => {
+              {channelReplyStats.map(({ ch, count, replied, rate, bench, benchLabel, benchColor }) => {
                 const pct = totalOutreach > 0 ? (count / totalOutreach) * 100 : 0;
-                const chColors = { WhatsApp: '#25D366', Email: '#60a5fa', LinkedIn: '#0A66C2', Call: '#fbbf24' };
+                const chColors = { WhatsApp: '#25D366', Email: '#60a5fa', LinkedIn: '#0A66C2', Phone: '#fbbf24', Call: '#fbbf24', SMS: '#a78bfa' };
                 const color = chColors[ch] || '#a78bfa';
                 return (
-                  <div key={ch} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <div key={ch} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4, alignItems: 'center' }}>
                       <span style={{ fontWeight: 600 }}>{channelIcon[ch] || '📋'} {ch}</span>
-                      <span style={{ fontWeight: 700 }}>{count} <span style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 400 }}>({Math.round(pct)}%)</span></span>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        {count >= 5 && bench && (
+                          <span style={{ fontSize: 10, color: benchColor, fontWeight: 700 }}>
+                            {rate}% reply{benchLabel ? ` · ${benchLabel}` : ''}
+                          </span>
+                        )}
+                        <span style={{ fontWeight: 700 }}>{count} <span style={{ fontSize: 10, color: 'var(--globant-muted)', fontWeight: 400 }}>({Math.round(pct)}%)</span></span>
+                      </div>
                     </div>
                     <div style={{ height: 8, borderRadius: 4, background: 'var(--globant-darker)', overflow: 'hidden' }}>
                       <div style={{ height: '100%', borderRadius: 4, width: `${pct}%`, background: color, transition: 'width 0.3s' }} />
                     </div>
+                    {count < 5 && bench && <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginTop: 2 }}>Need ≥5 touches for benchmark comparison</div>}
                   </div>
                 );
               })}
@@ -8059,6 +8119,37 @@ Tell them: (1) whether they're on track or not, (2) the exact number to focus on
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Industry Benchmarks 2025 */}
+            <div className="card" style={{ borderLeft: '3px solid #a78bfa' }}>
+              <div className="card-header">
+                <h3>📊 B2B Outbound Benchmarks 2025</h3>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+                Source: Belkins + Reply.io + Expandi + Nooks — 16.5M cold emails, 20M+ LinkedIn outreach, 5M+ calls analyzed.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {Object.entries(CHANNEL_BENCHMARKS).map(([key, b]) => (
+                  <div key={key} style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{b.icon} {b.label}</span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: 'rgba(239,68,68,0.15)', color: '#f87171', fontWeight: 600 }}>{b.acceptable}%+</span>
+                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontWeight: 600 }}>{b.good}%+</span>
+                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: 'rgba(74,222,128,0.15)', color: '#4ade80', fontWeight: 600 }}>{b.excellent}%+</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--globant-muted)', lineHeight: 1.5 }}>{b.note}</div>
+                  </div>
+                ))}
+                <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 8, background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', marginBottom: 4 }}>🔗 Multichannel multiplier</div>
+                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', lineHeight: 1.5 }}>
+                    Email + LinkedIn + Phone combined = +287% engagement vs. single channel. Target: 10–15% total reply/engagement for a well-orchestrated campaign.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
