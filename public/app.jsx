@@ -13035,6 +13035,13 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [seqDirty, setSeqDirty] = useState(false);
       const [savingSeq, setSavingSeq] = useState(false);
       const [enrolling, setEnrolling] = useState(false);
+      const [showEmailTpl, setShowEmailTpl] = useState(false);
+      const [emailTplHtml, setEmailTplHtml] = useState('');
+      const [emailTplDirty, setEmailTplDirty] = useState(false);
+      const [generatingTpl, setGeneratingTpl] = useState(false);
+      const [savingTpl, setSavingTpl] = useState(false);
+      const [previewTpl, setPreviewTpl] = useState(false);
+      const [bulkUseHtml, setBulkUseHtml] = useState(false);
 
       const addContactToCampaign = async (stakeholderId) => {
         if (!selectedCampaign) return;
@@ -13197,13 +13204,15 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
       const parseSeqEnrollments = (c) => { try { return JSON.parse(F(c,'Sequence Enrollments') || '{}'); } catch { return {}; } };
       const parseSeqConfig = (c) => { try { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', ...JSON.parse(F(c,'Sequence Config') || '{}') }; } catch { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires' }; } };
 
-      // Sync local seqSteps + config when campaign changes
+      // Sync local seqSteps + config + email template when campaign changes
       useEffect(() => {
         if (selectedCampaign) {
           setSeqSteps(parseSeqSteps(selectedCampaign));
           setSeqConfig(parseSeqConfig(selectedCampaign));
+          setEmailTplHtml(F(selectedCampaign, 'Email HTML Template') || '');
         }
         setSeqDirty(false);
+        setEmailTplDirty(false);
       }, [selectedId]);
 
       const addSeqStep = () => {
@@ -13272,6 +13281,172 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const a = api || new AirtableAPI();
         await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': json });
         if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
+      };
+
+      // ── Email HTML Template ──
+      const generateEmailTemplate = async () => {
+        if (!selectedCampaign) return;
+        setGeneratingTpl(true);
+        const campaignName   = F(selectedCampaign,'Name') || '';
+        const campaignType   = F(selectedCampaign,'Type') || '';
+        const template       = F(selectedCampaign,'Message Template') || '';
+        const context        = (F(selectedCampaign,'Context') || '').slice(0, 800);
+        const aiSummary      = (F(selectedCampaign,'AI Summary') || '').slice(0, 600);
+        const assetUrl       = F(selectedCampaign,'Asset URL') || '';
+        const senderName     = COMPANY_PROFILE.senderName || 'Ale';
+        const companyName    = COMPANY_PROFILE.companyName || 'Oike';
+        const senderEmail    = CURRENT_USER?.email || '';
+        // Aggregate sample pains from assigned contacts for context
+        const samplePains = pendingEmailContacts.slice(0, 8)
+          .map(s => F(s,'Pain Points (Generated)') || F(s,'Pain points') || '')
+          .filter(Boolean).join(' | ').slice(0, 500);
+        const industries = [...new Set(pendingEmailContacts.map(s => {
+          const acc = accounts.find(a => linkedIds(s,'Account').includes(a.id));
+          return acc ? F(acc,'Industry') : '';
+        }).filter(Boolean))].slice(0,5).join(', ');
+
+        const prompt = `Generate a professional HTML email for a B2B outreach campaign. Return ONLY valid HTML with all styles inline (no <style> tags, no external CSS — it must render in Gmail/Outlook).
+
+CAMPAIGN: "${campaignName}" (${campaignType})
+SENDER: ${senderName}, ${companyName}${senderEmail ? ` <${senderEmail}>` : ''}
+TARGET INDUSTRIES: ${industries || 'various'}
+PAIN CONTEXT: ${samplePains || 'business efficiency and growth'}
+${context ? `CAMPAIGN CONTEXT:\n${context}\n` : ''}${aiSummary ? `STRATEGIC BRIEF:\n${aiSummary}\n` : ''}${template ? `MESSAGE ANGLE: ${template.slice(0,300)}\n` : ''}${assetUrl ? `ASSET/RESOURCE: ${assetUrl}\n` : ''}
+
+STRUCTURE (use a single-column table layout, 600px max width, white background):
+1. Header bar: dark background (#1a1a2e or brand dark), campaign name or sender company in white
+2. Greeting: "Hi {{first_name}}," in 15px dark gray
+3. Personalized opener: a placeholder paragraph — literally the text "{{ai_opener}}" wrapped in <p> tags with color #555, font-size 14px, line-height 1.6 — DO NOT write actual content here, keep the placeholder exactly as {{ai_opener}}
+4. Main body: 2-3 short paragraphs with the core campaign message (specific, no fluff). Reference {{company}} when talking about their situation.
+5. CTA button: prominent button linking to ${assetUrl || '#'} — text like "Learn More" or "Schedule a Call"
+6. Signature block: "Best,<br>${senderName}<br>${companyName}" in small gray text
+7. Footer: very small gray text, font-size 11px: "${companyName} · ${senderEmail}"
+
+TOKENS TO PRESERVE EXACTLY (do not fill them in, keep as-is):
+- {{first_name}} — contact's first name
+- {{company}} — contact's company name
+- {{ai_opener}} — personalized opening paragraph (will be filled per recipient)
+
+Return ONLY the HTML. No markdown, no explanation, no code fences.`;
+
+        try {
+          const html = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 2000 });
+          setEmailTplHtml(html.trim());
+          setEmailTplDirty(true);
+          setPreviewTpl(true);
+        } catch(e) {
+          alert('Failed to generate template: ' + e.message);
+        }
+        setGeneratingTpl(false);
+      };
+
+      const saveEmailTemplate = async () => {
+        if (!selectedCampaign) return;
+        setSavingTpl(true);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Email HTML Template': emailTplHtml });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Email HTML Template': emailTplHtml });
+          setEmailTplDirty(false);
+        } catch(e) { alert('Failed to save template: ' + e.message); }
+        setSavingTpl(false);
+      };
+
+      // Generate a personalized opener (1-2 sentences) for a contact using the HTML template flow
+      const generateContactOpener = async (s) => {
+        const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+        const firstName = F(s,'Name') || sName;
+        const role = F(s,'Role') || '';
+        const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,250);
+        const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,150);
+        const accId = linkedIds(s,'Account')[0];
+        const acc = accounts.find(a => a.id === accId);
+        const accName = acc ? F(acc,'Account Name') : '';
+        const industry = acc ? F(acc,'Industry') : '';
+        const accNews = acc ? (F(acc,'Recent News')||'').slice(0,120) : '';
+        const campaignName = F(selectedCampaign,'Name') || '';
+        const aiSummary = (F(selectedCampaign,'AI Summary') || '').slice(0,300);
+        const context = (F(selectedCampaign,'Context') || '').slice(0,300);
+
+        const prompt = `Write 1-2 sentences that open a B2B email to ${firstName} at ${accName || 'their company'}. The sentence must:
+- Reference something specific about them or their company (use pain, LinkedIn news, or company news if available)
+- Connect naturally to the campaign angle below
+- Sound like a human wrote it, not a template
+- Be under 40 words total
+- NOT start with "I", "We", "Hope", or "Following up"
+
+CONTACT: ${firstName} | ${role} | ${accName}${industry ? ` (${industry})` : ''}
+${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : ''}${accNews ? `\nNews: ${accNews}` : ''}
+CAMPAIGN ANGLE: ${aiSummary || context || campaignName}
+
+Return ONLY the 1-2 sentences. No greeting, no subject line.`;
+
+        const opener = await callOpenAI({ prompt, temperature: 0.8, max_tokens: 80 });
+        return opener.trim();
+      };
+
+      // Execute bulk send using HTML template — generates opener per contact and substitutes tokens
+      const executeBulkSendHtml = async () => {
+        if (!emailTplHtml) return;
+        setBulkSending(true);
+        setBulkResult(null);
+        let sent = 0, errors = 0;
+        const contacts = pendingEmailContacts.filter(s => !!F(s,'Email'));
+
+        for (let i = 0; i < contacts.length; i++) {
+          const s = contacts[i];
+          const email = F(s,'Email');
+          const firstName = F(s,'Name') || 'there';
+          const accId = linkedIds(s,'Account')[0];
+          const acc = accId ? accounts.find(a => a.id === accId) : null;
+          const companyName = acc ? F(acc,'Account Name') : '';
+
+          setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'sending', error: '' } }));
+          try {
+            const opener = await generateContactOpener(s);
+            // Substitute tokens
+            const personalizedHtml = emailTplHtml
+              .replace(/\{\{first_name\}\}/g, firstName)
+              .replace(/\{\{company\}\}/g, companyName)
+              .replace(/\{\{ai_opener\}\}/g, opener);
+
+            // Extract subject from campaign name
+            const subject = `${F(selectedCampaign,'Name')||'Hello'} — for ${firstName} at ${companyName || 'your team'}`;
+
+            const res = await fetch('/api/gmail/send', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: email, subject, message: opener, bodyHtml: personalizedHtml,
+                stakeholderId: s.id, accountIds: linkedIds(s,'Account'),
+                baseId: AIRTABLE_BASE_ID, outreachTableId: TABLE_IDS.outreach,
+              }),
+            });
+
+            if (res.ok) {
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: opener, status: 'sent', error: '' } }));
+              const currentReached = linkedIds(selectedCampaign,'Stakeholders Reached');
+              const currentAssigned = linkedIds(selectedCampaign,'Assigned Stakeholders');
+              const a = api || new AirtableAPI();
+              await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+                'Stakeholders Reached': [...new Set([...currentReached, s.id])],
+                'Assigned Stakeholders': [...new Set([...currentAssigned, s.id])],
+              }).catch(() => {});
+              sent++;
+            } else {
+              const err = await res.json().catch(() => ({}));
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'error', error: err.error || 'Send failed' } }));
+              errors++;
+            }
+          } catch(e) {
+            setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'error', error: e.message || 'Failed' } }));
+            errors++;
+          }
+          if (i < contacts.length - 1) await new Promise(r => setTimeout(r, 1500));
+        }
+        setBulkSending(false);
+        setBulkResult({ sent, errors });
+        if (onLogActivity) onLogActivity();
       };
 
       // Available contacts to add (not yet assigned, filtered by search)
@@ -13741,6 +13916,67 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               })()}
             </div>
 
+            {/* Email HTML Template */}
+            <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid #60a5fa', padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: 1 }}>📧 Email HTML Template</div>
+                <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setShowEmailTpl(!showEmailTpl)}>
+                  {showEmailTpl ? '▲ Collapse' : (emailTplHtml ? '▼ Template saved' : '▼ Build template')}
+                </button>
+              </div>
+              {showEmailTpl && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                      onClick={generateEmailTemplate} disabled={generatingTpl || bulkSending}>
+                      {generatingTpl ? '⏳ Generating...' : emailTplHtml ? '🔄 Regenerate' : '✨ Generate Template'}
+                    </button>
+                    {emailTplHtml && (
+                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
+                        onClick={() => setPreviewTpl(!previewTpl)}>
+                        {previewTpl ? '📝 Edit HTML' : '👁️ Preview'}
+                      </button>
+                    )}
+                    {emailTplDirty && (
+                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }}
+                        onClick={saveEmailTemplate} disabled={savingTpl}>
+                        {savingTpl ? '⏳ Saving...' : '💾 Save Template'}
+                      </button>
+                    )}
+                  </div>
+
+                  {emailTplHtml && (
+                    previewTpl ? (
+                      <div style={{ border: '1px solid var(--globant-border)', borderRadius: 6, overflow: 'hidden', background: '#fff' }}>
+                        <div style={{ padding: '6px 10px', background: 'var(--globant-darker)', borderBottom: '1px solid var(--globant-border)', fontSize: 10, color: 'var(--globant-muted)' }}>
+                          Preview (tokens shown as-is — filled per contact on send)
+                        </div>
+                        <iframe
+                          srcDoc={emailTplHtml}
+                          style={{ width: '100%', height: 480, border: 'none', display: 'block' }}
+                          sandbox="allow-same-origin"
+                          title="Email preview"
+                        />
+                      </div>
+                    ) : (
+                      <textarea
+                        className="input-field"
+                        style={{ width: '100%', minHeight: 260, resize: 'vertical', fontSize: 11, fontFamily: 'monospace', lineHeight: 1.4 }}
+                        value={emailTplHtml}
+                        onChange={e => { setEmailTplHtml(e.target.value); setEmailTplDirty(true); }}
+                      />
+                    )
+                  )}
+
+                  {emailTplHtml && (
+                    <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(96,165,250,0.08)', borderRadius: 6, border: '1px solid rgba(96,165,250,0.2)', fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>
+                      Tokens: <code style={{ color: '#60a5fa' }}>{'{{first_name}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{company}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{ai_opener}}'}</code> — filled automatically per contact on bulk send.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Stats */}
             <div className="kpi-row" style={{ gridTemplateColumns:'repeat(3,1fr)', marginBottom:14 }}>
               <div className="kpi-card">
@@ -13871,13 +14107,34 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       </span>
                     </div>
                   )}
+                  {/* Mode toggle — only show HTML option when template exists */}
+                  {emailTplHtml && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                      {[{val:false,label:'🤖 AI text per contact'},{val:true,label:'📧 HTML template + AI opener'}].map(opt => (
+                        <button key={String(opt.val)} onClick={() => { setBulkUseHtml(opt.val); setBulkMsgs({}); setBulkResult(null); }}
+                          style={{ flex:1, padding:'6px 10px', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight: bulkUseHtml===opt.val ? 700 : 400,
+                            background: bulkUseHtml===opt.val ? 'rgba(96,165,250,0.18)' : 'rgba(0,0,0,0.15)',
+                            color: bulkUseHtml===opt.val ? '#60a5fa' : 'var(--globant-muted)',
+                            border: `1px solid ${bulkUseHtml===opt.val ? 'rgba(96,165,250,0.4)' : 'var(--globant-border)'}` }}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                    <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                      disabled={generating || bulkSending || pendingEmailContacts.length === 0}
-                      onClick={() => generateBulkMessages(pendingEmailContacts)}>
-                      {generating ? '⏳ Generating...' : hasMessages ? '🔄 Regenerate All' : '✨ Generate Messages'}
-                    </button>
-                    {readyCount > 0 && (
+                    {!bulkUseHtml && (
+                      <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                        disabled={generating || bulkSending || pendingEmailContacts.length === 0}
+                        onClick={() => generateBulkMessages(pendingEmailContacts)}>
+                        {generating ? '⏳ Generating...' : hasMessages ? '🔄 Regenerate All' : '✨ Generate Messages'}
+                      </button>
+                    )}
+                    {bulkUseHtml ? (
+                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)', fontWeight: 700 }}
+                        disabled={bulkSending || !gmailConn} onClick={executeBulkSendHtml}>
+                        {bulkSending ? '⏳ Sending...' : `📧 Send HTML to all (${pendingEmailContacts.filter(s=>!!F(s,'Email')).length})`}
+                      </button>
+                    ) : readyCount > 0 && (
                       <button className="action-btn" style={{ fontSize: 11, background: 'rgba(91,191,181,0.15)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)', fontWeight: 700 }}
                         disabled={bulkSending || !gmailConn} onClick={executeBulkSend}>
                         {bulkSending ? '⏳ Sending...' : `✉️ Send All (${readyCount})`}
