@@ -78,16 +78,25 @@ function textToHtml(text: string): string {
 }
 
 // ── Build base64url-encoded MIME message (HTML with signature) ──
-function buildMimeMessage({ to, subject, body, signature, cc, inReplyTo, references }: {
-  to: string; subject: string; body: string; signature?: string;
+function buildMimeMessage({ to, subject, body, bodyHtml, signature, cc, inReplyTo, references }: {
+  to: string; subject: string; body: string; bodyHtml?: string; signature?: string;
   cc?: string[]; inReplyTo?: string; references?: string;
 }): string {
   const replySubject = inReplyTo && !subject.toLowerCase().startsWith('re:')
     ? `Re: ${subject}`
     : subject;
 
-  const htmlBody = `<div style="font-family:sans-serif;font-size:14px;">${textToHtml(body)}</div>`
-    + (signature ? `<br><div>${signature}</div>` : '');
+  // If pre-built HTML is provided, inject signature before </body>; otherwise convert plain text
+  let htmlBody: string;
+  if (bodyHtml) {
+    const sigBlock = signature ? `<div style="margin:24px 32px 0;padding-top:16px;border-top:1px solid #eee;">${signature}</div>` : '';
+    htmlBody = sigBlock
+      ? (bodyHtml.includes('</body>') ? bodyHtml.replace('</body>', sigBlock + '</body>') : bodyHtml + sigBlock)
+      : bodyHtml;
+  } else {
+    htmlBody = `<div style="font-family:sans-serif;font-size:14px;">${textToHtml(body)}</div>`
+      + (signature ? `<br><div>${signature}</div>` : '');
+  }
 
   const lines = [
     `To: ${to}`,
@@ -187,7 +196,7 @@ export default async (req: Request, context: Context) => {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const { to, subject, message, cc, threadId, inReplyTo, references, readMessageId, stakeholderId, accountIds, baseId, outreachTableId, draft = false } = body;
+  const { to, subject, message, bodyHtml, cc, threadId, inReplyTo, references, readMessageId, stakeholderId, accountIds, baseId, outreachTableId, draft = false } = body;
 
   if (!to || !subject || !message || !stakeholderId || !baseId || !outreachTableId) {
     return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -208,7 +217,7 @@ export default async (req: Request, context: Context) => {
 
     // 3. Fetch Gmail signature + build MIME message
     const signature = await getGmailSignature(accessToken);
-    const raw = buildMimeMessage({ to, subject, body: message, signature, cc, inReplyTo, references });
+    const raw = buildMimeMessage({ to, subject, body: message, bodyHtml, signature, cc, inReplyTo, references });
 
     if (draft) {
       // ── Create Gmail draft ──
