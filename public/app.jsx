@@ -13218,8 +13218,10 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           setSeqSteps(parseSeqSteps(selectedCampaign));
           setSeqConfig(parseSeqConfig(selectedCampaign));
           const savedHtml = F(selectedCampaign, 'Email HTML Template') || '';
-          setEmailTplHtml(savedHtml);
-          setEmailTplContent(parseTplContent(savedHtml));
+          const savedContent = parseTplContent(savedHtml);
+          setEmailTplContent(savedContent);
+          // Re-render with current branding (restores photo/colors stripped at save time)
+          setEmailTplHtml(savedContent ? renderCampaignEmail(savedContent, selectedCampaign) : savedHtml);
         }
         setSeqDirty(false);
         setEmailTplDirty(false);
@@ -13427,8 +13429,10 @@ Return ONLY the JSON. No markdown fences.`;
         setSavingTpl(true);
         try {
           const a = api || new AirtableAPI();
-          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Email HTML Template': emailTplHtml });
-          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Email HTML Template': emailTplHtml });
+          // Strip base64-encoded images before saving (they can exceed Airtable's 100k char limit)
+          const htmlToSave = emailTplHtml.replace(/src="data:[^"]{100,}"/g, 'src=""');
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Email HTML Template': htmlToSave });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Email HTML Template': htmlToSave });
           setEmailTplDirty(false);
         } catch(e) { alert('Failed to save template: ' + e.message); }
         setSavingTpl(false);
