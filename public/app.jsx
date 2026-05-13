@@ -13031,6 +13031,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [bulkResult, setBulkResult] = useState(null); // {sent, errors}
       const [showSeq, setShowSeq] = useState(false);
       const [seqSteps, setSeqSteps] = useState([]);
+      const [seqConfig, setSeqConfig] = useState({ sendHour: 9, timezone: 'America/Argentina/Buenos_Aires' });
       const [seqDirty, setSeqDirty] = useState(false);
       const [savingSeq, setSavingSeq] = useState(false);
       const [enrolling, setEnrolling] = useState(false);
@@ -13194,10 +13195,14 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
       // ── Sequence helpers ──
       const parseSeqSteps = (c) => { try { return JSON.parse(F(c,'Sequence Steps') || '[]'); } catch { return []; } };
       const parseSeqEnrollments = (c) => { try { return JSON.parse(F(c,'Sequence Enrollments') || '{}'); } catch { return {}; } };
+      const parseSeqConfig = (c) => { try { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', ...JSON.parse(F(c,'Sequence Config') || '{}') }; } catch { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires' }; } };
 
-      // Sync local seqSteps when campaign changes
+      // Sync local seqSteps + config when campaign changes
       useEffect(() => {
-        if (selectedCampaign) setSeqSteps(parseSeqSteps(selectedCampaign));
+        if (selectedCampaign) {
+          setSeqSteps(parseSeqSteps(selectedCampaign));
+          setSeqConfig(parseSeqConfig(selectedCampaign));
+        }
         setSeqDirty(false);
       }, [selectedId]);
 
@@ -13209,14 +13214,30 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
       const removeSeqStep = (i) => { setSeqSteps(prev => prev.filter((_,idx) => idx !== i)); setSeqDirty(true); };
       const updateSeqStep = (i, key, val) => { setSeqSteps(prev => prev.map((s,idx) => idx===i ? {...s,[key]:val} : s)); setSeqDirty(true); };
 
+      const SEQ_TIMEZONES = [
+        { label: 'Buenos Aires (ART, UTC-3)',  value: 'America/Argentina/Buenos_Aires' },
+        { label: 'São Paulo (BRT, UTC-3)',      value: 'America/Sao_Paulo' },
+        { label: 'Santiago (CLT, UTC-3/-4)',    value: 'America/Santiago' },
+        { label: 'Bogotá (COT, UTC-5)',         value: 'America/Bogota' },
+        { label: 'México DF (CST, UTC-6)',      value: 'America/Mexico_City' },
+        { label: 'Lima (PET, UTC-5)',           value: 'America/Lima' },
+        { label: 'New York (ET, UTC-5/-4)',     value: 'America/New_York' },
+        { label: 'Chicago (CT, UTC-6/-5)',      value: 'America/Chicago' },
+        { label: 'Los Angeles (PT, UTC-8/-7)',  value: 'America/Los_Angeles' },
+        { label: 'London (GMT/BST)',            value: 'Europe/London' },
+        { label: 'Madrid (CET, UTC+1/+2)',      value: 'Europe/Madrid' },
+        { label: 'UTC',                         value: 'UTC' },
+      ];
+
       const saveSeqSteps = async () => {
         if (!selectedCampaign) return;
         setSavingSeq(true);
-        const json = JSON.stringify(seqSteps);
+        const stepsJson  = JSON.stringify(seqSteps);
+        const configJson = JSON.stringify(seqConfig);
         try {
           const a = api || new AirtableAPI();
-          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Steps': json });
-          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Steps': json });
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Steps': stepsJson, 'Sequence Config': configJson });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Steps': stepsJson, 'Sequence Config': configJson });
           setSeqDirty(false);
         } catch(e) { alert('Failed to save sequence: ' + e.message); }
         setSavingSeq(false);
@@ -13580,6 +13601,31 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
                 return (
                   <div style={{ marginTop: 12 }}>
+                    {/* Send time config */}
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 14, padding: '10px 12px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase' }}>Send time</div>
+                        <select className="input-field" style={{ fontSize: 12, padding: '5px 8px' }}
+                          value={seqConfig.sendHour}
+                          onChange={e => { setSeqConfig(p => ({...p, sendHour: parseInt(e.target.value)})); setSeqDirty(true); }}>
+                          {Array.from({length: 24}, (_,h) => (
+                            <option key={h} value={h}>{String(h).padStart(2,'0')}:00{h < 12 ? ' AM' : ' PM'}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase' }}>Timezone</div>
+                        <select className="input-field" style={{ fontSize: 12, padding: '5px 8px', width: '100%' }}
+                          value={seqConfig.timezone}
+                          onChange={e => { setSeqConfig(p => ({...p, timezone: e.target.value})); setSeqDirty(true); }}>
+                          {SEQ_TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', paddingBottom: 4 }}>
+                        Runner checks every hour — emails go out at <strong style={{ color: '#a78bfa' }}>{String(seqConfig.sendHour).padStart(2,'0')}:00</strong> in your timezone
+                      </div>
+                    </div>
+
                     {/* Step builder */}
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Steps</div>
                     {seqSteps.length === 0 && (
