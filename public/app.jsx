@@ -5237,6 +5237,7 @@ Pain points must be specific to their role, reference industry challenges, and c
       const [loadingMeddpicc, setLoadingMeddpicc] = useState(false);
       const [editingMeddpicc, setEditingMeddpicc] = useState(false);
       const [meddpiccDraft, setMeddpiccDraft] = useState({});
+      const [meddpiccExpanded, setMeddpiccExpanded] = useState(false);
       const meddpiccEntry = selectedAccountId ? (meddpiccData[selectedAccountId] || null) : null;
       const meddpiccValues = meddpiccEntry?.fields || {};
       const meddpiccUpdatedAt = meddpiccEntry?.updatedAt || null;
@@ -5328,7 +5329,20 @@ Pain points must be specific to their role, reference industry challenges, and c
       const [bulkPainProgress, setBulkPainProgress] = useState('');
       const [editingAccount, setEditingAccount] = useState(null);
       const [accDetailTab, setAccDetailTab] = useState('intel');
-      const [radarData, setRadarData] = useState(null);
+      const RADAR_LS_KEY = 'oike_radar_data';
+      const [radarStore, setRadarStore] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(RADAR_LS_KEY) || '{}'); } catch { return {}; }
+      });
+      const radarData = selectedAccountId ? (radarStore[selectedAccountId]?.data || null) : null;
+      const radarUpdatedAt = selectedAccountId ? (radarStore[selectedAccountId]?.updatedAt || null) : null;
+      const setRadarData = (data) => {
+        const updatedAt = new Date().toISOString();
+        setRadarStore(prev => {
+          const next = { ...prev, [selectedAccountId]: { data, updatedAt } };
+          try { localStorage.setItem(RADAR_LS_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      };
       const [loadingRadar, setLoadingRadar] = useState(false);
       const [savingRadar, setSavingRadar] = useState(false);
       const now = new Date();
@@ -6313,7 +6327,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       };
 
       // Reset talking points and recs when account changes
-      useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('intel'); setRadarData(null); }, [selectedAccountId]);
+      useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('intel'); }, [selectedAccountId]);
 
       // ── Sales Intelligence Radar — generate for current account ──
       const generateAccountRadar = async () => {
@@ -6723,6 +6737,160 @@ Rules:
               {/* ══════════ INTEL TAB ══════════ */}
               {accDetailTab === 'intel' && (
                 <div>
+                  {/* ── ACCOUNT BRIEF (Sales Intelligence Radar) — top, always visible ── */}
+                  <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid #a78bfa' }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <h3>🔮 Account Brief</h3>
+                        {radarUpdatedAt && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>Updated {new Date(radarUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
+                      </div>
+                      <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                        onClick={generateAccountRadar} disabled={loadingRadar}>
+                        {loadingRadar ? '⏳ Generating...' : radarData ? '🔄 Refresh' : '✨ Generate Brief'}
+                      </button>
+                    </div>
+
+                    {!radarData && !loadingRadar && (
+                      <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0 4px' }}>
+                        Genera el brief de esta cuenta — señales clave, stack tecnológico, landscape competitivo, movimientos de personas y acciones recomendadas con prioridad HOT🔥/WARM🌡️/COLD❄️.
+                      </p>
+                    )}
+                    {loadingRadar && (
+                      <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>
+                        ⏳ Analizando señales y construyendo el brief…
+                      </div>
+                    )}
+                    {radarData && (() => {
+                      const rd = radarData;
+                      const sectionTitle = (icon, label, color = '#5BBFB5') => (
+                        <div style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>{icon}</span><span>{label}</span>
+                        </div>
+                      );
+                      const box = (children, style = {}) => (
+                        <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.06)', ...style }}>
+                          {children}
+                        </div>
+                      );
+                      const tempBadge = (temp) => {
+                        const cfg = temp === 'HOT' ? { icon: '🔥', bg: 'rgba(239,68,68,0.15)', color: '#f87171' }
+                                 : temp === 'WARM' ? { icon: '🌡️', bg: 'rgba(251,146,60,0.15)', color: '#fb923c' }
+                                 : { icon: '❄️', bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' };
+                        return (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: cfg.bg, color: cfg.color }}>
+                            {cfg.icon} {temp}
+                          </span>
+                        );
+                      };
+                      return (
+                        <div>
+                          {/* TL;DR banner */}
+                          <div style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(91,191,181,0.12) 100%)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 10, padding: '14px 18px', marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, fontWeight: 800, color: '#a78bfa', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>TL;DR</div>
+                            <p style={{ margin: 0, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6 }}>{rd.tldr}</p>
+                            <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              {rd.est_budget && <span style={{ fontSize: 11, background: 'rgba(74,222,128,0.12)', color: '#4ade80', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>💰 {rd.est_budget}</span>}
+                              {rd.portfolio_label && <span style={{ fontSize: 11, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>🏷️ {rd.portfolio_label}</span>}
+                            </div>
+                          </div>
+
+                          {/* Recommended Actions — FIRST, most actionable */}
+                          {(rd.recommended_actions || []).length > 0 && (
+                            <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.1) 0%, rgba(91,191,181,0.05) 100%)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '16px 18px', marginBottom: 14 }}>
+                              {sectionTitle('⚡', 'Acciones Recomendadas', '#5BBFB5')}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {(rd.recommended_actions || []).map((a, i) => (
+                                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '10px 12px' }}>
+                                    <div style={{ fontSize: 12, fontWeight: 800, color: '#5BBFB5', minWidth: 16, paddingTop: 1 }}>{i + 1}</div>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{a.stakeholder}</span>
+                                        {tempBadge(a.temperature)}
+                                        {a.channel && <span style={{ fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: 6 }}>{a.channel}</span>}
+                                      </div>
+                                      <div style={{ fontSize: 12, color: 'var(--globant-text)', marginBottom: 3 }}>{a.action}</div>
+                                      {a.rationale && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{a.rationale}</div>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Key Developments + People Moves */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                            {box(<>
+                              {sectionTitle('📰', 'Key Developments', '#fbbf24')}
+                              {(rd.key_developments || []).map((d, i) => (
+                                <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: i < rd.key_developments.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 3 }}>{d.headline}</div>
+                                  <div style={{ fontSize: 11, color: '#5BBFB5', marginBottom: 2 }}>→ {d.signal}</div>
+                                  {d.source && <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Source: {d.source}</div>}
+                                </div>
+                              ))}
+                              {(!rd.key_developments || rd.key_developments.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No key developments found.</div>}
+                            </>)}
+                            {box(<>
+                              {sectionTitle('👥', 'People Moves', '#fb923c')}
+                              {(rd.people_moves || []).length > 0 ? (rd.people_moves || []).map((m, i) => (
+                                <div key={i} style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{m.name}</div>
+                                  <div style={{ fontSize: 11, color: '#fb923c', marginBottom: 2 }}>{m.move}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{m.relevance}</div>
+                                </div>
+                              )) : <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No significant people moves detected.</div>}
+                              <div style={{ marginTop: 12 }}>
+                                {sectionTitle('📣', 'Social Sentiment', '#60a5fa')}
+                                <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.social_sentiment || '—'}</p>
+                              </div>
+                            </>)}
+                          </div>
+
+                          {/* Financial Signals + Tech Stack */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                            {box(<>
+                              {sectionTitle('💰', 'Financial Signals', '#4ade80')}
+                              <p style={{ margin: 0, fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.financial_signals || '—'}</p>
+                              <div style={{ marginTop: 12 }}>
+                                {sectionTitle('💼', 'Hiring Signals', '#a78bfa')}
+                                <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.hiring_signals || '—'}</p>
+                              </div>
+                            </>)}
+                            {box(<>
+                              {sectionTitle('⚙️', 'Tech Stack', '#94a3b8')}
+                              {(rd.tech_stack || []).map((t, i) => (
+                                <div key={i} style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-text)' }}>{t.tool}</div>
+                                  <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 2 }}>{t.category}</div>
+                                  {t.opportunity && <div style={{ fontSize: 10, color: '#5BBFB5' }}>⚡ {t.opportunity}</div>}
+                                </div>
+                              ))}
+                              {(!rd.tech_stack || rd.tech_stack.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No tech stack signals found.</div>}
+                              <div style={{ marginTop: 12 }}>
+                                {sectionTitle('🏆', 'Competitive', '#f472b6')}
+                                <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.competitive || '—'}</p>
+                              </div>
+                            </>)}
+                          </div>
+
+                          {/* Upcoming Events */}
+                          {(rd.upcoming_events || []).length > 0 && box(<>
+                            {sectionTitle('📅', 'Upcoming Events', '#38bdf8')}
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              {rd.upcoming_events.map((ev, i) => (
+                                <div key={i} style={{ flex: '1 1 220px', background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, padding: '10px 12px' }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{ev.event}</div>
+                                  {ev.date && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 4 }}>📅 {ev.date}</div>}
+                                  {ev.angle && <div style={{ fontSize: 11, color: '#38bdf8' }}>→ {ev.angle}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </>, { marginBottom: 0 })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                   {/* Recent News — 2-column grid */}
                   {(() => {
                     const lastUpdStr = newsAIUpdatedAt
@@ -6777,84 +6945,50 @@ Rules:
                     );
                   })()}
 
-                  {/* ── Exec Summary + MEDDPICC side by side ── */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    {/* Exec Summary */}
-                    <div className="card" style={{ borderLeft: '3px solid #60a5fa' }}>
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <h3>🧠 Executive Summary</h3>
-                          {execSummaryUpdatedAt && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>Updated: {new Date(execSummaryUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
-                        </div>
-                        <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateExecSummary} disabled={loadingSummary}>
-                          {loadingSummary ? '⏳...' : execSummary ? '🔄 Regen' : '✨ Generate'}
+                  {/* ── MEDDPICC — collapsible ── */}
+                  <div className="card" style={{ borderLeft: '3px solid #f472b6', marginBottom: 0 }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setMeddpiccExpanded(v => !v)}>
+                        <h3 style={{ margin: 0 }}>🎯 MEDDPICC</h3>
+                        {meddpiccUpdatedAt && !meddpiccExpanded && <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Updated {new Date(meddpiccUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>}
+                        <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{meddpiccExpanded ? '▲' : '▼'}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 5 }}>
+                        {Object.keys(meddpiccValues).length > 0 && !editingMeddpicc && meddpiccExpanded && (
+                          <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setMeddpiccDraft({...meddpiccValues}); setEditingMeddpicc(true); }}>✏️</button>
+                        )}
+                        {editingMeddpicc && (
+                          <>
+                            <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingMeddpicc(false)}>Cancel</button>
+                            <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => { saveMeddpicc(meddpiccDraft); setEditingMeddpicc(false); }}>💾</button>
+                          </>
+                        )}
+                        <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(244,114,182,0.15)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.3)' }}
+                          onClick={e => { e.stopPropagation(); generateMeddpicc(); if (!meddpiccExpanded) setMeddpiccExpanded(true); }} disabled={loadingMeddpicc}>
+                          {loadingMeddpicc ? '⏳' : Object.keys(meddpiccValues).length > 0 ? '🔄' : '✨ Generate'}
                         </button>
                       </div>
-                      {!execSummary && !loadingSummary && <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '6px 0' }}>Generate a strategic briefing combining news, stakeholders, opportunities, and intel.</p>}
-                      {execSummary && (() => {
-                        const lines = execSummary.split('\n').filter(l => l.trim());
-                        return (
-                          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                            {lines.map((line, i) => {
-                              const isHeader = line.match(/^#{1,3}\s/);
-                              const clean = line.replace(/^#{1,3}\s+/, '').replace(/\*\*/g, '').trim();
-                              if (!clean) return null;
-                              if (isHeader) return <div key={i} style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', marginTop: i > 0 ? 12 : 0, paddingBottom: 3, borderBottom: '1px solid rgba(96,165,250,0.15)' }}>{clean}</div>;
-                              const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
-                              const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
-                              const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
-                              return <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '2px 0' }}>
-                                {isBullet && <span style={{ color: '#60a5fa', fontSize: 8, marginTop: 6 }}>●</span>}
-                                <span style={{ fontSize: 12, lineHeight: 1.6 }}>
-                                  {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**') ? <strong key={pi} style={{ color: '#60a5fa' }}>{p.slice(2,-2)}</strong> : <span key={pi}>{p}</span>)}
-                                </span>
-                              </div>;
-                            })}
+                    </div>
+                    {meddpiccExpanded && (
+                      <>
+                        {Object.keys(meddpiccValues).length === 0 && !loadingMeddpicc && <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '6px 0' }}>Generate MEDDPICC qualification using account context — news, stakeholders, opportunities, and intel notes.</p>}
+                        {Object.keys(meddpiccValues).length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                            {MEDDPICC_FIELDS.map(f => (
+                              <div key={f.key} style={{ borderLeft: '2px solid rgba(244,114,182,0.25)', paddingLeft: 8 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: '#f472b6', marginBottom: 2 }}>{f.label}</div>
+                                {editingMeddpicc ? (
+                                  <textarea style={{ width: '100%', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '5px 7px', resize: 'vertical', minHeight: 50, lineHeight: 1.5, boxSizing: 'border-box' }}
+                                    value={meddpiccDraft[f.key] || ''} onChange={e => setMeddpiccDraft(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.hint} />
+                                ) : (
+                                  <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{meddpiccValues[f.key] || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Not defined</span>}</div>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* MEDDPICC */}
-                    <div className="card" style={{ borderLeft: '3px solid #f472b6' }}>
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <h3>🎯 MEDDPICC</h3>
-                          {meddpiccUpdatedAt && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>Updated: {new Date(meddpiccUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
-                        </div>
-                        <div style={{ display: 'flex', gap: 5 }}>
-                          {Object.keys(meddpiccValues).length > 0 && !editingMeddpicc && (
-                            <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setMeddpiccDraft({...meddpiccValues}); setEditingMeddpicc(true); }}>✏️</button>
-                          )}
-                          {editingMeddpicc && (
-                            <>
-                              <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingMeddpicc(false)}>Cancel</button>
-                              <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => { saveMeddpicc(meddpiccDraft); setEditingMeddpicc(false); }}>💾</button>
-                            </>
-                          )}
-                          <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(244,114,182,0.15)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.3)' }}
-                            onClick={generateMeddpicc} disabled={loadingMeddpicc}>
-                            {loadingMeddpicc ? '⏳' : Object.keys(meddpiccValues).length > 0 ? '🔄' : '✨ Generate'}
-                          </button>
-                        </div>
-                      </div>
-                      {Object.keys(meddpiccValues).length === 0 && !loadingMeddpicc && <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '6px 0' }}>Generate MEDDPICC qualification using account context — news, stakeholders, opportunities, and intel notes.</p>}
-                      {Object.keys(meddpiccValues).length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 400, overflowY: 'auto' }}>
-                          {MEDDPICC_FIELDS.map(f => (
-                            <div key={f.key} style={{ borderLeft: '2px solid rgba(244,114,182,0.25)', paddingLeft: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: '#f472b6', marginBottom: 2 }}>{f.label}</div>
-                              {editingMeddpicc ? (
-                                <textarea style={{ width: '100%', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '5px 7px', resize: 'vertical', minHeight: 50, lineHeight: 1.5, boxSizing: 'border-box' }}
-                                  value={meddpiccDraft[f.key] || ''} onChange={e => setMeddpiccDraft(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.hint} />
-                              ) : (
-                                <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{meddpiccValues[f.key] || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Not defined</span>}</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   {/* Team Assignment — admin only */}
@@ -7061,8 +7195,8 @@ Rules:
                 </div>
               )}
 
-              {/* ══════════ SALES INTELLIGENCE RADAR (inline, intel tab) ══════════ */}
-              {accDetailTab === 'intel' && (
+              {/* ══════════ SALES INTELLIGENCE RADAR — placeholder, moved to top ══════════ */}
+              {accDetailTab === 'intel' && false && (
                 <div className="card" style={{ marginTop: 16 }}>
                   <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                     <div>
@@ -7070,11 +7204,6 @@ Rules:
                       <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>AI-generated account intelligence snapshot</div>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      {radarData && (
-                        <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={saveRadarToIntel} disabled={savingRadar}>
-                          {savingRadar ? '⏳ Saving...' : '💾 Save to Intel Notes'}
-                        </button>
-                      )}
                       <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
                         onClick={generateAccountRadar} disabled={loadingRadar}>
                         {loadingRadar ? '⏳ Generating...' : radarData ? '🔄 Refresh Radar' : '✨ Generate Radar'}
