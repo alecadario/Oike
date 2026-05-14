@@ -997,7 +997,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               </div>
               {editingStkNotes ? (
                 <textarea className="input-field" value={stkNotesDraft} onChange={e => setStkNotesDraft(e.target.value)}
-                  placeholder="Notas de reunión, lo que se habló, compromisos, contexto clave, próximos pasos..."
+                  placeholder="Meeting notes, key commitments, context, next steps..."
                   style={{ width: '100%', minHeight: 100, fontSize: 12, lineHeight: 1.6, resize: 'vertical' }} />
               ) : stkNotes ? (
                 <FileNotesRenderer notes={stkNotes} accentColor="#fbbf24"
@@ -1009,7 +1009,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   }} />
               ) : (
                 <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
-                  Sin notas — agregá contexto de reuniones, PDFs de propuestas, o cualquier información relevante de este contacto.
+                  No notes yet — add meeting context, proposal PDFs, or any relevant intel about this contact.
                 </div>
               )}
             </div>
@@ -5292,7 +5292,7 @@ Pain points must be specific to their role, reference industry challenges, and c
     }
 
     // ============ CP BRIEFINGS ============
-    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, goToAccount, goToProposal }) {
+    function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, navigateToAccountTab, clearNavigateTab, goToAccount, goToProposal }) {
       const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [], campaigns = [], landings = [] } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -5308,9 +5308,11 @@ Pain points must be specific to their role, reference industry challenges, and c
         if (navigateToAccountId) {
           selectAccount(navigateToAccountId);
           setSearchTerm('');
+          if (navigateToAccountTab) setAccDetailTab(navigateToAccountTab);
           if (clearNavigate) clearNavigate();
+          if (clearNavigateTab) clearNavigateTab();
         }
-      }, [navigateToAccountId, clearNavigate]);
+      }, [navigateToAccountId, clearNavigate, navigateToAccountTab, clearNavigateTab]);
       const [talkingPoints, setTalkingPoints] = useState('');
       const [loadingTP, setLoadingTP] = useState(false);
       const EXEC_SUMMARY_LS_KEY = 'oike_exec_summaries';
@@ -5439,6 +5441,8 @@ Pain points must be specific to their role, reference industry challenges, and c
       const [bulkPainProgress, setBulkPainProgress] = useState('');
       const [editingAccount, setEditingAccount] = useState(null);
       const [accDetailTab, setAccDetailTab] = useState('intel');
+      const [viewingProposal, setViewingProposal] = useState(null);
+      const [viewingLanding, setViewingLanding] = useState(null);
       const RADAR_LS_KEY = 'oike_radar_data';
       const [radarStore, setRadarStore] = useState(() => {
         try { return JSON.parse(localStorage.getItem(RADAR_LS_KEY) || '{}'); } catch { return {}; }
@@ -6853,7 +6857,7 @@ Rules:
 
               {/* ── TAB NAVIGATION ── */}
               <div style={{ display: 'flex', gap: 4, padding: '4px', background: 'var(--globant-darker)', borderRadius: 12, marginTop: 12, marginBottom: 16, border: '1px solid var(--globant-border)' }}>
-                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline'], ['proposals', '📋 Presentations']].map(([tab, label]) => (
+                {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline'], ['proposals', '📋 Proposals']].map(([tab, label]) => (
                   <button key={tab} onClick={() => setAccDetailTab(tab)}
                     style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
                       background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(91,191,181,0.2) 0%, rgba(91,191,181,0.08) 100%)' : 'transparent',
@@ -6883,12 +6887,12 @@ Rules:
 
                     {!radarData && !loadingRadar && (
                       <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0 4px' }}>
-                        Genera el brief de esta cuenta — señales clave, stack tecnológico, landscape competitivo, movimientos de personas y acciones recomendadas con prioridad HOT🔥/WARM🌡️/COLD❄️.
+                        Generate a full account brief — key signals, tech stack, competitive landscape, people moves, and recommended actions with HOT🔥/WARM🌡️/COLD❄️ priorities.
                       </p>
                     )}
                     {loadingRadar && (
                       <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>
-                        ⏳ Analizando señales y construyendo el brief…
+                        ⏳ Scanning signals and building your brief…
                       </div>
                     )}
                     {radarData && (() => {
@@ -6928,7 +6932,7 @@ Rules:
                           {/* Recommended Actions — FIRST, most actionable */}
                           {(rd.recommended_actions || []).length > 0 && (
                             <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.1) 0%, rgba(91,191,181,0.05) 100%)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '16px 18px', marginBottom: 14 }}>
-                              {sectionTitle('⚡', 'Acciones Recomendadas', '#5BBFB5')}
+                              {sectionTitle('⚡', 'Recommended Actions', '#5BBFB5')}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 {(rd.recommended_actions || []).map((a, i) => (
                                   <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '10px 12px' }}>
@@ -7519,7 +7523,7 @@ Rules:
                   </div>
                   {!talkingPoints && !loadingTP && (
                     <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '4px 0' }}>
-                      Genera puntos de conversación personalizados basados en pain points de los stakeholders, noticias recientes y soluciones mapeadas.
+                      Generate personalized talking points based on stakeholder pain points, recent news, and mapped solutions.
                     </p>
                   )}
                   {talkingPoints && (() => {
@@ -7795,17 +7799,20 @@ Rules:
                     {/* Proposals section */}
                     <div className="card">
                       <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <h3>📋 Presentations ({accProposals.length})</h3>
+                        <h3>📋 Proposals ({accProposals.length})</h3>
                         <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
                           onClick={() => {
-                            try { sessionStorage.setItem('oike_proposal_prefill_account', account.id); } catch {}
+                            try {
+                              sessionStorage.setItem('oike_proposal_prefill_account', account.id);
+                              sessionStorage.setItem('oike_return_to_account', JSON.stringify({ accountId: account.id, tab: 'proposals' }));
+                            } catch {}
                             goToProposal && goToProposal();
                           }}>
                           + New Proposal
                         </button>
                       </div>
                       {accProposals.length === 0 ? (
-                        <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No presentations for this account yet.</p>
+                        <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No proposals for this account yet.</p>
                       ) : (
                         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                           {accProposals.map(p => {
@@ -7815,7 +7822,7 @@ Rules:
                             const docs = p.fields?.['Document'];
                             return (
                               <div key={p.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)', cursor:'pointer' }}
-                                onClick={() => goToProposal && goToProposal(p.id)}>
+                                onClick={() => setViewingProposal(p)}>
                                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
                                   <div style={{ fontWeight:700, fontSize:13 }}>{F(p,'Title')}</div>
                                   <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
@@ -7840,7 +7847,10 @@ Rules:
                         <h3>📨 Landings ({accLandings.length})</h3>
                         <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
                           onClick={() => {
-                            try { sessionStorage.setItem('oike_landing_prefill_account', account.id); } catch {}
+                            try {
+                              sessionStorage.setItem('oike_landing_prefill_account', account.id);
+                              sessionStorage.setItem('oike_return_to_account', JSON.stringify({ accountId: account.id, tab: 'proposals' }));
+                            } catch {}
                             window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }));
                           }}>
                           + New Landing
@@ -7856,7 +7866,8 @@ Rules:
                             const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
                             const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : '—';
                             return (
-                              <div key={l.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)' }}>
+                              <div key={l.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)', cursor:'pointer' }}
+                                onClick={() => setViewingLanding(l)}>
                                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
                                   <div style={{ fontWeight:700, fontSize:13 }}>{F(l,'Slug') || l.id}</div>
                                   <span style={{ background:LANDING_STATUS_BG[lStatus]||'rgba(156,163,175,0.15)', color:LANDING_STATUS_COLOR[lStatus]||'#9ca3af', borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>{lStatus}</span>
@@ -7873,6 +7884,132 @@ Rules:
               })()}
             </div>
           )}
+
+          {/* Proposal Viewer Modal */}
+          {viewingProposal && (() => {
+            const vp = viewingProposal;
+            const vpStatus = F(vp,'Status') || 'Draft';
+            const vpAmount = vp.fields?.['Amount'];
+            const vpAccount = (data.accounts||[]).find(a => linkedIds(vp,'Account').includes(a.id));
+            const vpStks = linkedIds(vp,'Stakeholders').map(id => stakeholders.find(s=>s.id===id)).filter(Boolean);
+            const vpSols = linkedIds(vp,'Solutions').map(id => (data.solutions||[]).find(s=>s.id===id)).filter(Boolean);
+            const vpDoc = F(vp,'Document');
+            const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
+            const STATUS_BG = { Draft:'rgba(156,163,175,0.15)', Presented:'rgba(96,165,250,0.15)', 'Under Review':'rgba(251,146,60,0.15)', Accepted:'rgba(74,222,128,0.15)', Rejected:'rgba(248,113,113,0.15)', Expired:'rgba(107,114,128,0.15)' };
+            return (
+              <div className="modal-overlay" onClick={() => setViewingProposal(null)} style={{ zIndex:1100 }}>
+                <div className="modal" style={{ maxWidth:540, width:'90%' }} onClick={e => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h2 style={{ margin:0, fontSize:17 }}>📋 {F(vp,'Title')}</h2>
+                    <button className="btn-icon" onClick={() => setViewingProposal(null)}>✕</button>
+                  </div>
+                  <div style={{ padding:'0 20px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+                    {/* Status + meta */}
+                    <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                      <span style={{ background:STATUS_BG[vpStatus], color:STATUS_COLOR[vpStatus], borderRadius:5, padding:'3px 10px', fontSize:11, fontWeight:700 }}>{vpStatus}</span>
+                      {vpAmount && <span style={{ fontWeight:700, color:'var(--globant-green)', fontSize:14 }}>{formatCurrency(vpAmount)}</span>}
+                      {F(vp,'Presented Date') && <span style={{ fontSize:11, color:'var(--globant-muted)' }}>📅 {formatDate(F(vp,'Presented Date'))}</span>}
+                    </div>
+                    {/* Stakeholders */}
+                    {vpStks.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>Stakeholders</div>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                          {vpStks.map(s => <span key={s.id} style={{ background:'rgba(91,191,181,0.12)', color:'var(--globant-green)', borderRadius:5, padding:'3px 10px', fontSize:12 }}>{F(s,'Name')} {F(s,'Last name')||''}</span>)}
+                        </div>
+                      </div>
+                    )}
+                    {/* Solutions */}
+                    {vpSols.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>Offerings</div>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                          {vpSols.map(s => <span key={s.id} style={{ background:'rgba(255,255,255,0.06)', color:'var(--globant-text)', borderRadius:5, padding:'3px 10px', fontSize:12 }}>🛠️ {F(s,'Name')}</span>)}
+                        </div>
+                      </div>
+                    )}
+                    {/* Description */}
+                    {F(vp,'Description') && (
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>Description</div>
+                        <div style={{ fontSize:13, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap', background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'10px 12px' }}>{F(vp,'Description')}</div>
+                      </div>
+                    )}
+                    {/* Document */}
+                    {vpDoc && (
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>Document</div>
+                        <a href={vpDoc} target="_blank" rel="noopener noreferrer" style={{ color:'var(--globant-green)', fontSize:13, wordBreak:'break-all' }}>📎 {vpDoc}</a>
+                      </div>
+                    )}
+                    {/* Actions */}
+                    <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+                      <button className="action-btn btn-ghost" onClick={() => setViewingProposal(null)}>Close</button>
+                      <button className="action-btn btn-primary" style={{ fontSize:12 }} onClick={() => { setViewingProposal(null); goToProposal && goToProposal(vp.id); }}>Open Full View →</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Landing Viewer Modal */}
+          {viewingLanding && (() => {
+            const vl = viewingLanding;
+            const vlStatus = F(vl,'Status') || 'Draft';
+            const vlSlug = F(vl,'Slug') || vl.id;
+            const vlStkId = linkedIds(vl,'Stakeholder')[0];
+            const vlStk = vlStkId ? stakeholders.find(s=>s.id===vlStkId) : null;
+            const vlStkName = vlStk ? `${F(vlStk,'Name')||''} ${F(vlStk,'Last name')||''}`.trim() : '—';
+            const vlSolId = linkedIds(vl,'Solution')[0];
+            const vlSol = vlSolId ? (data.solutions||[]).find(s=>s.id===vlSolId) : null;
+            const LANDING_STATUS_COLOR = { Draft:'#a78bfa', Sent:'#4ade80', Archived:'#6b7280' };
+            const LANDING_STATUS_BG = { Draft:'rgba(167,139,250,0.15)', Sent:'rgba(74,222,128,0.15)', Archived:'rgba(107,114,128,0.15)' };
+            const previewUrl = `${window.location.origin}/p/${vlSlug}`;
+            return (
+              <div className="modal-overlay" onClick={() => setViewingLanding(null)} style={{ zIndex:1100 }}>
+                <div className="modal" style={{ maxWidth:480, width:'90%' }} onClick={e => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h2 style={{ margin:0, fontSize:17 }}>📨 Landing: {vlSlug}</h2>
+                    <button className="btn-icon" onClick={() => setViewingLanding(null)}>✕</button>
+                  </div>
+                  <div style={{ padding:'0 20px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+                    <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                      <span style={{ background:LANDING_STATUS_BG[vlStatus]||'rgba(156,163,175,0.15)', color:LANDING_STATUS_COLOR[vlStatus]||'#9ca3af', borderRadius:5, padding:'3px 10px', fontSize:11, fontWeight:700 }}>{vlStatus}</span>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <span style={{ fontSize:12, color:'var(--globant-muted)', minWidth:80 }}>Stakeholder</span>
+                        <span style={{ fontSize:13, color:'var(--globant-text)', fontWeight:600 }}>👤 {vlStkName}</span>
+                      </div>
+                      {vlSol && (
+                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                          <span style={{ fontSize:12, color:'var(--globant-muted)', minWidth:80 }}>Offering</span>
+                          <span style={{ fontSize:13, color:'var(--globant-text)' }}>🛠️ {F(vlSol,'Name')}</span>
+                        </div>
+                      )}
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <span style={{ fontSize:12, color:'var(--globant-muted)', minWidth:80 }}>Preview URL</span>
+                        <a href={previewUrl} target="_blank" rel="noopener noreferrer" style={{ color:'var(--globant-green)', fontSize:12, wordBreak:'break-all' }}>{previewUrl}</a>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+                      <button className="action-btn btn-ghost" onClick={() => setViewingLanding(null)}>Close</button>
+                      <button className="action-btn btn-primary" style={{ fontSize:12 }} onClick={() => {
+                        setViewingLanding(null);
+                        try {
+                          sessionStorage.setItem('oike_return_to_account', JSON.stringify({ accountId: selectedAccountId, tab: 'proposals' }));
+                          const stkId = vlStkId;
+                          if (stkId) sessionStorage.setItem('oike_landing_prefill_stakeholder', stkId);
+                        } catch {}
+                        window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings', landingId: vl.id } }));
+                      }}>Edit Landing →</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Edit Contact Modal (from Account view) */}
           {cpEditingContact && (() => {
@@ -11775,8 +11912,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onAddRecord) onAddRecord('proposals', fields);
           setShowNew(false);
           resetForm();
-          if (rec?.id) selectProposal(rec.id);
           if (onLogActivity) onLogActivity();
+          try {
+            const returnTo = sessionStorage.getItem('oike_return_to_account');
+            if (returnTo) {
+              const { accountId, tab } = JSON.parse(returnTo);
+              sessionStorage.removeItem('oike_return_to_account');
+              window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'accounts', accountId, tab } }));
+              return;
+            }
+          } catch {}
+          if (rec?.id) selectProposal(rec.id);
         } catch(e) { console.error(e); alert('Error creating proposal'); }
         setSaving(false);
       };
@@ -12134,7 +12280,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           <div>
             <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
-                <button className="action-btn btn-ghost" style={{ fontSize:11, marginBottom:8 }} onClick={() => selectProposal('')}>← Back to Presentations</button>
+                <button className="action-btn btn-ghost" style={{ fontSize:11, marginBottom:8 }} onClick={() => selectProposal('')}>← Back to Proposals</button>
                 <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                   <h1 style={{ margin:0 }}>📋 {F(selected,'Title')}</h1>
                   <span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], border:`1px solid ${STATUS_COLOR[status]}50`, borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:700 }}>{status}</span>
@@ -17867,6 +18013,14 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           setEditingLanding(null);
           setForm(emptyForm);
           if (onLogActivity) onLogActivity();
+          try {
+            const returnTo = sessionStorage.getItem('oike_return_to_account');
+            if (returnTo) {
+              const { accountId, tab } = JSON.parse(returnTo);
+              sessionStorage.removeItem('oike_return_to_account');
+              window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'accounts', accountId, tab } }));
+            }
+          } catch {}
         } catch (e) {
           console.error('Save landing failed:', e);
           alert('Error: ' + (e.message || 'unknown'));
@@ -20988,7 +21142,11 @@ Return ONLY valid JSON.`;
       // Listen to global navigation events (e.g. from StakeholderHistoryModal → "Generate Landing")
       useEffect(() => {
         const handler = (e) => {
-          if (e.detail?.page) setPageAndSave(e.detail.page);
+          if (e.detail?.page) {
+            setPageAndSave(e.detail.page);
+            if (e.detail.accountId) setNavigateToAccountId(e.detail.accountId);
+            if (e.detail.tab) setNavigateToAccountTab(e.detail.tab);
+          }
         };
         window.addEventListener('oike:navigate', handler);
         return () => window.removeEventListener('oike:navigate', handler);
@@ -21016,6 +21174,7 @@ Return ONLY valid JSON.`;
       const [navigateToSolId, setNavigateToSolId] = useState('');
       const [navigateToEventId, setNavigateToEventId] = useState('');
       const [navigateToProposalId, setNavigateToProposalId] = useState('');
+      const [navigateToAccountTab, setNavigateToAccountTab] = useState('');
       // Campaign prefill from Report Builder → Campaigns (Create campaign from insight)
       const [campaignPrefill, setCampaignPrefill] = useState(null); // { name, type, context, stakeholderIds }
       const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21252,7 +21411,7 @@ Return ONLY valid JSON.`;
         contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
         landings: <LandingsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} onCreateCampaignFromInsight={createCampaignFromInsight} />,
-        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
+        accounts: <CPBriefings data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} navigateToAccountId={navigateToAccountId} clearNavigate={() => setNavigateToAccountId('')} navigateToAccountTab={navigateToAccountTab} clearNavigateTab={() => setNavigateToAccountTab('')} goToAccount={goToAccount} goToProposal={goToProposal} />,
         solutionshub: <SolutionsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} goToAccount={goToAccount} navigateToSolId={navigateToSolId} clearNavigateSol={() => setNavigateToSolId('')} />,
         icp: <ICPSection data={data} goToSolution={goToSolution} api={api} onLogActivity={bgSync} onAddRecord={addToData} />,
       };
