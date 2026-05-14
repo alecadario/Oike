@@ -13982,6 +13982,11 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
         ? detailContacts.filter(s => !reachedIds.includes(s.id) && !!F(s,'Email'))
         : []), [selectedCampaign, detailContacts, reachedIds]);
 
+      // All contacts with email (pending + already reached) — used in bulk panel to allow re-touch
+      const allEmailContacts = useMemo(() => (selectedCampaign
+        ? detailContacts.filter(s => !!F(s,'Email'))
+        : []), [selectedCampaign, detailContacts]);
+
       // ── Add / Remove contacts from campaign ──
       const [showAddContacts, setShowAddContacts] = useState(false);
       const [addContactsSearch, setAddContactsSearch] = useState('');
@@ -15561,14 +15566,15 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               const readyCount = allStatuses.filter(st => st === 'ready').length;
               const sentCount = allStatuses.filter(st => st === 'sent').length;
               const errorCount = allStatuses.filter(st => st === 'error').length;
-              const hasMessages = Object.keys(bulkMsgs).length > 0;
+              // Show list if we have generated messages OR there are already-reached contacts to re-touch
+              const hasMessages = Object.keys(bulkMsgs).length > 0 || reachedIds.some(id => allEmailContacts.find(s => s.id === id));
               return (
                 <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid var(--globant-green)', padding: '14px 16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)' }}>📣 Bulk Email — {F(selectedCampaign,'Name')}</div>
                       <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 3 }}>
-                        {pendingEmailContacts.length} pending contact{pendingEmailContacts.length !== 1 ? 's' : ''} with email
+                        {pendingEmailContacts.length} pending · {reachedIds.filter(id => allEmailContacts.find(s => s.id === id)).length} already reached
                         {hasMessages && ` · ${readyCount} ready · ${sentCount} sent${errorCount ? ` · ${errorCount} errors` : ''}`}
                       </div>
                     </div>
@@ -15670,8 +15676,8 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                   </div>
                   {hasMessages && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
-                      {pendingEmailContacts.map(s => {
-                        const bm = bulkMsgs[s.id] || {};
+                      {allEmailContacts.map(s => {
+                        const bm = bulkMsgs[s.id] || (reachedIds.includes(s.id) ? { msg: '', status: 'sent', error: '' } : {});
                         const accId = linkedIds(s,'Account')[0];
                         const acc = accId ? accounts.find(a => a.id === accId) : null;
                         const STATUS_BADGE = { generating: ['#fbbf24','⏳ Generating'], ready: ['var(--globant-green)','✅ Ready'], sending: ['#60a5fa','📤 Sending...'], sent: ['#4ade80','✅ Sent'], draft: ['#fbbf24','📝 Draft saved'], error: ['#ef4444','❌ Error'] };
