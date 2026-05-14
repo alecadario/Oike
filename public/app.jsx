@@ -81,7 +81,13 @@
       if (id)   params.set('id', id); else params.delete('id');
       params.delete('gmail'); // never persist oauth params
       const qs = params.toString();
-      window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+      const newUrl = window.location.pathname + (qs ? '?' + qs : '');
+      // Use pushState so browser back button works within the app
+      if (window.location.search !== (qs ? '?' + qs : '')) {
+        window.history.pushState({ page, id }, '', newUrl);
+      } else {
+        window.history.replaceState({ page, id }, '', newUrl);
+      }
     }
 
     // ============ COMPANY PROFILE (configurable per client) ============
@@ -20987,6 +20993,18 @@ Return ONLY valid JSON.`;
         window.addEventListener('oike:navigate', handler);
         return () => window.removeEventListener('oike:navigate', handler);
       }, [setPageAndSave]);
+
+      // Handle browser back/forward button
+      useEffect(() => {
+        const onPopState = (e) => {
+          const params = new URLSearchParams(window.location.search);
+          const p = e.state?.page || params.get('v') || localStorage.getItem('oike_page') || 'overview';
+          setPage(p);
+          localStorage.setItem('oike_page', p);
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+      }, []);
       const [data, setData] = useState({ accounts: [], stakeholders: [], opportunities: [], actionPlan: [], outreach: [], solutions: [], events: [], clientPartners: [], sources: [], icp: [], proposals: [], campaigns: [], contentLab: [], landings: [] });
       const [loading, setLoading] = useState(true);
       const [api, setApi] = useState(null);
