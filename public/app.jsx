@@ -13694,6 +13694,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [saving, setSaving] = useState(false);
       const [hubTab, setHubTab] = useState('campaigns');
       const [tplExpanded, setTplExpanded] = useState(false);
+      const [tplOpen, setTplOpen] = useState(false);
       const [ctxExpanded, setCtxExpanded] = useState(false);
       const [sumExpanded, setSumExpanded] = useState(false);
 
@@ -13780,6 +13781,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const campaignType = F(selectedCampaign, 'Type') || '';
           const assetUrl = F(selectedCampaign, 'Asset URL') || '';
           const isFollowUp = stepIndex > 0;
+          const langInstruction = tplLanguage === 'es' ? 'Write in Spanish (Latin American, tuteo or voseo as natural).' : tplLanguage === 'pt' ? 'Write in Brazilian Portuguese.' : tplLanguage === 'fr' ? 'Write in French.' : 'Write in English.';
           const prompt = `You are a senior B2B sales rep writing a ${step.channel || 'Email'} message for step ${stepIndex + 1} of the "${campaignName}" outreach campaign (${campaignType}).
 
 ${isFollowUp
@@ -13791,6 +13793,7 @@ ${context ? `\nCampaign context:\n${context.slice(0, 700)}` : ''}
 ${aiSummary ? `\nStrategic brief:\n${aiSummary.slice(0, 500)}` : ''}
 ${assetUrl ? `\nAsset link to reference: ${assetUrl}` : ''}
 
+LANGUAGE: ${langInstruction}
 Write for a fictional prospect — use {{first_name}} and {{company}} as tokens. Output ONLY the message body (no subject line, no greeting label, no signature block). Sound like a human, not a template.`;
 
           const preview = await callOpenAI({ prompt, temperature: 0.72, max_tokens: 400 });
@@ -14126,6 +14129,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         setEmailTplDirty(false);
         setStepPreviews({});
         setEditingTemplate(false);
+        setTplOpen(false);
       }, [selectedId]);
 
       const addSeqStep = () => {
@@ -14928,14 +14932,31 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
                 return (
                   <div style={{ marginTop: 12 }}>
-                    {/* Message Template — inline within sequence */}
-                    <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: editingTemplate || F(selectedCampaign,'Message Template') ? 8 : 0 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: 0.5 }}>✍️ Message Template</span>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                    {/* Message Template — inline within sequence, collapsible */}
+                    <div style={{ marginBottom: 14, borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)', overflow: 'hidden' }}>
+                      {/* Header row — always visible, click to toggle */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(91,191,181,0.06)', cursor: 'pointer' }}
+                        onClick={() => { if (!editingTemplate) setTplOpen(o => !o); }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          {tplOpen ? '▲' : '▼'} ✍️ Message Template
+                          {!tplOpen && F(selectedCampaign,'Message Template') && (
+                            <span style={{ marginLeft: 8, fontWeight: 400, color: 'var(--globant-muted)', textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
+                              {F(selectedCampaign,'Message Template').slice(0, 60).trim()}{F(selectedCampaign,'Message Template').length > 60 ? '…' : ''}
+                            </span>
+                          )}
+                        </span>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                          {/* Language selector */}
+                          {[['en','🇬🇧'],['es','🇦🇷'],['pt','🇧🇷'],['fr','🇫🇷']].map(([lang, flag]) => (
+                            <button key={lang} onClick={() => setTplLanguage(lang)}
+                              style={{ padding:'2px 8px', borderRadius:4, border:`1px solid ${tplLanguage===lang ? 'var(--globant-green)' : 'var(--globant-border)'}`, background: tplLanguage===lang ? 'rgba(91,191,181,0.15)' : 'transparent', color: tplLanguage===lang ? 'var(--globant-green)' : 'var(--globant-muted)', cursor:'pointer', fontSize:12 }}>
+                              {flag}
+                            </button>
+                          ))}
+                          <div style={{ width:1, height:14, background:'var(--globant-border)' }} />
                           {!editingTemplate ? (
                             <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
-                              onClick={() => { setTemplateDraft(F(selectedCampaign,'Message Template') || ''); setEditingTemplate(true); }}>
+                              onClick={() => { setTemplateDraft(F(selectedCampaign,'Message Template') || ''); setEditingTemplate(true); setTplOpen(true); }}>
                               {F(selectedCampaign,'Message Template') ? '✏️ Edit' : '➕ Add'}
                             </button>
                           ) : (
@@ -14948,18 +14969,23 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           )}
                         </div>
                       </div>
-                      {editingTemplate ? (
-                        <textarea
-                          className="input-field"
-                          style={{ width: '100%', minHeight: 100, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}
-                          placeholder="Write the reference angle the AI will personalize per contact..."
-                          value={templateDraft}
-                          onChange={e => setTemplateDraft(e.target.value)}
-                        />
-                      ) : F(selectedCampaign,'Message Template') ? (
-                        <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{F(selectedCampaign,'Message Template')}</div>
-                      ) : (
-                        <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No template yet — click "Add" to write the angle the AI will use for every step.</div>
+                      {/* Collapsible body */}
+                      {(tplOpen || editingTemplate) && (
+                        <div style={{ padding: '10px 12px', background: 'rgba(91,191,181,0.03)' }}>
+                          {editingTemplate ? (
+                            <textarea
+                              className="input-field"
+                              style={{ width: '100%', minHeight: 100, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}
+                              placeholder="Write the reference angle the AI will personalize per contact..."
+                              value={templateDraft}
+                              onChange={e => setTemplateDraft(e.target.value)}
+                            />
+                          ) : F(selectedCampaign,'Message Template') ? (
+                            <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{F(selectedCampaign,'Message Template')}</div>
+                          ) : (
+                            <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No template yet — click "Add" to write the angle the AI will use for every step.</div>
+                          )}
+                        </div>
                       )}
                     </div>
                     {/* Send time config */}
