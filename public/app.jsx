@@ -13729,6 +13729,15 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [generatingSummary, setGeneratingSummary] = useState(false);
       const [campaignUploadingFile, setCampaignUploadingFile] = useState(false);
 
+      // Message Template inline edit
+      const [editingTemplate, setEditingTemplate] = useState(false);
+      const [templateDraft, setTemplateDraft] = useState('');
+      const [savingTemplate, setSavingTemplate] = useState(false);
+
+      // Sequence step preview
+      const [stepPreviews, setStepPreviews] = useState({});
+      const [generatingStepPreview, setGeneratingStepPreview] = useState(null);
+
       const saveCampaignContext = async () => {
         if (!selectedCampaign) return;
         setSavingContext(true);
@@ -13743,6 +13752,53 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           alert('Failed to save context: ' + (e.message || 'unknown'));
         }
         setSavingContext(false);
+      };
+
+      const saveCampaignTemplate = async () => {
+        if (!selectedCampaign) return;
+        setSavingTemplate(true);
+        try {
+          const a = api || new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Message Template': templateDraft });
+          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Message Template': templateDraft });
+          setEditingTemplate(false);
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          alert('Failed to save template: ' + (e.message || 'unknown'));
+        }
+        setSavingTemplate(false);
+      };
+
+      const generateStepPreview = async (stepIndex, step) => {
+        if (!selectedCampaign || generatingStepPreview !== null) return;
+        setGeneratingStepPreview(stepIndex);
+        try {
+          const template = F(selectedCampaign, 'Message Template') || '';
+          const context  = F(selectedCampaign, 'Context') || '';
+          const aiSummary = F(selectedCampaign, 'AI Summary') || '';
+          const campaignName = F(selectedCampaign, 'Name') || '';
+          const campaignType = F(selectedCampaign, 'Type') || '';
+          const assetUrl = F(selectedCampaign, 'Asset URL') || '';
+          const isFollowUp = stepIndex > 0;
+          const prompt = `You are a senior B2B sales rep writing a ${step.channel || 'Email'} message for step ${stepIndex + 1} of the "${campaignName}" outreach campaign (${campaignType}).
+
+${isFollowUp
+  ? `This is a follow-up (sent ${step.waitDays} day${step.waitDays !== 1 ? 's' : ''} after the previous touch, condition: ${step.condition === 'no_reply' ? 'only if no reply' : 'always'}). Reference that a previous message was sent and add a new angle or brief value-add. Keep it short — 3-4 sentences max.`
+  : `This is the first touch. Keep it punchy and human — 4-6 sentences max. Open with a sharp observation, not a generic intro.`}
+${step.note ? `Step intent: "${step.note}"` : ''}
+${template ? `\nReference angle (personalize — DO NOT copy verbatim, rewrite naturally):\n"${template.slice(0, 500)}"` : ''}
+${context ? `\nCampaign context:\n${context.slice(0, 700)}` : ''}
+${aiSummary ? `\nStrategic brief:\n${aiSummary.slice(0, 500)}` : ''}
+${assetUrl ? `\nAsset link to reference: ${assetUrl}` : ''}
+
+Write for a fictional prospect — use {{first_name}} and {{company}} as tokens. Output ONLY the message body (no subject line, no greeting label, no signature block). Sound like a human, not a template.`;
+
+          const preview = await callOpenAI({ prompt, temperature: 0.72, max_tokens: 400 });
+          setStepPreviews(prev => ({ ...prev, [stepIndex]: preview }));
+        } catch (e) {
+          alert('Preview generation failed: ' + (e.message || 'unknown'));
+        }
+        setGeneratingStepPreview(null);
       };
 
       // File upload → AI summary → append to Campaign "Context" as FILE: block
@@ -14068,6 +14124,8 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         }
         setSeqDirty(false);
         setEmailTplDirty(false);
+        setStepPreviews({});
+        setEditingTemplate(false);
       }, [selectedId]);
 
       const addSeqStep = () => {
@@ -14687,25 +14745,54 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               </div>
             </div>
 
-            {/* Template reference */}
-            {template && (
-              <div className="card" style={{ marginBottom:14, borderLeft:'3px solid var(--globant-green)', padding:'10px 14px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:1 }}>Message Template / Reference Angle</div>
-                  {template.length > 200 && (
-                    <button onClick={() => setTplExpanded(x=>!x)} style={{ background:'none', border:'none', color:'var(--globant-green)', cursor:'pointer', fontSize:11, padding:0, fontWeight:600 }}>
-                      {tplExpanded ? '▲ Show less' : '▼ Show more'}
-                    </button>
+            {/* Message Template — inline editable */}
+            <div className="card" style={{ marginBottom:14, borderLeft:'3px solid var(--globant-green)', padding:'10px 14px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:1 }}>✍️ Message Template / Reference Angle</div>
+                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                  {!editingTemplate ? (
+                    <>
+                      {template.length > 200 && (
+                        <button onClick={() => setTplExpanded(x=>!x)} style={{ background:'none', border:'none', color:'var(--globant-green)', cursor:'pointer', fontSize:10, padding:0, fontWeight:600 }}>
+                          {tplExpanded ? '▲ Less' : '▼ More'}
+                        </button>
+                      )}
+                      <button className="action-btn btn-ghost" style={{ fontSize:10 }}
+                        onClick={() => { setTemplateDraft(template); setEditingTemplate(true); setTplExpanded(true); }}>
+                        {template ? '✏️ Edit' : '➕ Add Template'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="action-btn btn-primary" style={{ fontSize:10 }} onClick={saveCampaignTemplate} disabled={savingTemplate}>
+                        {savingTemplate ? '⏳' : '💾 Save'}
+                      </button>
+                      <button className="action-btn btn-ghost" style={{ fontSize:10 }} onClick={() => setEditingTemplate(false)}>Cancel</button>
+                    </>
                   )}
                 </div>
-                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap', overflow:'hidden', maxHeight: tplExpanded || template.length <= 200 ? 'none' : '72px', position:'relative' }}>
+              </div>
+              {editingTemplate ? (
+                <textarea
+                  className="input-field"
+                  style={{ width:'100%', minHeight:120, resize:'vertical', fontFamily:'inherit', fontSize:12, lineHeight:1.6 }}
+                  placeholder={`Write the reference angle / message template the AI will personalize per contact.\n\nTips:\n- Opening hook or observation\n- Main pain you're addressing\n- What you're sharing and why it matters\n- Call to action`}
+                  value={templateDraft}
+                  onChange={e => setTemplateDraft(e.target.value)}
+                />
+              ) : template ? (
+                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap', overflow:'hidden', maxHeight: tplExpanded || template.length <= 200 ? 'none' : '72px', position:'relative' }}>
                   {template}
                   {!tplExpanded && template.length > 200 && (
                     <div style={{ position:'absolute', bottom:0, left:0, right:0, height:32, background:'linear-gradient(transparent, var(--globant-card))' }} />
                   )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div style={{ fontSize:12, color:'var(--globant-muted)', fontStyle:'italic' }}>
+                  No template yet — click "Add Template" to write the reference angle the AI will use to personalize each message.
+                </div>
+              )}
+            </div>
 
             {/* Campaign Context + AI Summary (mirror of Events pattern) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
@@ -14906,7 +14993,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           <button onClick={() => removeSeqStep(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: 0 }}>✕</button>
                         </div>
                         {/* Send mode toggle */}
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                           {[{val:'send', label:'🤖 Auto-send', desc:'AI generates and sends directly'}, {val:'draft', label:'📝 Draft first', desc:'Creates Gmail draft for your review'}].map(opt => (
                             <button key={opt.val}
                               onClick={() => updateSeqStep(i, 'mode', opt.val)}
@@ -14919,6 +15006,24 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                               <span style={{ display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 }}>{opt.desc}</span>
                             </button>
                           ))}
+                        </div>
+                        {/* AI message preview for this step */}
+                        <div>
+                          <button
+                            onClick={() => generateStepPreview(i, step)}
+                            disabled={generatingStepPreview === i}
+                            style={{ background:'none', border:'1px dashed rgba(167,139,250,0.4)', borderRadius:6, color:'#a78bfa', cursor:'pointer', fontSize:11, padding:'4px 12px', width:'100%', fontWeight:600 }}>
+                            {generatingStepPreview === i ? '⏳ Generating preview...' : stepPreviews[i] ? '🔄 Re-generate preview' : '👁️ Preview AI message for this step'}
+                          </button>
+                          {stepPreviews[i] && (
+                            <div style={{ marginTop:8, padding:'10px 12px', background:'rgba(167,139,250,0.06)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:6 }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                                <span style={{ fontSize:10, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.5 }}>Sample message — Step {i+1}</span>
+                                <button onClick={() => { try { navigator.clipboard.writeText(stepPreviews[i]); } catch {} }} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:10 }}>📋 Copy</button>
+                              </div>
+                              <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{stepPreviews[i]}</div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
