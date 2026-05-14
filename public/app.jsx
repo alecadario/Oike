@@ -17255,12 +17255,13 @@ No markdown, no commentary. JSON only.`;
         try {
           const prefillAccId = sessionStorage.getItem('oike_landing_prefill_account');
           if (prefillAccId) {
-            // find first stakeholder of this account to prefill
             const accStk = stakeholders.filter(s => linkedIds(s, 'Account').includes(prefillAccId));
+            const onlyOne = accStk.length === 1;
             setForm(f => ({
               ...emptyForm,
-              stakeholderId: accStk.length === 1 ? accStk[0].id : '',
-              slug: accStk.length === 1 ? autoSlugFromStakeholder(accStk[0].id) : '',
+              accountId: prefillAccId,
+              stakeholderId: onlyOne ? accStk[0].id : '',
+              slug: onlyOne ? autoSlugFromStakeholder(accStk[0].id) : '',
             }));
             setShowForm(true);
             sessionStorage.removeItem('oike_landing_prefill_account');
