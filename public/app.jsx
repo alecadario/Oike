@@ -586,6 +586,79 @@
       const [showAIGenerator, setShowAIGenerator] = useState(false);
       const [enrichLoading, setEnrichLoading] = useState(false);
       const [localEmail, setLocalEmail] = useState(F(stakeholder, 'Email') || '');
+      // Intel Notes for this stakeholder
+      const [stkNotes, setStkNotes] = useState(F(stakeholder, 'Intel Notes') || '');
+      const [editingStkNotes, setEditingStkNotes] = useState(false);
+      const [stkNotesDraft, setStkNotesDraft] = useState('');
+      const [savingStkNotes, setSavingStkNotes] = useState(false);
+      const [uploadingStkFile, setUploadingStkFile] = useState(false);
+      const saveStkNotes = async () => {
+        setSavingStkNotes(true);
+        try {
+          const a = new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Intel Notes': stkNotesDraft });
+          setStkNotes(stkNotesDraft);
+          setEditingStkNotes(false);
+          if (onRefresh) onRefresh();
+        } catch (e) { alert('Error saving notes: ' + (e.message || 'unknown')); }
+        setSavingStkNotes(false);
+      };
+      const handleStkFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploadingStkFile(true);
+        try {
+          let content = '';
+          const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+          if (isPdf) {
+            const pdfjsLib = await new Promise((resolve, reject) => {
+              if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
+              const script = document.createElement('script');
+              script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+              script.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; resolve(window.pdfjsLib); };
+              script.onerror = () => reject(new Error('Failed to load PDF.js'));
+              document.head.appendChild(script);
+            });
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const pages = [];
+            for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              pages.push(textContent.items.map(item => item.str).join(' '));
+            }
+            content = pages.join('\n');
+          } else {
+            content = await file.text();
+          }
+          if (!content.trim()) throw new Error('File appears to be empty or unreadable.');
+          const truncated = content.slice(0, 4000);
+          const prompt = `You are a B2B sales analyst. Summarize the key insights from this file relevant for sales outreach to ${sName} (${F(stakeholder,'Role')||'?'}).
+
+FILE: ${file.name}
+CONTENT:
+${truncated}
+
+Provide:
+1. Brief summary (2-3 sentences) of what this file contains
+2. Key insights for outreach (3-5 bullet points)
+3. Any specific pain points, commitments, or next steps mentioned
+
+Be concise and actionable.`;
+          const summary = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 500 });
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          const newEntry = `\n\n📎 FILE: ${file.name} (uploaded ${dateStr})\n${summary}`;
+          const updated = (stkNotes || '') + newEntry;
+          const a = new AirtableAPI();
+          await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Intel Notes': updated });
+          setStkNotes(updated);
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          alert('Error processing file: ' + (err.message || 'unknown'));
+        }
+        setUploadingStkFile(false);
+        e.target.value = '';
+      };
       const [emailMeta, setEmailMeta] = useState({
         confidence: F(stakeholder, 'email_confidence') || null,
         source: F(stakeholder, 'email_source') || '',
@@ -888,6 +961,51 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Last Touch</div>
               </div>
+            </div>
+
+            {/* Intel Notes */}
+            <div style={{ padding: '12px 14px', background: 'rgba(251,191,36,0.05)', borderRadius: 8, marginBottom: 14, borderLeft: '3px solid #fbbf24' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#fbbf24' }}>📝 INTEL NOTES</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {!editingStkNotes ? (
+                    <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 10px' }}
+                      onClick={() => { setStkNotesDraft(stkNotes); setEditingStkNotes(true); }}>
+                      {stkNotes ? '✏️ Edit' : '➕ Add Notes'}
+                    </button>
+                  ) : (
+                    <>
+                      <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '3px 10px' }} onClick={saveStkNotes} disabled={savingStkNotes}>
+                        {savingStkNotes ? '⏳' : '💾 Save'}
+                      </button>
+                      <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 10px' }} onClick={() => setEditingStkNotes(false)}>Cancel</button>
+                    </>
+                  )}
+                  <label style={{ cursor: 'pointer' }}>
+                    <span className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 10px', display: 'inline-block', color: 'var(--globant-info)', border: '1px solid rgba(96,165,250,0.3)', background: 'rgba(96,165,250,0.08)' }}>
+                      {uploadingStkFile ? '⏳' : '📎 Upload File'}
+                    </span>
+                    <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml,.pdf" onChange={handleStkFileUpload} style={{ display: 'none' }} disabled={uploadingStkFile} />
+                  </label>
+                </div>
+              </div>
+              {editingStkNotes ? (
+                <textarea className="input-field" value={stkNotesDraft} onChange={e => setStkNotesDraft(e.target.value)}
+                  placeholder="Notas de reunión, lo que se habló, compromisos, contexto clave, próximos pasos..."
+                  style={{ width: '100%', minHeight: 100, fontSize: 12, lineHeight: 1.6, resize: 'vertical' }} />
+              ) : stkNotes ? (
+                <FileNotesRenderer notes={stkNotes} accentColor="#fbbf24"
+                  onUpdateNotes={async (updated) => {
+                    const a = new AirtableAPI();
+                    await a.updateRecord(TABLE_IDS.stakeholders, stakeholder.id, { 'Intel Notes': updated });
+                    setStkNotes(updated);
+                    if (onRefresh) onRefresh();
+                  }} />
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
+                  Sin notas — agregá contexto de reuniones, PDFs de propuestas, o cualquier información relevante de este contacto.
+                </div>
+              )}
             </div>
 
             {/* AI Message Generator toggle */}
@@ -7093,105 +7211,6 @@ Rules:
                     )}
                   </div>
 
-                  {/* AI Talking Points */}
-                  <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
-                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3>🎤 Recommended Talking Points</h3>
-                      <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateTalkingPoints} disabled={loadingTP}>
-                        {loadingTP ? '⏳ Generating...' : talkingPoints ? '🔄 Regenerate' : '✨ Generate with AI'}
-                      </button>
-                    </div>
-                    {!talkingPoints && !loadingTP && (
-                      <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '8px 0' }}>
-                        Generate personalized talking points based on stakeholder pain points, recent news, and mapped solutions.
-                      </p>
-                    )}
-                    {talkingPoints && (() => {
-                      const tpLines = talkingPoints.split('\n').filter(l => l.trim());
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {tpLines.map((line, i) => {
-                            const isHeader = line.match(/^#{1,3}\s/) || line.match(/^\*\*[A-Z]/);
-                            const clean = line.replace(/^#{1,3}\s+/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
-                            if (!clean) return null;
-                            if (isHeader) {
-                              return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)', marginTop: i > 0 ? 10 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(91,191,181,0.15)' }}>{clean.replace(/\*\*/g, '')}</div>;
-                            }
-                            const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
-                            const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
-                            const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
-                            return (
-                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
-                                {isBullet && <span style={{ color: 'var(--globant-green)', fontSize: 8, marginTop: 6 }}>●</span>}
-                                <span style={{ fontSize: 12, lineHeight: 1.6 }}>
-                                  {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**')
-                                    ? <strong key={pi} style={{ color: 'var(--globant-green)' }}>{p.slice(2, -2)}</strong>
-                                    : <span key={pi}>{p}</span>
-                                  )}
-                                  )}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Who to Contact */}
-                  <div className="card" style={{ borderLeft: '3px solid var(--globant-info)' }}>
-                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3>🎯 Who to Contact Next</h3>
-                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: 'var(--globant-info)', border: '1px solid rgba(96,165,250,0.3)' }}
-                        onClick={generateContactRecs} disabled={loadingRecs}>
-                        {loadingRecs ? '⏳ Analyzing...' : contactRecs ? '🔄 Refresh' : '🤖 Get AI Recommendations'}
-                      </button>
-                    </div>
-                    {!contactRecs && !loadingRecs && (
-                      <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '8px 0' }}>
-                        AI analyzes stakeholders, outreach history, pipeline, news, and gaps to recommend who to contact, missing roles to find, and re-engagement tactics.
-                      </p>
-                    )}
-                    {contactRecs && (() => {
-                      const sectionIcons = { 'PRIORITY CONTACTS': '🔥', 'MISSING ROLES': '🔍', 'RE-ENGAGEMENT': '♻️', 'TIMING & TRIGGERS': '⏰', 'TIMING': '⏰', 'TRIGGERS': '⏰' };
-                      const sectionColors = { 'PRIORITY CONTACTS': '#4ade80', 'MISSING ROLES': '#60a5fa', 'RE-ENGAGEMENT': '#fbbf24', 'TIMING & TRIGGERS': '#f87171', 'TIMING': '#f87171', 'TRIGGERS': '#f87171' };
-                      const sections = contactRecs.split(/#{2,3}\s+/).filter(Boolean);
-                      return (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-                          {sections.map((sec, i) => {
-                            const lines = sec.trim().split('\n');
-                            const titleLine = lines[0].replace(/\*+/g, '').trim();
-                            const titleKey = Object.keys(sectionIcons).find(k => titleLine.toUpperCase().includes(k)) || '';
-                            const icon = sectionIcons[titleKey] || '📋';
-                            const color = sectionColors[titleKey] || 'var(--globant-info)';
-                            const body = lines.slice(1).join('\n').trim();
-                            const renderLine = (line, li) => {
-                              const clean = line.replace(/^[\s-]*\d*\.?\s*/, '').trim();
-                              if (!clean) return null;
-                              const parts = clean.split(/(\*\*[^*]+\*\*)/g);
-                              return (
-                                <div key={li} style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                  <span style={{ color, fontSize: 8, marginTop: 6 }}>●</span>
-                                  <span style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--globant-text)' }}>
-                                    {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**') ? <strong key={pi} style={{ color }}>{p.slice(2, -2)}</strong> : <span key={pi}>{p}</span>)}
-                                  </span>
-                                </div>
-                              );
-                            };
-                            return (
-                              <div key={i} style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: `1px solid ${color}22` }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                                  <span style={{ fontSize: 18 }}>{icon}</span>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{titleLine}</span>
-                                </div>
-                                {body.split('\n').map((line, li) => renderLine(line, li))}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
                 </div>
               )}
 
@@ -7473,6 +7492,50 @@ Rules:
                         </table>
                       </div>
                   </div>
+                </div>
+              )}
+
+              {/* ══════════ TALKING POINTS TAB (moved from Intel) ══════════ */}
+              {accDetailTab === 'stakeholders' && (
+                <div className="card" style={{ marginTop: 16, borderLeft: '3px solid var(--globant-accent)' }}>
+                  <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3>🎤 Talking Points</h3>
+                    <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={generateTalkingPoints} disabled={loadingTP}>
+                      {loadingTP ? '⏳ Generating...' : talkingPoints ? '🔄 Regenerate' : '✨ Generate with AI'}
+                    </button>
+                  </div>
+                  {!talkingPoints && !loadingTP && (
+                    <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '4px 0' }}>
+                      Genera puntos de conversación personalizados basados en pain points de los stakeholders, noticias recientes y soluciones mapeadas.
+                    </p>
+                  )}
+                  {talkingPoints && (() => {
+                    const tpLines = talkingPoints.split('\n').filter(l => l.trim());
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {tpLines.map((line, i) => {
+                          const isHeader = line.match(/^#{1,3}\s/) || line.match(/^\*\*[A-Z]/);
+                          const clean = line.replace(/^#{1,3}\s+/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
+                          if (!clean) return null;
+                          if (isHeader) return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-green)', marginTop: i > 0 ? 10 : 0, paddingBottom: 4, borderBottom: '1px solid rgba(91,191,181,0.15)' }}>{clean.replace(/\*\*/g, '')}</div>;
+                          const isBullet = line.match(/^[\s]*[-•*]\s|^\d+\./);
+                          const bulletClean = clean.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
+                          const parts = bulletClean.split(/(\*\*[^*]+\*\*)/g);
+                          return (
+                            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
+                              {isBullet && <span style={{ color: 'var(--globant-green)', fontSize: 8, marginTop: 6 }}>●</span>}
+                              <span style={{ fontSize: 12, lineHeight: 1.6 }}>
+                                {parts.map((p, pi) => p.startsWith('**') && p.endsWith('**')
+                                  ? <strong key={pi} style={{ color: 'var(--globant-green)' }}>{p.slice(2, -2)}</strong>
+                                  : <span key={pi}>{p}</span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
