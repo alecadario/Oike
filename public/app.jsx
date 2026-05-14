@@ -15678,6 +15678,11 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                                 onChange={e => setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], msg: e.target.value } }))}
                                 disabled={bm.status === 'sending'} />
                             )}
+                            {bm.status === 'ready' && !bm.msg && (
+                              <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic', marginTop: 4 }}>
+                                ↑ Hit <strong>Generate All</strong> to create a new message
+                              </div>
+                            )}
                             {bm.status === 'ready' && !gmailConn && F(s,'Email') && (
                               <button style={{ marginTop: 6, width: '100%', padding: '5px 10px', borderRadius: 6, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
                                 onClick={() => {
@@ -15711,8 +15716,16 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                                 📬 Open in Gmail
                               </button>
                             )}
-                            {bm.status === 'sent' && bm.msg && (
-                              <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>{bm.msg.slice(0, 150)}...</div>
+                            {bm.status === 'sent' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {bm.msg && <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>{bm.msg.slice(0, 150)}…</div>}
+                                <button
+                                  style={{ marginTop: 2, padding: '4px 10px', borderRadius: 6, background: 'rgba(91,191,181,0.08)', border: '1px solid rgba(91,191,181,0.25)', color: 'var(--globant-green)', cursor: 'pointer', fontSize: 11, fontWeight: 700, alignSelf: 'flex-start' }}
+                                  onClick={() => setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'ready', error: '' } }))}
+                                >
+                                  ↩️ Re-touch
+                                </button>
+                              </div>
                             )}
                           </div>
                         );
