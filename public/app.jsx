@@ -8229,21 +8229,86 @@ Rules:
         try {
           const deadlineDays = goalDeadline ? Math.ceil((new Date(goalDeadline) - new Date()) / (1000*60*60*24)) : null;
           const chBenchContext = channelReplyStats.filter(r => r.count >= 5 && r.bench).map(r => `${r.ch}: ${r.rate}% reply (benchmark: ${r.bench.acceptable}–${r.bench.good}%+)`).join('; ');
-          const prompt = `You are a B2B sales coach. Write a 3-4 sentence projection in English. Be direct, specific, data-driven and actionable. No fluff.
+          const todayMs = Date.now();
 
-Context:
-- Person: ${viewName}
+          // ── Recent outreach with timing + content ──
+          const last30 = viewActivities
+            .filter(o => { const d = o.fields?.['Date']; return d && (todayMs - new Date(d).getTime()) <= 30*24*60*60*1000; })
+            .sort((a,b) => new Date(b.fields?.['Date']||0) - new Date(a.fields?.['Date']||0));
+
+          // Messages sent in last 7 days (likely still within reply window)
+          const last7 = last30.filter(o => (todayMs - new Date(o.fields?.['Date']||0).getTime()) <= 7*24*60*60*1000);
+          const pending7 = last7.filter(o => !['Replied','Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
+          const replied7 = last7.filter(o => ['Replied','Meeting Scheduled','Meeting Booked'].includes(F(o,'Status')));
+
+          // Messages 8-30 days old (should have replied by now)
+          const stale = last30.filter(o => {
+            const daysAgo = (todayMs - new Date(o.fields?.['Date']||0).getTime()) / (24*60*60*1000);
+            return daysAgo > 7 && !['Replied','Meeting Scheduled','Meeting Booked'].includes(F(o,'Status'));
+          });
+
+          // Avg days to reply (from replied records with dates)
+          const repliedWithDates = viewActivities.filter(o => ['Replied'].includes(F(o,'Status')) && o.fields?.['Date']);
+          const avgDaysToReply = repliedWithDates.length > 0
+            ? (repliedWithDates.reduce((sum,o) => sum + (todayMs - new Date(o.fields['Date']).getTime())/(24*60*60*1000), 0) / repliedWithDates.length).toFixed(1)
+            : null;
+
+          // Sample recent message content (last 5, meaningful messages)
+          const recentMsgSamples = last30
+            .filter(o => (F(o,'Message')||'').length > 20)
+            .slice(0, 5)
+            .map(o => {
+              const daysAgo = Math.round((todayMs - new Date(o.fields?.['Date']||0).getTime()) / (24*60*60*1000));
+              const stkId = linkedIds(o,'Stakeholder')[0];
+              const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
+              const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : '?';
+              const accId = linkedIds(o,'Account')[0];
+              const acc = accId ? accounts.find(a => a.id === accId) : null;
+              const accName = acc ? F(acc,'Account Name') : '';
+              const msg = (F(o,'Message')||'').slice(0, 180);
+              return `[${daysAgo}d ago · ${F(o,'Channel')||'?'} · ${F(o,'Status')||'Sent'} · ${stkName}${accName?' @ '+accName:''}]\n"${msg}${msg.length===180?'…':''}"`;
+            }).join('\n\n');
+
+          // Channels breakdown for last 30d
+          const recentByChannel = {};
+          last30.forEach(o => { const ch = F(o,'Channel')||'?'; recentByChannel[ch] = (recentByChannel[ch]||0)+1; });
+          const channelBreakdown = Object.entries(recentByChannel).map(([ch,n]) => `${ch}: ${n}`).join(', ');
+
+          const prompt = `You are a senior B2B sales coach reviewing ${viewName}'s outreach activity. Write a sharp, honest analysis in 5-7 sentences. Be specific, use the data, and name real patterns. No generic advice.
+
+═══ GOALS & PIPELINE ═══
 - Company goal: ${goalName || 'not set'}${goalTarget > 0 ? ` (€${goalTarget.toLocaleString()})` : ''}${deadlineDays !== null ? ` · ${deadlineDays} days left` : ''}
 - Meetings target: ${viewMeetingsTarget} | Achieved: ${viewMeetings.length} | Gap: ${meetingsGap}
 - Deals target: ${viewDealsTarget} | Won: ${viewDealsWon} | Gap: ${dealsGap}
-- Activity velocity: ${activitiesPerWeek.toFixed(1)} activities/week (last 4 weeks)
-- Overall reply rate: ${(meetingConvRate * 100).toFixed(1)}%
-- Per-channel reply rates vs 2025 Belkins benchmarks: ${chBenchContext || 'insufficient data per channel'}
-- Activities needed to close meetings gap: ${activitiesNeeded ?? 'insufficient data'}
-- Weeks to hit meetings target at current pace: ${weeksToTarget !== null ? weeksToTarget.toFixed(1) : 'insufficient data'}
 
-Tell them: (1) whether they're on track or not, (2) the exact number to focus on this week, (3) whether to push volume or improve conversion — and which channel specifically needs attention based on the benchmark data.`;
-          const result = await callOpenAI({ prompt, max_tokens: 220, temperature: 0.6 });
+═══ ACTIVITY VELOCITY ═══
+- Last 4 weeks: ${activitiesPerWeek.toFixed(1)} activities/week
+- Last 30 days channels: ${channelBreakdown || 'no data'}
+- Channel reply rates vs benchmarks: ${chBenchContext || 'insufficient data'}
+- Activities needed to close meetings gap: ${activitiesNeeded ?? 'insufficient data'}
+- Weeks to hit target at current pace: ${weeksToTarget !== null ? weeksToTarget.toFixed(1) : 'insufficient data'}
+
+═══ TIMING & REPLY CONTEXT ═══
+- Messages sent last 7 days (still within normal reply window): ${last7.length}
+  → ${pending7.length} pending (IMPORTANT: these are recent — it's normal not to have replies yet, do NOT count these as no-replies)
+  → ${replied7.length} already replied/meeting booked
+- Messages 8-30 days old with NO reply yet (legitimately stale): ${stale.length}
+- Avg days to reply (from historical data): ${avgDaysToReply ? avgDaysToReply + ' days' : 'not enough data'}
+${avgDaysToReply ? `- IMPORTANT: factor in this avg reply lag when assessing current pipeline health` : ''}
+
+═══ RECENT MESSAGE CONTENT (last 5 sent) ═══
+${recentMsgSamples || 'No message content available.'}
+
+Your analysis must cover:
+1. Pipeline health RIGHT NOW — accounting for the reply lag (recent messages are not yet stale)
+2. Quality of the messages above — are the angles sharp? Too generic? Right length? Specific enough?
+3. Whether the ${stale.length} stale no-replies suggest a messaging problem, wrong targets, or just volume
+4. The ONE channel or ONE behavior to change this week for the biggest impact
+5. Whether the current pace will hit the target — and by when if not
+
+Write in English. Be direct. Quote specific numbers from the data above.`;
+
+          const result = await callOpenAI({ prompt, max_tokens: 450, temperature: 0.65 });
           setAiProjection(result);
         } catch (e) {
           setAiProjection('Could not generate projection. Try again.');
