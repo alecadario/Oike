@@ -15548,7 +15548,45 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         {bulkSending ? '⏳ Processing...' : bulkDraftMode ? `📝 Draft All (${readyCount})` : `✉️ Send All (${readyCount})`}
                       </button>
                     )}
-                    {!gmailConn && <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>Connect Gmail in Settings to send</span>}
+                    {!gmailConn && readyCount > 0 && (
+                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', fontWeight: 700 }}
+                        onClick={async () => {
+                          const ready = pendingEmailContacts.filter(s => bulkMsgs[s.id]?.status === 'ready' && !!F(s,'Email'));
+                          const a = api || new AirtableAPI();
+                          for (let i = 0; i < ready.length; i++) {
+                            const s = ready[i];
+                            const msg = bulkMsgs[s.id].msg;
+                            const email = F(s,'Email');
+                            const lines = msg.split('\n');
+                            const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                            const subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${F(selectedCampaign,'Name')||'Campaign'} — ${F(s,'Name')||''}`;
+                            const body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg;
+                            window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+                            // Log activity
+                            const accIds = linkedIds(s,'Account');
+                            const actFields = {
+                              'Activity Name': `Email — ${new Date().toLocaleDateString('en-US')}`,
+                              'Channel': 'Email', 'Status': 'Sent', 'Message': body,
+                              'Stakeholder': [s.id], 'Date': new Date().toISOString(),
+                              'Logged By': CURRENT_USER?.name || '',
+                              ...(accIds.length ? { 'Account': accIds } : {}),
+                              ...(selectedCampaign?.id ? { 'Campaign': [selectedCampaign.id] } : {}),
+                            };
+                            if (onAddRecord) onAddRecord('outreach', actFields);
+                            a.createRecord(TABLE_IDS.outreach, actFields).catch(e => console.error('[gmail-open] outreach log failed:', e));
+                            a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+                              'Stakeholders Reached': [...new Set([...linkedIds(selectedCampaign,'Stakeholders Reached'), s.id])],
+                              'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
+                            }).catch(() => {});
+                            setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
+                            if (i < ready.length - 1) await new Promise(r => setTimeout(r, 600));
+                          }
+                          if (onLogActivity) onLogActivity();
+                        }}>
+                        📬 Open all in Gmail ({readyCount})
+                      </button>
+                    )}
+                    {!gmailConn && <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>💡 No Gmail connected — use "Open in Gmail" per contact or open all above</span>}
                   </div>
                   {hasMessages && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
@@ -15574,6 +15612,39 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                                 value={bm.msg}
                                 onChange={e => setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], msg: e.target.value } }))}
                                 disabled={bm.status === 'sending'} />
+                            )}
+                            {bm.status === 'ready' && !gmailConn && F(s,'Email') && (
+                              <button style={{ marginTop: 6, width: '100%', padding: '5px 10px', borderRadius: 6, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+                                onClick={() => {
+                                  const email = F(s,'Email');
+                                  const msg = bm.msg;
+                                  const lines = msg.split('\n');
+                                  const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                                  const subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${F(selectedCampaign,'Name')||'Campaign'} — ${F(s,'Name')||''}`;
+                                  const body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg;
+                                  window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+                                  // Log activity + mark reached
+                                  const accIds = linkedIds(s,'Account');
+                                  const a = api || new AirtableAPI();
+                                  const actFields = {
+                                    'Activity Name': `Email — ${new Date().toLocaleDateString('en-US')}`,
+                                    'Channel': 'Email', 'Status': 'Sent', 'Message': body,
+                                    'Stakeholder': [s.id], 'Date': new Date().toISOString(),
+                                    'Logged By': CURRENT_USER?.name || '',
+                                    ...(accIds.length ? { 'Account': accIds } : {}),
+                                    ...(selectedCampaign?.id ? { 'Campaign': [selectedCampaign.id] } : {}),
+                                  };
+                                  if (onAddRecord) onAddRecord('outreach', actFields);
+                                  a.createRecord(TABLE_IDS.outreach, actFields).catch(e => console.error('[gmail-open] log failed:', e));
+                                  a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+                                    'Stakeholders Reached': [...new Set([...linkedIds(selectedCampaign,'Stakeholders Reached'), s.id])],
+                                    'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
+                                  }).catch(() => {});
+                                  setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
+                                  if (onLogActivity) onLogActivity();
+                                }}>
+                                📬 Open in Gmail
+                              </button>
                             )}
                             {bm.status === 'sent' && bm.msg && (
                               <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>{bm.msg.slice(0, 150)}...</div>
