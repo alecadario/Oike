@@ -21813,17 +21813,21 @@ Return ONLY valid JSON.`;
       const isAdmin = CURRENT_USER?.role === 'admin';
 
       const allNavItems = [
-        { icon: '🎯', label: 'My Day', key: 'followup', bdr: true },
-        { icon: '🏢', label: 'Accounts', key: 'accounts', bdr: true },
-        { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true },
-        { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true },
-        { icon: '📊', label: 'Strategy Overview', key: 'overview' },
-        { icon: '🎯', label: 'ICP', key: 'icp' },
-        { icon: '🛠️', label: 'Offering Hub', key: 'solutionshub' },
-        { icon: '🎪', label: 'Events', key: 'events' },
-        { icon: '📈', label: 'Activity Tracker', key: 'activity' },
-        { icon: '🧠', label: 'Insights', key: 'insights' },
-        { icon: '📧', label: 'Reports', key: 'reports' },
+        // Group 1 — Daily Execution
+        { icon: '🎯', label: 'My Day', key: 'followup', bdr: true, group: 1 },
+        { icon: '🏢', label: 'Accounts', key: 'accounts', bdr: true, group: 1 },
+        { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true, group: 1 },
+        { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true, group: 1 },
+        // Group 2 — Outreach & Pipeline
+        { icon: '🎪', label: 'Events', key: 'events', group: 2 },
+        { icon: '📈', label: 'Activity Tracker', key: 'activity', group: 2 },
+        // Group 3 — Intelligence & Reporting
+        { icon: '🧠', label: 'Insights', key: 'insights', group: 3 },
+        { icon: '📧', label: 'Reports', key: 'reports', group: 3 },
+        // Group 4 — Strategy & Setup
+        { icon: '📊', label: 'Strategy Overview', key: 'overview', group: 4 },
+        { icon: '🎯', label: 'ICP', key: 'icp', group: 4 },
+        { icon: '🛠️', label: 'Offering Hub', key: 'solutionshub', group: 4 },
       ];
       const navItems = isBDR ? allNavItems.filter(i => i.bdr) : allNavItems;
 
@@ -21865,7 +21869,7 @@ Return ONLY valid JSON.`;
             <nav className="sidebar-nav">
               {navItems.map((item, idx) => {
                 const prevItem = navItems[idx - 1];
-                const showDivider = !isBDR && idx > 0 && item.bdr === undefined && prevItem?.bdr === true;
+                const showDivider = !isBDR && idx > 0 && item.group !== prevItem?.group;
                 return (
                   <React.Fragment key={item.key}>
                     {showDivider && (
