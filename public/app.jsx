@@ -633,7 +633,7 @@
           }
           if (!content.trim()) throw new Error('File appears to be empty or unreadable.');
           const truncated = content.slice(0, 4000);
-          const prompt = `You are a B2B sales analyst. Summarize the key insights from this file relevant for sales outreach to ${sName} (${F(stakeholder,'Role')||'?'}).
+          const prompt = `You are a B2B sales analyst working for ${COMPANY_PROFILE.companyName || 'our company'} (${COMPANY_PROFILE.services || 'professional services'}). Summarize the key insights from this file relevant for sales outreach to ${sName} (${F(stakeholder,'Role')||'?'}).
 
 FILE: ${file.name}
 CONTENT:
@@ -6216,7 +6216,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
           if (!content.trim()) throw new Error('File appears to be empty or unreadable.');
           const truncated = content.slice(0, 4000);
 
-          const prompt = `You are a B2B sales intelligence analyst. Summarize the key insights from this file that are relevant for selling digital transformation, AI, CX, and data services to ${name}.
+          const prompt = `You are a B2B sales intelligence analyst working for ${COMPANY_PROFILE.companyName || 'our company'} (${COMPANY_PROFILE.services || 'professional services'}). Summarize the key insights from this file that are relevant for selling to ${name}.
 
 FILE NAME: ${file.name}
 FILE CONTENT:
@@ -6484,7 +6484,28 @@ ${pain ? `  Pain: ${pain}` : ''}${linkedin ? `\n  Signal: ${linkedin}` : ''}`;
             `- ${F(o,'Deal/Opp name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`
           ).join('\n');
 
-          const prompt = `You are a senior B2B sales intelligence analyst. Generate a Sales Intelligence Radar for the following account. Return ONLY valid JSON.
+          // Our company offering — from COMPANY_PROFILE + real solutions from Airtable
+          const cp = COMPANY_PROFILE;
+          const allSolutions = data.solutions || [];
+          const accSolIds = account ? linkedIds(account, 'Solutions') : [];
+          const accSolutions = accSolIds.length > 0
+            ? allSolutions.filter(s => accSolIds.includes(s.id))
+            : allSolutions; // if no solutions linked to account, use all available
+          const solutionsList = accSolutions.slice(0, 12).map(s => {
+            const name = F(s, 'Name') || '';
+            const desc = (F(s, 'Description') || F(s, 'Info') || '').slice(0, 150);
+            const km = (F(s, 'Key Message') || '').slice(0, 100);
+            return `• ${name}${desc ? ` — ${desc}` : ''}${km ? ` | Key message: ${km}` : ''}`;
+          }).join('\n');
+
+          const prompt = `You are a senior B2B sales intelligence analyst working for ${cp.companyName || 'our company'}.
+${cp.services ? `Our services: ${cp.services}` : ''}
+${cp.goals ? `Strategic focus: ${cp.goals}` : ''}
+
+OUR SOLUTIONS / OFFERINGS:
+${solutionsList || cp.services || 'Not specified'}
+
+Generate a Sales Intelligence Radar for the following account. All analysis must be grounded in how OUR specific solutions above can address this account's needs. Return ONLY valid JSON.
 
 ACCOUNT: ${accName}
 Industry: ${accIndustry} · Country: ${accCountry} · Size: ${accSize}
@@ -6507,14 +6528,14 @@ ${outreachSummary || 'No outreach history'}
 OPEN OPPORTUNITIES:
 ${oppsSummary || 'None'}
 
-Return a JSON object with EXACTLY these keys. Be specific and data-driven. Never use generic platitudes.
+Return a JSON object with EXACTLY these keys. Be specific and data-driven. Reference our actual solutions by name when relevant.
 
 {
-  "tldr": "3 sentences max: biggest opportunity right now, key risk, one immediate action",
+  "tldr": "3 sentences max: biggest opportunity right now (referencing a specific solution if applicable), key risk, one immediate action",
   "est_budget": "Estimated annual tech/services budget range based on company size and industry. E.g. '$2M–5M'. If unknown write 'Unknown — discovery needed'",
   "portfolio_label": "1 line: what category of buyer are they? e.g. 'Digital transformation leader, early AI adopter'",
   "key_developments": [
-    { "headline": "...", "signal": "what this means for us", "source": "News/Intel/LinkedIn" }
+    { "headline": "...", "signal": "what this means for our specific solutions and why it's an opening", "source": "News/Intel/LinkedIn" }
   ],
   "financial_signals": "2-3 sentences on financial health, investment activity, budget signals, hiring trends that imply budget",
   "people_moves": [
@@ -6522,24 +6543,24 @@ Return a JSON object with EXACTLY these keys. Be specific and data-driven. Never
   ],
   "social_sentiment": "1-2 sentences: what is the company publicly saying/signaling on LinkedIn or press? Tone: growth, caution, cost-cutting?",
   "tech_stack": [
-    { "tool": "tool or platform name", "category": "CRM/ERP/Cloud/Analytics/etc", "opportunity": "how we can replace, complement or integrate with this" }
+    { "tool": "tool or platform name", "category": "CRM/ERP/Cloud/Analytics/etc", "opportunity": "how one of our specific solutions can replace, complement or integrate with this" }
   ],
-  "competitive": "2-3 sentences: who else could they be evaluating? What is our differentiation vs likely competitors?",
-  "hiring_signals": "1-2 sentences: what roles are they hiring that reveal strategic priorities?",
+  "competitive": "2-3 sentences: who else could they be evaluating? What is our differentiation with our specific solutions vs likely competitors?",
+  "hiring_signals": "1-2 sentences: what roles are they hiring that reveal strategic priorities and align with our solutions?",
   "upcoming_events": [
-    { "event": "...", "date": "...", "angle": "how to use this as an outreach hook or meeting trigger" }
+    { "event": "...", "date": "...", "angle": "how to use this as an outreach hook, referencing a relevant solution if applicable" }
   ],
   "recommended_actions": [
-    { "priority": 1, "stakeholder": "Name or role", "temperature": "HOT/WARM/COLD", "action": "specific action", "channel": "LinkedIn/Email/Phone/WhatsApp", "rationale": "why now" }
+    { "priority": 1, "stakeholder": "Name or role", "temperature": "HOT/WARM/COLD", "action": "specific action mentioning which solution to lead with", "channel": "LinkedIn/Email/Phone/WhatsApp", "rationale": "why now and why this solution fits" }
   ]
 }
 
 Rules:
 - key_developments: 2-4 items based on real news/intel provided
 - people_moves: only include if there are actual signals, otherwise empty array []
-- tech_stack: 2-5 tools you can infer from industry/description/news
+- tech_stack: 2-5 tools you can infer from industry/description/news. Always connect opportunity to one of our specific solutions
 - upcoming_events: only if you can infer real events (conferences, fiscal year end, announced launches), otherwise []
-- recommended_actions: 3-5 actions, ordered by priority, using real stakeholder names from the data
+- recommended_actions: 3-5 actions, ordered by priority, using real stakeholder names from the data. Always name which solution to lead with
 - Return ONLY valid JSON. No markdown. No commentary.`;
 
           const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 2800 });
