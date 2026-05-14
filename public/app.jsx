@@ -1009,29 +1009,15 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
 
             {/* AI Message Generator toggle */}
-            <div style={{ marginBottom: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ marginBottom: 12 }}>
               <button
                 onClick={() => setShowAIGenerator(v => !v)}
-                style={{ padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                style={{ width: '100%', padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
                   background: showAIGenerator ? 'rgba(91,191,181,0.15)' : 'rgba(91,191,181,0.07)',
                   border: '1px solid rgba(91,191,181,0.35)', color: 'var(--globant-green)',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>✨ Generate Message</span>
                 <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{showAIGenerator ? '▲' : '▼'}</span>
-              </button>
-              <button
-                onClick={() => {
-                  // Save stakeholder ID to sessionStorage so LandingsHub can pick it up
-                  try { sessionStorage.setItem('oike_landing_prefill_stakeholder', stakeholder.id); } catch {}
-                  // Navigate to landings page
-                  window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }));
-                  if (onClose) onClose();
-                }}
-                style={{ padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                  background: 'rgba(167,139,250,0.12)',
-                  border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                📨 Generate Landing
               </button>
             </div>
 
@@ -5301,7 +5287,7 @@ Pain points must be specific to their role, reference industry challenges, and c
 
     // ============ CP BRIEFINGS ============
     function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, goToAccount, goToProposal }) {
-      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [], campaigns = [] } = data;
+      const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [], campaigns = [], landings = [] } = data;
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedAccountId, setSelectedAccountId] = useState('');
       const isAdmin = CURRENT_USER?.role === 'admin';
@@ -7793,44 +7779,89 @@ Rules:
                   .sort((a,b) => new Date(b.fields?.['Created']||0) - new Date(a.fields?.['Created']||0));
                 const STATUS_COLOR = { Draft:'#9ca3af', Presented:'#60a5fa', 'Under Review':'#fb923c', Accepted:'#4ade80', Rejected:'#f87171', Expired:'#6b7280' };
                 const STATUS_BG    = { Draft:'rgba(156,163,175,0.15)', Presented:'rgba(96,165,250,0.15)', 'Under Review':'rgba(251,146,60,0.15)', Accepted:'rgba(74,222,128,0.15)', Rejected:'rgba(248,113,113,0.15)', Expired:'rgba(107,114,128,0.15)' };
+                const accStakeholderIdSet = new Set(accStakeholders.map(s => s.id));
+                const accLandings = landings.filter(l => linkedIds(l,'Stakeholder').some(stkId => accStakeholderIdSet.has(stkId)))
+                  .sort((a,b) => new Date(b.createdTime||0) - new Date(a.createdTime||0));
+                const LANDING_STATUS_COLOR = { Draft:'#a78bfa', Sent:'#4ade80', Archived:'#6b7280' };
+                const LANDING_STATUS_BG    = { Draft:'rgba(167,139,250,0.15)', Sent:'rgba(74,222,128,0.15)', Archived:'rgba(107,114,128,0.15)' };
                 return (
-                  <div className="card">
-                    <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <h3>📋 Presentations ({accProposals.length})</h3>
-                      <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
-                        onClick={() => goToProposal && goToProposal()}>
-                        + New Presentation
-                      </button>
-                    </div>
-                    {accProposals.length === 0 ? (
-                      <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No presentations for this account yet.</p>
-                    ) : (
-                      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                        {accProposals.map(p => {
-                          const status = F(p,'Status') || 'Draft';
-                          const solNames = linkedIds(p,'Solutions').map(id => { const s = (data.solutions||[]).find(x=>x.id===id); return s ? F(s,'Name') : null; }).filter(Boolean);
-                          const amount = p.fields?.['Amount'];
-                          const docs = p.fields?.['Document'];
-                          return (
-                            <div key={p.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)', cursor:'pointer' }}
-                              onClick={() => goToProposal && goToProposal(p.id)}>
-                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
-                                <div style={{ fontWeight:700, fontSize:13 }}>{F(p,'Title')}</div>
-                                <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
-                                  {amount && <span style={{ fontWeight:700, color:'var(--globant-green)', fontSize:12 }}>{formatCurrency(amount)}</span>}
-                                  <span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>{status}</span>
+                  <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+                    {/* Proposals section */}
+                    <div className="card">
+                      <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <h3>📋 Presentations ({accProposals.length})</h3>
+                        <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
+                          onClick={() => {
+                            try { sessionStorage.setItem('oike_proposal_prefill_account', account.id); } catch {}
+                            goToProposal && goToProposal();
+                          }}>
+                          + New Proposal
+                        </button>
+                      </div>
+                      {accProposals.length === 0 ? (
+                        <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No presentations for this account yet.</p>
+                      ) : (
+                        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                          {accProposals.map(p => {
+                            const status = F(p,'Status') || 'Draft';
+                            const solNames = linkedIds(p,'Solutions').map(id => { const s = (data.solutions||[]).find(x=>x.id===id); return s ? F(s,'Name') : null; }).filter(Boolean);
+                            const amount = p.fields?.['Amount'];
+                            const docs = p.fields?.['Document'];
+                            return (
+                              <div key={p.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)', cursor:'pointer' }}
+                                onClick={() => goToProposal && goToProposal(p.id)}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
+                                  <div style={{ fontWeight:700, fontSize:13 }}>{F(p,'Title')}</div>
+                                  <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+                                    {amount && <span style={{ fontWeight:700, color:'var(--globant-green)', fontSize:12 }}>{formatCurrency(amount)}</span>}
+                                    <span style={{ background:STATUS_BG[status], color:STATUS_COLOR[status], borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>{status}</span>
+                                  </div>
+                                </div>
+                                <div style={{ display:'flex', gap:12, fontSize:11, color:'var(--globant-muted)' }}>
+                                  {solNames.length > 0 && <span>🛠️ {solNames.join(', ')}</span>}
+                                  {F(p,'Presented Date') && <span>📅 {formatDate(F(p,'Presented Date'))}</span>}
+                                  {docs && Array.isArray(docs) && docs.length > 0 && <span>📎 {docs.length} doc{docs.length > 1 ? 's' : ''}</span>}
                                 </div>
                               </div>
-                              <div style={{ display:'flex', gap:12, fontSize:11, color:'var(--globant-muted)' }}>
-                                {solNames.length > 0 && <span>🛠️ {solNames.join(', ')}</span>}
-                                {F(p,'Presented Date') && <span>📅 {formatDate(F(p,'Presented Date'))}</span>}
-                                {docs && Array.isArray(docs) && docs.length > 0 && <span>📎 {docs.length} doc{docs.length > 1 ? 's' : ''}</span>}
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* Landings section */}
+                    <div className="card">
+                      <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <h3>📨 Landings ({accLandings.length})</h3>
+                        <button className="action-btn btn-primary" style={{ fontSize:11, padding:'4px 12px' }}
+                          onClick={() => {
+                            try { sessionStorage.setItem('oike_landing_prefill_account', account.id); } catch {}
+                            window.dispatchEvent(new CustomEvent('oike:navigate', { detail: { page: 'landings' } }));
+                          }}>
+                          + New Landing
+                        </button>
                       </div>
-                    )}
+                      {accLandings.length === 0 ? (
+                        <p style={{ color:'var(--globant-muted)', fontSize:12 }}>No landings for this account yet.</p>
+                      ) : (
+                        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                          {accLandings.map(l => {
+                            const lStatus = F(l,'Status') || 'Draft';
+                            const stkId = linkedIds(l,'Stakeholder')[0];
+                            const stk = stkId ? stakeholders.find(s => s.id === stkId) : null;
+                            const stkName = stk ? `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim() : '—';
+                            return (
+                              <div key={l.id} style={{ padding:'12px 14px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--globant-border)' }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
+                                  <div style={{ fontWeight:700, fontSize:13 }}>{F(l,'Slug') || l.id}</div>
+                                  <span style={{ background:LANDING_STATUS_BG[lStatus]||'rgba(156,163,175,0.15)', color:LANDING_STATUS_COLOR[lStatus]||'#9ca3af', borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>{lStatus}</span>
+                                </div>
+                                <div style={{ fontSize:11, color:'var(--globant-muted)' }}>👤 {stkName}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
@@ -11668,6 +11699,17 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (clearNavigateProposal) clearNavigateProposal();
         }
       }, [navigateToProposalId, clearNavigateProposal]);
+
+      useEffect(() => {
+        try {
+          const prefillAccId = sessionStorage.getItem('oike_proposal_prefill_account');
+          if (prefillAccId && accounts.find(a => a.id === prefillAccId)) {
+            setForm(f => ({ ...f, accountId: prefillAccId }));
+            setShowNew(true);
+            sessionStorage.removeItem('oike_proposal_prefill_account');
+          }
+        } catch {}
+      }, [accounts.length]);
 
       // Sync notes + PPT + exec summary when switching presentation
       useEffect(() => {
@@ -17208,6 +17250,24 @@ No markdown, no commentary. JSON only.`;
         } catch {}
       }, [stakeholders.length]);
 
+      // ── Check for prefill account from navigation (e.g. from Presentations tab) ──
+      useEffect(() => {
+        try {
+          const prefillAccId = sessionStorage.getItem('oike_landing_prefill_account');
+          if (prefillAccId) {
+            // find first stakeholder of this account to prefill
+            const accStk = stakeholders.filter(s => linkedIds(s, 'Account').includes(prefillAccId));
+            setForm(f => ({
+              ...emptyForm,
+              stakeholderId: accStk.length === 1 ? accStk[0].id : '',
+              slug: accStk.length === 1 ? autoSlugFromStakeholder(accStk[0].id) : '',
+            }));
+            setShowForm(true);
+            sessionStorage.removeItem('oike_landing_prefill_account');
+          }
+        } catch {}
+      }, [stakeholders.length]);
+
       // ── Filtered landings list ──
       const filteredLandings = useMemo(() => landings.filter(l => {
         if (statusFilter && F(l, 'Status') !== statusFilter) return false;
@@ -21186,7 +21246,6 @@ Return ONLY valid JSON.`;
         { icon: '🏢', label: 'Accounts', key: 'accounts', bdr: true },
         { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true },
         { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true },
-        { icon: '📄', label: 'Proposals', key: 'proposals', bdr: true },
         { icon: '📊', label: 'Strategy Overview', key: 'overview' },
         { icon: '🎯', label: 'ICP', key: 'icp' },
         { icon: '🛠️', label: 'Offering Hub', key: 'solutionshub' },
