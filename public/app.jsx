@@ -15766,10 +15766,10 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                   <span style={{ fontSize:11, color:'var(--globant-muted)' }}>✅ = reached · ⏳ = pending</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {pendingEmailContacts.length > 0 && (
+                  {allEmailContacts.length > 0 && (
                     <button className="action-btn" style={{ fontSize: 11, background: bulkMode ? 'rgba(91,191,181,0.2)' : 'rgba(91,191,181,0.1)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.3)' }}
                       onClick={() => { setBulkMode(!bulkMode); if (bulkMode) { setBulkMsgs({}); setBulkResult(null); } }}>
-                      {bulkMode ? '✕ Close Bulk' : `📣 Bulk Email (${pendingEmailContacts.length})`}
+                      {bulkMode ? '✕ Close Bulk' : pendingEmailContacts.length > 0 ? `📣 Bulk Email (${pendingEmailContacts.length} pending)` : `↩️ Bulk Re-touch (${allEmailContacts.length})`}
                     </button>
                   )}
                   <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setShowAddContacts(!showAddContacts)}>
