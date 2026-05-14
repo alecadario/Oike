@@ -14124,6 +14124,107 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         }
       };
 
+      // ── Open all in Gmail (no integration) — generates on the fly if needed, handles AI text + HTML ──
+      const openAllInGmailNow = async () => {
+        const a = api || new AirtableAPI();
+        // Targets: contacts with email that are explicitly ready (re-touched or pending+generated)
+        // OR pending contacts never interacted with (auto-generate for them)
+        const targets = allEmailContacts.filter(s => {
+          if (!F(s,'Email')) return false;
+          const rawBm = bulkMsgs[s.id];
+          if (!rawBm) return !reachedIds.includes(s.id); // pending, never generated
+          return rawBm.status === 'ready'; // explicitly ready (new or re-touched)
+        });
+        if (targets.length === 0) return;
+        setBulkSending(true);
+        for (let i = 0; i < targets.length; i++) {
+          const s = targets[i];
+          const email = F(s,'Email');
+          const firstName = F(s,'Name') || 'there';
+          const accId = linkedIds(s,'Account')[0];
+          const acc = accId ? accounts.find(a => a.id === accId) : null;
+          const companyName = acc ? F(acc,'Account Name') : '';
+          let subject = '', body = '';
+          try {
+            if (bulkUseHtml) {
+              // HTML mode: generate AI opener, use custom subject
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'generating', error: '' } }));
+              const opener = await generateContactOpener(s);
+              subject = emailTplSubject.trim()
+                ? emailTplSubject.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{company\}\}/g, companyName)
+                : `${F(selectedCampaign,'Name')||'Hello'} — for ${firstName} at ${companyName||'your team'}`;
+              body = opener;
+              setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: opener, status: 'ready', error: '' } }));
+            } else {
+              // AI text mode: use existing message or generate inline
+              const existing = bulkMsgs[s.id]?.msg;
+              if (existing) {
+                const lines = existing.split('\n');
+                const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${F(selectedCampaign,'Name')||'Campaign'} — ${firstName}`;
+                body = si !== -1 ? lines.slice(si+1).join('\n').trim() : existing;
+              } else {
+                // Generate full personalized email inline
+                setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'generating', error: '' } }));
+                const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+                const role = F(s,'Role') || '';
+                const influence = F(s,'Level of Influence') || '';
+                const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,300);
+                const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,200);
+                const accNews = acc ? (F(acc,'Recent News')||'').slice(0,150) : '';
+                const sOut = outreach.filter(o => linkedIds(o,'Stakeholder').includes(s.id))
+                  .sort((a,b) => new Date(b.fields?.['Date']||0) - new Date(a.fields?.['Date']||0))
+                  .slice(0,2).map(o => `[${F(o,'Channel')||'?'} · ${o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '?'}] ${(F(o,'Message')||'').slice(0,100)}`).join('\n');
+                const campaignName = F(selectedCampaign,'Name') || '';
+                const campaignType = F(selectedCampaign,'Type') || '';
+                const template = F(selectedCampaign,'Message Template') || '';
+                const assetUrl = F(selectedCampaign,'Asset URL') || '';
+                const campaignContext = (F(selectedCampaign,'Context') || '').slice(0,600);
+                const campaignAiSummary = (F(selectedCampaign,'AI Summary') || '').slice(0,600);
+                const prompt = `B2B sales rep. Write ONE personalized email for this campaign. Start with "Subject: [subject]", blank line, body. Max 3 sentences. No fluff.
+
+CONTACT: ${sName} | ${role}${influence ? ` (${influence})` : ''} | ${companyName}
+${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : ''}${accNews ? `\nCompany news: ${accNews}` : ''}
+History: ${sOut || 'First contact'}
+CAMPAIGN: "${campaignName}" (${campaignType})
+${campaignContext ? `CAMPAIGN CONTEXT:\n${campaignContext}\n` : ''}${campaignAiSummary ? `STRATEGIC BRIEF:\n${campaignAiSummary}\n` : ''}${template ? `Angle (rewrite for this person, DO NOT copy verbatim): "${template.slice(0,300)}"` : ''}${assetUrl ? `\nAsset: ${assetUrl}` : ''}
+Sender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}
+BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.`;
+                const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
+                const lines = msg.trim().split('\n');
+                const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${campaignName} — ${firstName}`;
+                body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg.trim();
+                setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: msg.trim(), status: 'ready', error: '' } }));
+              }
+            }
+            window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+            // Log activity
+            const accIds = linkedIds(s,'Account');
+            const actFields = {
+              'Activity Name': `Email — ${new Date().toLocaleDateString('en-US')}`,
+              'Channel': 'Email', 'Status': 'Sent', 'Message': body,
+              'Stakeholder': [s.id], 'Date': new Date().toISOString(),
+              'Logged By': CURRENT_USER?.name || '',
+              ...(accIds.length ? { 'Account': accIds } : {}),
+              ...(selectedCampaign?.id ? { 'Campaign': [selectedCampaign.id] } : {}),
+            };
+            if (onAddRecord) onAddRecord('outreach', actFields);
+            a.createRecord(TABLE_IDS.outreach, actFields).catch(e => console.error('[open-all-gmail] log failed:', e));
+            a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+              'Stakeholders Reached': [...new Set([...linkedIds(selectedCampaign,'Stakeholders Reached'), s.id])],
+              'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
+            }).catch(() => {});
+            setBulkMsgs(prev => ({ ...prev, [s.id]: { ...(prev[s.id]||{}), status: 'sent' } }));
+          } catch(e) {
+            setBulkMsgs(prev => ({ ...prev, [s.id]: { msg: '', status: 'error', error: e.message || 'Failed' } }));
+          }
+          if (i < targets.length - 1) await new Promise(r => setTimeout(r, 700));
+        }
+        setBulkSending(false);
+        if (onLogActivity) onLogActivity();
+      };
+
       // ── Bulk Email: send all ready messages via Gmail API ──
       const executeBulkSend = async () => {
         setBulkSending(true);
@@ -15623,61 +15724,43 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         {generating ? '⏳ Generating...' : hasMessages ? '🔄 Regenerate All' : '✨ Generate Messages'}
                       </button>
                     )}
-                    {bulkUseHtml ? (
+                    {gmailConn && bulkUseHtml && (
                       <button className="action-btn" style={{ fontSize: 11, background: bulkDraftMode ? 'rgba(251,191,36,0.15)' : 'rgba(96,165,250,0.15)', color: bulkDraftMode ? '#fbbf24' : '#60a5fa', border: `1px solid ${bulkDraftMode ? 'rgba(251,191,36,0.3)' : 'rgba(96,165,250,0.3)'}`, fontWeight: 700 }}
-                        disabled={bulkSending || !gmailConn} onClick={executeBulkSendHtml}>
+                        disabled={bulkSending} onClick={executeBulkSendHtml}>
                         {bulkSending ? '⏳ Processing...' : bulkDraftMode ? `📝 Draft all (${pendingEmailContacts.filter(s=>!!F(s,'Email')).length})` : `📧 Send HTML to all (${pendingEmailContacts.filter(s=>!!F(s,'Email')).length})`}
                       </button>
-                    ) : readyCount > 0 && (
+                    )}
+                    {gmailConn && !bulkUseHtml && readyCount > 0 && (
                       <button className="action-btn" style={{ fontSize: 11, background: bulkDraftMode ? 'rgba(251,191,36,0.15)' : 'rgba(91,191,181,0.15)', color: bulkDraftMode ? '#fbbf24' : 'var(--globant-green)', border: `1px solid ${bulkDraftMode ? 'rgba(251,191,36,0.3)' : 'rgba(91,191,181,0.3)'}`, fontWeight: 700 }}
-                        disabled={bulkSending || !gmailConn} onClick={executeBulkSend}>
+                        disabled={bulkSending} onClick={executeBulkSend}>
                         {bulkSending ? '⏳ Processing...' : bulkDraftMode ? `📝 Draft All (${readyCount})` : `✉️ Send All (${readyCount})`}
                       </button>
                     )}
-                    {!gmailConn && readyCount > 0 && (
-                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', fontWeight: 700 }}
-                        onClick={async () => {
-                          const ready = pendingEmailContacts.filter(s => bulkMsgs[s.id]?.status === 'ready' && !!F(s,'Email'));
-                          const a = api || new AirtableAPI();
-                          for (let i = 0; i < ready.length; i++) {
-                            const s = ready[i];
-                            const msg = bulkMsgs[s.id].msg;
-                            const email = F(s,'Email');
-                            const lines = msg.split('\n');
-                            const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
-                            const subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${F(selectedCampaign,'Name')||'Campaign'} — ${F(s,'Name')||''}`;
-                            const body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg;
-                            window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-                            // Log activity
-                            const accIds = linkedIds(s,'Account');
-                            const actFields = {
-                              'Activity Name': `Email — ${new Date().toLocaleDateString('en-US')}`,
-                              'Channel': 'Email', 'Status': 'Sent', 'Message': body,
-                              'Stakeholder': [s.id], 'Date': new Date().toISOString(),
-                              'Logged By': CURRENT_USER?.name || '',
-                              ...(accIds.length ? { 'Account': accIds } : {}),
-                              ...(selectedCampaign?.id ? { 'Campaign': [selectedCampaign.id] } : {}),
-                            };
-                            if (onAddRecord) onAddRecord('outreach', actFields);
-                            a.createRecord(TABLE_IDS.outreach, actFields).catch(e => console.error('[gmail-open] outreach log failed:', e));
-                            a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
-                              'Stakeholders Reached': [...new Set([...linkedIds(selectedCampaign,'Stakeholders Reached'), s.id])],
-                              'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
-                            }).catch(() => {});
-                            setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
-                            if (i < ready.length - 1) await new Promise(r => setTimeout(r, 600));
-                          }
-                          if (onLogActivity) onLogActivity();
-                        }}>
-                        📬 Open all in Gmail ({readyCount})
-                      </button>
-                    )}
-                    {!gmailConn && <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>💡 No Gmail connected — use "Open in Gmail" per contact or open all above</span>}
+                    {!gmailConn && (() => {
+                      const gmailTargetCount = allEmailContacts.filter(s => {
+                        if (!F(s,'Email')) return false;
+                        const rawBm = bulkMsgs[s.id];
+                        if (!rawBm) return !reachedIds.includes(s.id);
+                        return rawBm.status === 'ready';
+                      }).length;
+                      return (
+                        <button className="action-btn" style={{ fontSize: 11, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', fontWeight: 700 }}
+                          disabled={bulkSending || gmailTargetCount === 0} onClick={openAllInGmailNow}>
+                          {bulkSending ? '⏳ Generating & opening...' : `📬 Open all in Gmail${gmailTargetCount > 0 ? ` (${gmailTargetCount})` : ' — mark contacts for re-touch first'}`}
+                        </button>
+                      );
+                    })()}
+                    {!gmailConn && <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>💡 No Gmail connected — generates & opens all at once</span>}
                   </div>
                   {hasMessages && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
                       {allEmailContacts.map(s => {
-                        const bm = bulkMsgs[s.id] || (reachedIds.includes(s.id) ? { msg: '', status: 'sent', error: '' } : {});
+                        const isReached = reachedIds.includes(s.id);
+                        const rawBm = bulkMsgs[s.id];
+                        // If contact is already reached and has no active new message, show as sent so Re-touch appears
+                        const bm = (!rawBm || (isReached && rawBm.status === 'ready' && !rawBm.msg))
+                          ? (isReached ? { msg: '', status: 'sent', error: '' } : (rawBm || {}))
+                          : rawBm;
                         const accId = linkedIds(s,'Account')[0];
                         const acc = accId ? accounts.find(a => a.id === accId) : null;
                         const STATUS_BADGE = { generating: ['#fbbf24','⏳ Generating'], ready: ['var(--globant-green)','✅ Ready'], sending: ['#60a5fa','📤 Sending...'], sent: ['#4ade80','✅ Sent'], draft: ['#fbbf24','📝 Draft saved'], error: ['#ef4444','❌ Error'] };
