@@ -15052,6 +15052,31 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           </div>
                           <button onClick={() => removeSeqStep(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: 0 }}>✕</button>
                         </div>
+                        {/* Content type toggle */}
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Email content</div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {[
+                              { val: 'ai_text', label: '🤖 AI plain text', desc: 'AI writes a personalized message' },
+                              { val: 'html',    label: '📧 HTML template',  desc: emailTplHtml ? 'Uses your saved HTML template' : '⚠️ No HTML template saved yet' },
+                            ].map(opt => {
+                              const active = (step.contentType || 'ai_text') === opt.val;
+                              const disabled = opt.val === 'html' && !emailTplHtml;
+                              return (
+                                <button key={opt.val}
+                                  onClick={() => !disabled && updateSeqStep(i, 'contentType', opt.val)}
+                                  style={{ flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: active ? 700 : 400, opacity: disabled ? 0.5 : 1,
+                                    background: active ? (opt.val === 'html' ? 'rgba(96,165,250,0.18)' : 'rgba(91,191,181,0.18)') : 'rgba(0,0,0,0.15)',
+                                    color: active ? (opt.val === 'html' ? '#60a5fa' : 'var(--globant-green)') : 'var(--globant-muted)',
+                                    border: `1px solid ${active ? (opt.val === 'html' ? 'rgba(96,165,250,0.4)' : 'rgba(91,191,181,0.4)') : 'var(--globant-border)'}`,
+                                  }}>
+                                  {opt.label}
+                                  <span style={{ display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 }}>{opt.desc}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                         {/* Send mode toggle */}
                         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                           {[{val:'send', label:'🤖 Auto-send', desc:'AI generates and sends directly'}, {val:'draft', label:'📝 Draft first', desc:'Creates Gmail draft for your review'}].map(opt => (
@@ -15067,24 +15092,47 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                             </button>
                           ))}
                         </div>
-                        {/* AI message preview for this step */}
-                        <div>
-                          <button
-                            onClick={() => generateStepPreview(i, step)}
-                            disabled={generatingStepPreview === i}
-                            style={{ background:'none', border:'1px dashed rgba(167,139,250,0.4)', borderRadius:6, color:'#a78bfa', cursor:'pointer', fontSize:11, padding:'4px 12px', width:'100%', fontWeight:600 }}>
-                            {generatingStepPreview === i ? '⏳ Generating preview...' : stepPreviews[i] ? '🔄 Re-generate preview' : '👁️ Preview AI message for this step'}
-                          </button>
-                          {stepPreviews[i] && (
-                            <div style={{ marginTop:8, padding:'10px 12px', background:'rgba(167,139,250,0.06)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:6 }}>
-                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                                <span style={{ fontSize:10, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.5 }}>Sample message — Step {i+1}</span>
-                                <button onClick={() => { try { navigator.clipboard.writeText(stepPreviews[i]); } catch {} }} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:10 }}>📋 Copy</button>
+                        {/* Preview for this step */}
+                        {(step.contentType || 'ai_text') === 'html' ? (
+                          emailTplHtml ? (
+                            <div>
+                              <div style={{ fontSize:10, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>📧 HTML Template Preview</div>
+                              <div style={{ borderRadius:6, overflow:'hidden', border:'1px solid rgba(96,165,250,0.25)', background:'#fff' }}>
+                                <iframe
+                                  srcDoc={emailTplHtml}
+                                  style={{ width:'100%', height:320, border:'none', display:'block' }}
+                                  sandbox="allow-same-origin"
+                                  title={`HTML preview step ${i+1}`}
+                                />
                               </div>
-                              <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{stepPreviews[i]}</div>
+                              <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>
+                                AI will inject a personalized opener per contact before sending.
+                              </div>
                             </div>
-                          )}
-                        </div>
+                          ) : (
+                            <div style={{ fontSize:11, color:'#fbbf24', padding:'6px 10px', background:'rgba(251,191,36,0.08)', borderRadius:6, border:'1px solid rgba(251,191,36,0.2)' }}>
+                              ⚠️ No HTML template saved yet — build one in the Email Template section below, then come back and select it here.
+                            </div>
+                          )
+                        ) : (
+                          <div>
+                            <button
+                              onClick={() => generateStepPreview(i, step)}
+                              disabled={generatingStepPreview === i}
+                              style={{ background:'none', border:'1px dashed rgba(167,139,250,0.4)', borderRadius:6, color:'#a78bfa', cursor:'pointer', fontSize:11, padding:'4px 12px', width:'100%', fontWeight:600 }}>
+                              {generatingStepPreview === i ? '⏳ Generating preview...' : stepPreviews[i] ? '🔄 Re-generate preview' : '👁️ Preview AI message for this step'}
+                            </button>
+                            {stepPreviews[i] && (
+                              <div style={{ marginTop:8, padding:'10px 12px', background:'rgba(167,139,250,0.06)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:6 }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                                  <span style={{ fontSize:10, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.5 }}>Sample message — Step {i+1}</span>
+                                  <button onClick={() => { try { navigator.clipboard.writeText(stepPreviews[i]); } catch {} }} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:10 }}>📋 Copy</button>
+                                </div>
+                                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{stepPreviews[i]}</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
