@@ -14004,6 +14004,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [showCampaignLandings, setShowCampaignLandings] = useState(false);
       const [emailTplHtml, setEmailTplHtml] = useState('');
       const [emailTplDirty, setEmailTplDirty] = useState(false);
+      const [emailTplSubject, setEmailTplSubject] = useState('');
       const [generatingTpl, setGeneratingTpl] = useState(false);
       const [savingTpl, setSavingTpl] = useState(false);
       const [previewTpl, setPreviewTpl] = useState(false);
@@ -14547,8 +14548,10 @@ Return ONLY the 1-2 sentences in ${langLabel}. No greeting, no subject line.`;
               .replace(/\{\{company\}\}/g, companyName)
               .replace(/\{\{ai_opener\}\}/g, opener);
 
-            // Extract subject from campaign name
-            const subject = `${F(selectedCampaign,'Name')||'Hello'} — for ${firstName} at ${companyName || 'your team'}`;
+            // Subject: use custom subject if set, otherwise fall back to campaign name
+            const subject = emailTplSubject.trim()
+              ? emailTplSubject.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{company\}\}/g, companyName)
+              : `${F(selectedCampaign,'Name')||'Hello'} — for ${firstName} at ${companyName || 'your team'}`;
 
             const res = await fetch('/api/gmail/send', {
               method: 'POST',
@@ -15269,7 +15272,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               </div>
               {showEmailTpl && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <select value={tplLanguage} onChange={e => {
                       const lang = e.target.value;
                       setTplLanguage(lang);
@@ -15298,6 +15301,18 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         {savingTpl ? '⏳ Saving...' : '💾 Save'}
                       </button>
                     )}
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 4 }}>
+                      Subject line <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— supports <code style={{ fontSize: 10 }}>{'{{first_name}}'}</code> and <code style={{ fontSize: 10 }}>{'{{company}}'}</code></span>
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ width: '100%', fontSize: 12, padding: '6px 10px' }}
+                      placeholder={`${F(selectedCampaign,'Name')||'Campaign'} — for {{first_name}} at {{company}}`}
+                      value={emailTplSubject}
+                      onChange={e => setEmailTplSubject(e.target.value)}
+                    />
                   </div>
 
                   {emailTplHtml && (
