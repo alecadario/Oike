@@ -13111,16 +13111,12 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
               <h1>Proposals</h1>
-              <p>Generate client proposals and track commercial presentations</p>
+              <p>Generate and track client proposals</p>
             </div>
             <div style={{ display:'flex', gap:10, marginTop:4 }}>
-              <button className="action-btn btn-ghost" style={{ fontSize:12, padding:'8px 16px' }}
-                onClick={() => { setGenForm(DEFAULT_GEN); setGenStep(1); setShowGenerator(true); }}>
-                🎨 Generate Proposal
-              </button>
               <button className="action-btn btn-primary" style={{ fontSize:12, padding:'8px 16px' }}
-                onClick={() => { setShowNew(true); resetForm(); }}>
-                ➕ New Presentation
+                onClick={() => { setGenForm(DEFAULT_GEN); setGenStep(1); setShowGenerator(true); }}>
+                + Proposal
               </button>
             </div>
           </div>
@@ -13630,7 +13626,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
 
           {/* Filters */}
           <div className="filters-row" style={{ display:'flex', gap:10, alignItems:'center', marginBottom:16 }}>
-            <input className="input-field" style={{ maxWidth:300 }} placeholder="Search presentations..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <input className="input-field" style={{ maxWidth:300 }} placeholder="Search proposals..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             <select className="input-field" style={{ maxWidth:220, fontSize:12 }} value={filterAccountId} onChange={e => setFilterAccountId(e.target.value)}>
               <option value="">🏢 All accounts</option>
               {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
@@ -13659,7 +13655,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
                 </tr></thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--globant-muted)', padding:24 }}>No presentations found.</td></tr>
+                    <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--globant-muted)', padding:24 }}>No proposals found.</td></tr>
                   ) : filtered.map(p => {
                     const status = F(p,'Status') || 'Draft';
                     const acc = accounts.find(a => linkedIds(p,'Account').includes(a.id));
@@ -13686,7 +13682,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
     }
 
     // ============ CAMPAIGNS HUB ============
-    function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, campaignPrefill, clearCampaignPrefill }) {
+    function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, campaignPrefill, clearCampaignPrefill }) {
       const { campaigns = [], stakeholders = [], accounts = [], outreach = [], events = [], landings = [] } = data;
 
       const [selectedId, setSelectedId] = useState(null);
@@ -13696,6 +13692,10 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
       const [editingCampaign, setEditingCampaign] = useState(null);
       const [form, setForm] = useState({ name:'', type:'White Paper', status:'Draft', messageTemplate:'', assetUrl:'', startDate:'', goal:'', context:'', assignedIds: [] });
       const [saving, setSaving] = useState(false);
+      const [hubTab, setHubTab] = useState('campaigns');
+      const [tplExpanded, setTplExpanded] = useState(false);
+      const [ctxExpanded, setCtxExpanded] = useState(false);
+      const [sumExpanded, setSumExpanded] = useState(false);
 
       // Handle campaignPrefill coming from Report Builder (Create campaign from insight)
       useEffect(() => {
@@ -14690,8 +14690,20 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
             {/* Template reference */}
             {template && (
               <div className="card" style={{ marginBottom:14, borderLeft:'3px solid var(--globant-green)', padding:'10px 14px' }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', marginBottom:4, textTransform:'uppercase', letterSpacing:1 }}>Message Template / Reference Angle</div>
-                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{template}</div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:1 }}>Message Template / Reference Angle</div>
+                  {template.length > 200 && (
+                    <button onClick={() => setTplExpanded(x=>!x)} style={{ background:'none', border:'none', color:'var(--globant-green)', cursor:'pointer', fontSize:11, padding:0, fontWeight:600 }}>
+                      {tplExpanded ? '▲ Show less' : '▼ Show more'}
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, whiteSpace:'pre-wrap', overflow:'hidden', maxHeight: tplExpanded || template.length <= 200 ? 'none' : '72px', position:'relative' }}>
+                  {template}
+                  {!tplExpanded && template.length > 200 && (
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, height:32, background:'linear-gradient(transparent, var(--globant-card))' }} />
+                  )}
+                </div>
               </div>
             )}
 
@@ -14702,6 +14714,11 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-accent)', textTransform: 'uppercase', letterSpacing: 1 }}>📝 Campaign Context & Files</div>
                   <div style={{ display: 'flex', gap: 6 }}>
+                    {!editingContext && F(selectedCampaign,'Context') && (F(selectedCampaign,'Context')||'').length > 150 && (
+                      <button onClick={() => setCtxExpanded(x=>!x)} style={{ background:'none', border:'none', color:'var(--globant-accent)', cursor:'pointer', fontSize:10, padding:0, fontWeight:600 }}>
+                        {ctxExpanded ? '▲' : '▼'}
+                      </button>
+                    )}
                     {!editingContext ? (
                       <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
                         onClick={() => { setContextDraft(F(selectedCampaign, 'Context') || ''); setEditingContext(true); }}>
@@ -14732,16 +14749,21 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                     onChange={e => setContextDraft(e.target.value)} />
                 ) : (
                   F(selectedCampaign, 'Context') ? (
-                    <FileNotesRenderer
-                      notes={F(selectedCampaign, 'Context')}
-                      accentColor="var(--globant-accent)"
-                      onUpdateNotes={async (updated) => {
-                        const a = api || new AirtableAPI();
-                        await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Context': updated });
-                        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Context': updated });
-                        if (onLogActivity) onLogActivity();
-                      }}
-                    />
+                    <div style={{ overflow:'hidden', maxHeight: ctxExpanded || (F(selectedCampaign,'Context')||'').length <= 150 ? 'none' : '80px', position:'relative', transition:'max-height 0.2s' }}>
+                      <FileNotesRenderer
+                        notes={F(selectedCampaign, 'Context')}
+                        accentColor="var(--globant-accent)"
+                        onUpdateNotes={async (updated) => {
+                          const a = api || new AirtableAPI();
+                          await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Context': updated });
+                          if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Context': updated });
+                          if (onLogActivity) onLogActivity();
+                        }}
+                      />
+                      {!ctxExpanded && (F(selectedCampaign,'Context')||'').length > 150 && (
+                        <div style={{ position:'absolute', bottom:0, left:0, right:0, height:32, background:'linear-gradient(transparent, var(--globant-card))' }} />
+                      )}
+                    </div>
                   ) : (
                     <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
                       No context yet — click "Add Context" to write manually, or "Upload File" to let AI extract key points from a PDF / doc.
@@ -14754,12 +14776,20 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', padding: '12px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: 1 }}>🧠 AI Summary</div>
-                  <button className="action-btn btn-primary" style={{ fontSize: 10 }}
-                    onClick={generateCampaignSummary} disabled={generatingSummary}>
-                    {generatingSummary ? '⏳ Generating...' : F(selectedCampaign, 'AI Summary') ? '🔄 Regenerate' : '✨ Generate Summary'}
-                  </button>
+                  <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                    {F(selectedCampaign,'AI Summary') && (F(selectedCampaign,'AI Summary')||'').length > 150 && (
+                      <button onClick={() => setSumExpanded(x=>!x)} style={{ background:'none', border:'none', color:'var(--globant-green)', cursor:'pointer', fontSize:10, padding:0, fontWeight:600 }}>
+                        {sumExpanded ? '▲' : '▼'}
+                      </button>
+                    )}
+                    <button className="action-btn btn-primary" style={{ fontSize: 10 }}
+                      onClick={generateCampaignSummary} disabled={generatingSummary}>
+                      {generatingSummary ? '⏳ Generating...' : F(selectedCampaign, 'AI Summary') ? '🔄 Regenerate' : '✨ Generate Summary'}
+                    </button>
+                  </div>
                 </div>
                 {F(selectedCampaign, 'AI Summary') ? (
+                  <div style={{ overflow:'hidden', maxHeight: sumExpanded || (F(selectedCampaign,'AI Summary')||'').length <= 150 ? 'none' : '80px', position:'relative', transition:'max-height 0.2s' }}>
                   <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6 }}>
                     {(() => {
                       const summaryText = F(selectedCampaign, 'AI Summary');
@@ -14782,6 +14812,10 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         return <p key={i} style={{ margin: '3px 0' }}>{parseInline(line)}</p>;
                       });
                     })()}
+                  </div>
+                  {!sumExpanded && (F(selectedCampaign,'AI Summary')||'').length > 150 && (
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, height:32, background:'linear-gradient(transparent, var(--globant-card))' }} />
+                  )}
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
@@ -15581,11 +15615,20 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       // ── LIST VIEW ──
       return (
         <div>
-          <div className="page-header">
-            <h1>📣 Campaigns</h1>
-            <p>Targeted outreach campaigns with AI-personalized messages</p>
+          {/* Hub Tab switcher */}
+          <div style={{ display:'flex', gap:0, marginBottom:24, borderBottom:'1px solid var(--globant-border)' }}>
+            {[['campaigns','📣 Campaigns'],['contentlab','✍️ Content Lab']].map(([k,label]) => (
+              <button key={k} onClick={() => setHubTab(k)} style={{ padding:'10px 22px', background:'none', border:'none', borderBottom: hubTab===k ? '2px solid var(--globant-green)' : '2px solid transparent', color: hubTab===k ? 'var(--globant-green)' : 'var(--globant-muted)', fontWeight: hubTab===k ? 700 : 400, fontSize:14, cursor:'pointer', transition:'all 0.15s' }}>
+                {label}
+              </button>
+            ))}
           </div>
 
+          {hubTab === 'contentlab' && (
+            <ContentLab data={data} api={api} onLogActivity={onLogActivity} onAddRecord={onAddRecord} onDeleteRecord={onDeleteRecord} />
+          )}
+
+          {hubTab === 'campaigns' && <div>
           <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
             <input className="input-field" style={{ fontSize:12, flex:1, minWidth:180 }} placeholder="Search campaigns..." value={listSearch} onChange={e=>setListSearch(e.target.value)} />
             <select className="input-field" style={{ fontSize:12, minWidth:140 }} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
@@ -15715,6 +15758,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               </div>
             </div>
           )}
+          </div>}
         </div>
       );
     }
@@ -21407,7 +21451,7 @@ Return ONLY valid JSON.`;
         events: <EventsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToEventId={navigateToEventId} clearNavigateEvent={() => setNavigateToEventId('')} />,
         proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
         insights: <InsightsView data={data} />,
-        campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} campaignPrefill={campaignPrefill} clearCampaignPrefill={() => setCampaignPrefill(null)} />,
+        campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} campaignPrefill={campaignPrefill} clearCampaignPrefill={() => setCampaignPrefill(null)} />,
         contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
         landings: <LandingsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
         reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} onCreateCampaignFromInsight={createCampaignFromInsight} />,
@@ -21428,7 +21472,6 @@ Return ONLY valid JSON.`;
         { icon: '🎯', label: 'ICP', key: 'icp' },
         { icon: '🛠️', label: 'Offering Hub', key: 'solutionshub' },
         { icon: '🎪', label: 'Events', key: 'events' },
-        { icon: '✍️', label: 'Content Lab', key: 'contentlab' },
         { icon: '📈', label: 'Activity Tracker', key: 'activity' },
         { icon: '🧠', label: 'Insights', key: 'insights' },
         { icon: '📧', label: 'Reports', key: 'reports' },
