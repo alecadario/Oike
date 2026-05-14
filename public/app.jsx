@@ -14928,6 +14928,40 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
                 return (
                   <div style={{ marginTop: 12 }}>
+                    {/* Message Template — inline within sequence */}
+                    <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: editingTemplate || F(selectedCampaign,'Message Template') ? 8 : 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: 0.5 }}>✍️ Message Template</span>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {!editingTemplate ? (
+                            <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
+                              onClick={() => { setTemplateDraft(F(selectedCampaign,'Message Template') || ''); setEditingTemplate(true); }}>
+                              {F(selectedCampaign,'Message Template') ? '✏️ Edit' : '➕ Add'}
+                            </button>
+                          ) : (
+                            <>
+                              <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={saveCampaignTemplate} disabled={savingTemplate}>
+                                {savingTemplate ? '⏳' : '💾 Save'}
+                              </button>
+                              <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingTemplate(false)}>Cancel</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {editingTemplate ? (
+                        <textarea
+                          className="input-field"
+                          style={{ width: '100%', minHeight: 100, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}
+                          placeholder="Write the reference angle the AI will personalize per contact..."
+                          value={templateDraft}
+                          onChange={e => setTemplateDraft(e.target.value)}
+                        />
+                      ) : F(selectedCampaign,'Message Template') ? (
+                        <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{F(selectedCampaign,'Message Template')}</div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No template yet — click "Add" to write the angle the AI will use for every step.</div>
+                      )}
+                    </div>
                     {/* Send time config */}
                     <div style={{ display: 'flex', gap: 10, marginBottom: 14, padding: '10px 12px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div>
