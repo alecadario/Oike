@@ -427,7 +427,7 @@ export default async (req?: Request) => {
 
   console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}`);
   return new Response(
-    JSON.stringify({ sent: totalSent, skipped: totalSkipped, errors: totalErrors }),
+    JSON.stringify({ v: 4, sent: totalSent, skipped: totalSkipped, errors: totalErrors }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
 };
