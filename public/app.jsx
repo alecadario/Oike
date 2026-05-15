@@ -333,6 +333,136 @@
       <span className="info-tip">ⓘ<span className="info-tip-text">{text}</span></span>
     );
 
+    // ── Data Enrichment ─────────────────────────────────────────────────────────
+    // Adds _enriched computed fields to stakeholders and accounts after loading.
+    // Called once in loadData so all components benefit without recomputing.
+
+    const REPLY_STATUSES = new Set(['Replied','Received','Meeting Booked','Meeting Confirmed','Interested','Positive Reply']);
+
+    const computeEnrichment = (results) => {
+      const outreach = results.outreach || [];
+      const accounts = results.accounts || [];
+      const proposals = results.proposals || [];
+      const opportunities = results.opportunities || [];
+      const campaigns = results.campaigns || [];
+
+      // Build outreach index per stakeholder for O(1) lookup
+      const outreachByStakeholder = {};
+      outreach.forEach(o => {
+        linkedIds(o, 'Stakeholder').forEach(id => {
+          if (!outreachByStakeholder[id]) outreachByStakeholder[id] = [];
+          outreachByStakeholder[id].push(o);
+        });
+      });
+
+      // ── Enrich stakeholders ──
+      const enrichedStakeholders = (results.stakeholders || []).map(s => {
+        const sOut = (outreachByStakeholder[s.id] || [])
+          .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+        const lastDate = sOut.length > 0 ? new Date(sOut[0].fields?.['Date'] || 0) : null;
+        const now = Date.now();
+        const daysSince = lastDate ? Math.floor((now - lastDate) / 86400000) : null;
+        const replies = sOut.filter(o => REPLY_STATUSES.has(F(o, 'Status')));
+        const replyRate = sOut.length > 0 ? replies.length / sOut.length : 0;
+        const lastChannel = sOut.length > 0 ? (F(sOut[0], 'Channel') || null) : null;
+        const contactedToday = lastDate ? new Date(lastDate).toDateString() === new Date().toDateString() : false;
+
+        // Focus score: multi-factor priority for My Day
+        let focusScore = 0;
+        let focusTag = null;
+        const influence = F(s, 'Level of Influence') || '';
+
+        if (daysSince === null) {
+          focusScore += 30; focusTag = 'nuevo';         // Never contacted
+        } else if (daysSince >= 3 && daysSince <= 7) {
+          focusScore += 55; focusTag = 'urgente';       // Sweet spot follow-up window
+        } else if (daysSince > 7 && daysSince <= 21) {
+          focusScore += 30; focusTag = 'seguimiento';   // Needs follow-up
+        } else if (daysSince > 21 && daysSince <= 45) {
+          focusScore += 15; focusTag = 'reactivar';     // Going cold
+        } else if (daysSince > 45) {
+          focusScore += 5;  focusTag = 'reactivar';     // Very cold
+        }
+        if (influence === 'Decision Maker') focusScore += 25;
+        else if (influence === 'Champion') focusScore += 15;
+        else if (influence === 'Influencer') focusScore += 10;
+        if (replies.length > 0) focusScore += 20;       // Has replied before
+        if (contactedToday) focusScore = 0;             // Already done today
+
+        return {
+          ...s,
+          _enriched: {
+            totalTouches: sOut.length,
+            daysSince,
+            lastDate,
+            replyRate,
+            lastChannel,
+            hasReplied: replies.length > 0,
+            contactedToday,
+            lastOutreach: sOut[0] || null,
+            focusScore,
+            focusTag,
+          }
+        };
+      });
+
+      // ── Enrich accounts ──
+      const enrichedByAccId = {};
+      enrichedStakeholders.forEach(s => {
+        linkedIds(s, 'Account').forEach(accId => {
+          if (!enrichedByAccId[accId]) enrichedByAccId[accId] = [];
+          enrichedByAccId[accId].push(s);
+        });
+      });
+
+      const enrichedAccounts = accounts.map(acc => {
+        const accStk = enrichedByAccId[acc.id] || [];
+        const contacted = accStk.filter(s => s._enriched.totalTouches > 0);
+        const lastDates = contacted.map(s => s._enriched.lastDate).filter(Boolean).sort((a,b) => b - a);
+        const lastContactDate = lastDates[0] || null;
+        const daysSinceAny = lastContactDate ? Math.floor((Date.now() - lastContactDate) / 86400000) : null;
+        const hasActiveProposal = proposals.some(p => linkedIds(p,'Account').includes(acc.id) && !['Closed Lost','Rejected','Declined'].includes(F(p,'Status')));
+        const hasWon = opportunities.some(o => linkedIds(o,'Account').includes(acc.id) && ['Won','Closed Won','Active Client'].includes(F(o,'Stage')));
+        const inActiveCampaign = campaigns.some(c => linkedIds(c,'Account').includes(acc.id) && F(c,'Status') !== 'Inactive');
+
+        // Account diagnosis
+        let diagnosis;
+        if (hasWon)                                      diagnosis = 'won';
+        else if (hasActiveProposal)                      diagnosis = 'proposal_out';
+        else if (contacted.length === 0)                 diagnosis = 'cold_never';
+        else if (daysSinceAny !== null && daysSinceAny > 45) diagnosis = 'stale';
+        else if (daysSinceAny !== null && daysSinceAny <= 14) diagnosis = 'warm_active';
+        else                                             diagnosis = 'cold_no_response';
+
+        return {
+          ...acc,
+          _enriched: {
+            numStakeholders: accStk.length,
+            numContacted: contacted.length,
+            lastContactDate,
+            daysSinceAny,
+            hasActiveProposal,
+            hasWon,
+            inActiveCampaign,
+            diagnosis,
+          }
+        };
+      });
+
+      return { ...results, stakeholders: enrichedStakeholders, accounts: enrichedAccounts };
+    };
+
+    // Diagnosis display config
+    const DIAGNOSIS_CONFIG = {
+      won:             { label: '✅ Active client',   color: '#4ade80', bg: 'rgba(74,222,128,0.12)',  action: 'Expand relationship' },
+      proposal_out:    { label: '📋 Proposal out',    color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  action: 'Follow up on proposal' },
+      warm_active:     { label: '🔥 Active',          color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  action: 'Keep momentum' },
+      cold_no_response:{ label: '🔄 No response',     color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  action: 'Try different channel' },
+      stale:           { label: '💤 Stale 45d+',      color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', action: 'Re-engage with new angle' },
+      cold_never:      { label: '🥶 Not contacted',   color: 'var(--globant-muted)', bg: 'rgba(255,255,255,0.05)', action: 'Start outreach' },
+    };
+    // ────────────────────────────────────────────────────────────────────────────
+
     // ── Stakeholder duplicate detection ──
     // Returns { match, severity: 'hard' | 'soft', reason } or null
     // Hard = email or LinkedIn URL exact match (strong signal)
@@ -3022,16 +3152,15 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       }, [outreach]);
 
       // Stakeholders with outreach but NOT contacted in last 3 days → follow-up pending
-      const followupPending = useMemo(() => {
-        const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 3); cutoff.setHours(0, 0, 0, 0);
+      // ── Daily Focus: smart scored list replacing simple 3-day cutoff ──
+      const dailyFocusItems = useMemo(() => {
+        const campaigns = data.campaigns || [];
         const results = [];
         stakeholders.forEach(s => {
-          const sOutreach = outreach.filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
-            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
-          if (sOutreach.length === 0) return; // never contacted
-          const lastDate = new Date(sOutreach[0].fields?.['Date'] || 0);
-          if (lastDate >= cutoff) return; // contacted recently, skip
-          // Apply filters
+          const e = s._enriched;
+          if (!e) return; // not enriched yet (shouldn't happen)
+          if (e.contactedToday) return; // already handled today
+          // Apply search filters
           if (accountSearch) {
             const term = accountSearch.toLowerCase();
             const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
@@ -3039,11 +3168,25 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           }
           if (selectedInfluence && F(s, 'Level of Influence') !== selectedInfluence) return;
           if (searchName && !(F(s, 'Name') || '').toLowerCase().includes(searchName.toLowerCase())) return;
-          const daysSince = Math.floor((new Date() - lastDate) / (1000*60*60*24));
-          results.push({ s, lastOutreach: sOutreach[0], daysSince, totalTouches: sOutreach.length });
+          // Only show contacts that have been touched (never-touched go to "needs contact" list)
+          if (e.totalTouches === 0) return;
+          // Apply campaign membership bonus to score
+          let score = e.focusScore;
+          const inCampaign = campaigns.some(c => {
+            const assigned = linkedIds(c, 'Assigned Stakeholders');
+            return assigned.includes(s.id) && F(c, 'Status') !== 'Inactive';
+          });
+          if (inCampaign) score += 12;
+          const accId = linkedIds(s, 'Account')[0];
+          const acc = accId ? accounts.find(a => a.id === accId) : null;
+          if (acc?._enriched?.inActiveCampaign) score += 8;
+          results.push({ s, acc, score, tag: e.focusTag, e });
         });
-        return results.sort((a, b) => b.daysSince - a.daysSince);
-      }, [stakeholders, outreach, accounts, accountSearch, selectedInfluence, searchName]);
+        return results.sort((a, b) => b.score - a.score);
+      }, [stakeholders, accounts, data.campaigns, accountSearch, selectedInfluence, searchName]);
+
+      // Backwards-compat alias used by summary line and old section header
+      const followupPending = dailyFocusItems;
 
       // ── Urgent Actions: AI-generated Action Plan tasks, not done, not snoozed for today ──
       const DONE_STATUSES = new Set(['Completado', 'Cerrado', 'Done', 'Closed']);
@@ -3923,75 +4066,109 @@ Output ONLY the message, nothing else.`;
             </div>
           )}
 
-          {/* Group 1: Follow-up Pending */}
-          <div className="card" style={{ borderLeft: '3px solid var(--globant-info)' }}>
-            <div className="card-header">
-              <h3 style={{ color: 'var(--globant-info)' }}>🔵 Follow-up Pending ({followupPending.length})</h3>
-              <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Already contacted — waiting for response or next action</span>
-            </div>
-            {followupPending.length === 0 ? (
-              <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '8px 0' }}>No pending follow-ups right now</p>
-            ) : (
-              <div>
-                {followupPending.map(({ s, lastOutreach, daysSince, totalTouches }) => {
-                  const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
-                  const lastChannel = F(lastOutreach, 'Channel');
-                  const lastMsg = F(lastOutreach, 'Message');
-                  const lastStatus = F(lastOutreach, 'Status');
-                  const phone = F(s, 'Phone number');
-                  const email = F(s, 'Email');
-                  const linkedin = F(s, 'LinkedIn');
-                  const urgencyColor = daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : '#60a5fa';
-                  const urgencyBg = daysSince > 14 ? 'rgba(239,68,68,0.06)' : daysSince > 7 ? 'rgba(251,191,36,0.06)' : 'rgba(96,165,250,0.04)';
-
-                  return (
-                    <div key={s.id} style={{ padding: '14px', marginBottom: 8, borderRadius: 8, background: urgencyBg, borderLeft: `3px solid ${urgencyColor}` }}>
-                      {/* Header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <div>
-                          <span style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}</span>
-                          <span style={{ fontSize: 12, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} · {accNames.join(', ')}</span>
+          {/* Group 1: Daily Focus — scored & tagged */}
+          {(() => {
+            const TAG_CFG = {
+              urgente:    { label: '🔴 Urgente',    color: '#ef4444', bg: 'rgba(239,68,68,0.08)',    border: '#ef4444', desc: 'Ideal follow-up window (3–7d)' },
+              seguimiento:{ label: '🟡 Seguimiento', color: '#fbbf24', bg: 'rgba(251,191,36,0.06)',   border: '#fbbf24', desc: 'Follow-up overdue (8–21d)' },
+              reactivar:  { label: '🟣 Reactivar',  color: '#a78bfa', bg: 'rgba(167,139,250,0.06)',  border: '#a78bfa', desc: 'Going cold — new angle needed' },
+            };
+            const groups = {};
+            dailyFocusItems.forEach(item => {
+              const tag = item.tag || 'seguimiento';
+              if (!groups[tag]) groups[tag] = [];
+              groups[tag].push(item);
+            });
+            const tagOrder = ['urgente', 'seguimiento', 'reactivar'];
+            return (
+              <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', padding: 0, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--globant-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: 'var(--globant-green)', fontSize: 14 }}>🎯 Daily Focus ({dailyFocusItems.length})</h3>
+                    <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Scored by timing · influence · reply history · campaign</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {tagOrder.filter(t => groups[t]?.length).map(t => (
+                      <span key={t} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: TAG_CFG[t].bg, color: TAG_CFG[t].color, border: `1px solid ${TAG_CFG[t].color}40` }}>
+                        {TAG_CFG[t].label.split(' ')[0]} {groups[t].length}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {dailyFocusItems.length === 0 ? (
+                  <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '16px' }}>🎉 No follow-ups pending — inbox clear!</p>
+                ) : (
+                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {tagOrder.map(tag => {
+                      const items = groups[tag];
+                      if (!items?.length) return null;
+                      const cfg = TAG_CFG[tag];
+                      return (
+                        <div key={tag}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6, marginTop: 4 }}>
+                            {cfg.label} — {cfg.desc}
+                          </div>
+                          {items.map(({ s, acc, score, e }) => {
+                            const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+                            const lastOutreach = e.lastOutreach;
+                            const lastChannel = F(lastOutreach, 'Channel');
+                            const lastMsg = F(lastOutreach, 'Message');
+                            const lastStatus = F(lastOutreach, 'Status');
+                            const phone = F(s, 'Phone number');
+                            const email = F(s, 'Email');
+                            const linkedin = F(s, 'LinkedIn');
+                            const accDiag = acc?._enriched?.diagnosis;
+                            const diagCfg = accDiag ? DIAGNOSIS_CONFIG[accDiag] : null;
+                            return (
+                              <div key={s.id} style={{ padding: '12px 14px', marginBottom: 6, borderRadius: 8, background: cfg.bg, borderLeft: `3px solid ${cfg.border}` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                                  <div>
+                                    <span style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>
+                                      {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                                    </span>
+                                    <span style={{ fontSize: 12, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s,'Role')} · {accNames.join(', ')}</span>
+                                    {diagCfg && (
+                                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: diagCfg.bg, color: diagCfg.color }}>
+                                        {diagCfg.label}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                    {e.daysSince !== null && <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color }}>{e.daysSince}d ago</span>}
+                                    <span className="badge badge-accent" style={{ fontSize: 9 }}>{e.totalTouches} touch{e.totalTouches !== 1 ? 'es' : ''}</span>
+                                    {e.hasReplied && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 8, background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>↩ replied</span>}
+                                    <span style={{ fontSize: 9, color: 'var(--globant-muted)' }}>score {score}</span>
+                                  </div>
+                                </div>
+                                {lastOutreach && (
+                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 8, padding: '5px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 6 }}>
+                                    <span style={{ marginRight: 6 }}>{channelIcon[lastChannel] || '📋'}</span>
+                                    {F(lastOutreach,'Activity Name')} · <span className="badge badge-green" style={{ fontSize: 9 }}>{lastStatus}</span>
+                                    {lastMsg && <div style={{ marginTop: 3, fontSize: 10, whiteSpace: 'pre-wrap', maxHeight: 32, overflow: 'hidden' }}>{lastMsg.substring(0, 120)}…</div>}
+                                  </div>
+                                )}
+                                {diagCfg && <div style={{ fontSize: 10, color: diagCfg.color, marginBottom: 8, fontStyle: 'italic' }}>💡 {diagCfg.action}</div>}
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                  {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'Email')}>{generatingFollowup === s.id ? '⏳' : '✉️ Follow-up'}</button>}
+                                  {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'WhatsApp')}>{generatingFollowup === s.id ? '⏳' : '💬 Follow-up'}</button>}
+                                  {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'LinkedIn')}>{generatingFollowup === s.id ? '⏳' : '🔗 Follow-up'}</button>}
+                                  {phone && <button className="action-btn btn-call" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Call', '')}>📞 Call</button>}
+                                  <div style={{ width: 1, background: 'var(--globant-border)', margin: '0 4px' }} />
+                                  <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => { setResponseModal({ stakeholder: s, lastOutreach }); setResponseText(''); }}>💬 Responded</button>
+                                  <button className="action-btn" style={{ fontSize: 10, padding: '5px 10px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }} onClick={() => { setMeetingModal({ stakeholder: s }); setMeetingNotes(''); setMeetingDate(''); setMeetingTime(''); }}>📅 Meeting</button>
+                                  <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => setSelectedStakeholder(s)}>✨ AI</button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: urgencyColor }}>{daysSince}d ago</span>
-                          <span className="badge badge-accent" style={{ fontSize: 9 }}>{totalTouches} touch{totalTouches > 1 ? 'es' : ''}</span>
-                        </div>
-                      </div>
-
-                      {/* Last activity */}
-                      <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 10, padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6 }}>
-                        <span style={{ marginRight: 6 }}>{channelIcon[lastChannel] || '📋'}</span>
-                        Last: {F(lastOutreach, 'Activity Name')} · <span className="badge badge-green" style={{ fontSize: 9 }}>{lastStatus}</span>
-                        {lastMsg && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', maxHeight: 40, overflow: 'hidden' }}>{lastMsg.substring(0, 150)}{lastMsg.length > 150 ? '...' : ''}</div>}
-                      </div>
-
-                      {/* Action buttons */}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {/* Follow-up via channels */}
-                        {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'Email')}>{generatingFollowup === s.id ? '⏳' : '✉️ Follow-up'}</button>}
-                        {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'WhatsApp')}>{generatingFollowup === s.id ? '⏳' : '💬 Follow-up'}</button>}
-                        {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'LinkedIn')}>{generatingFollowup === s.id ? '⏳' : '🔗 Follow-up'}</button>}
-                        {phone && <button className="action-btn btn-call" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Call', '')}>📞 Call</button>}
-
-                        <div style={{ width: 1, background: 'var(--globant-border)', margin: '0 4px' }} />
-
-                        {/* Response & Meeting */}
-                        <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => { setResponseModal({ stakeholder: s, lastOutreach }); setResponseText(''); }}>
-                          💬 Responded
-                        </button>
-                        <button className="action-btn" style={{ fontSize: 10, padding: '5px 10px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }} onClick={() => { setMeetingModal({ stakeholder: s }); setMeetingNotes(''); setMeetingDate(''); setMeetingTime(''); }}>
-                          📅 Schedule Meeting
-                        </button>
-                        <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => setSelectedStakeholder(s)}>
-                          ✨ Custom AI
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Group 2: Needs First Contact */}
           <div className="card" style={{ borderLeft: '3px solid var(--globant-warning)' }}>
@@ -6834,6 +7011,7 @@ Rules:
                         {F(account, 'Country') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(244,114,182,0.12)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.2)', fontWeight: 600 }}>📍 {F(account, 'Country')}</span>}
                         {F(account, 'Tier') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)', fontWeight: 600 }}>⭐ {F(account, 'Tier')}</span>}
                         {F(account, 'Inside Sales Status') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(91,191,181,0.14)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.22)', fontWeight: 600 }}>{F(account, 'Inside Sales Status')}</span>}
+                        {(() => { const d = account._enriched?.diagnosis; const cfg = d ? DIAGNOSIS_CONFIG[d] : null; return cfg ? <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}40`, fontWeight: 600 }}>{cfg.label}</span> : null; })()}
                         {solNames.map((sn, i) => <span key={i} style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.18)' }}>🛠️ {sn}</span>)}
                       </div>
                     </div>
@@ -13999,6 +14177,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [bulkSending, setBulkSending] = useState(false);
       const [bulkResult, setBulkResult] = useState(null); // {sent, errors}
       const [bulkDraftMode, setBulkDraftMode] = useState(false);
+      const [gmailQueueIdx, setGmailQueueIdx] = useState(null); // null = not in queue mode; number = current index
       const [showSeq, setShowSeq] = useState(false);
       const [seqSteps, setSeqSteps] = useState([]);
       const [seqConfig, setSeqConfig] = useState({ sendHour: 9, timezone: 'America/Argentina/Buenos_Aires' });
@@ -14132,60 +14311,57 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         }
       };
 
-      // ── Open all in Gmail (no integration) — SYNCHRONOUS, no awaits between window.open() calls ──
-      // Must be called after messages are already generated (avoids popup blocker)
-      const openAllInGmailSync = () => {
+      // ── Open in Gmail queue — one per click (avoids popup blocker), copies HTML to clipboard ──
+      const openGmailQueueItem = (targets, idx) => {
+        if (idx >= targets.length) { setGmailQueueIdx(null); if (onLogActivity) onLogActivity(); return; }
         const a = api || new AirtableAPI();
-        // Only open contacts that have a message ready
-        const targets = allEmailContacts.filter(s => {
-          if (!F(s,'Email')) return false;
-          const rawBm = bulkMsgs[s.id];
-          return rawBm?.status === 'ready' && rawBm?.msg;
-        });
-        if (!targets.length) return;
+        const s = targets[idx];
+        const email = F(s,'Email');
+        const firstName = F(s,'Name') || 'there';
+        const accId = linkedIds(s,'Account')[0];
+        const acc = accId ? accounts.find(a => a.id === accId) : null;
+        const companyName = acc ? F(acc,'Account Name') : '';
         const campaignName = F(selectedCampaign,'Name') || 'Campaign';
-        const today = new Date().toLocaleDateString('en-US');
-        targets.forEach(s => {
-          const email = F(s,'Email');
-          const firstName = F(s,'Name') || 'there';
-          const accId = linkedIds(s,'Account')[0];
-          const acc = accId ? accounts.find(a => a.id === accId) : null;
-          const companyName = acc ? F(acc,'Account Name') : '';
-          const msg = bulkMsgs[s.id].msg;
-          let subject, body;
-          if (bulkUseHtml) {
-            // HTML mode: opener is stored as plain body, subject from emailTplSubject
-            subject = emailTplSubject.trim()
-              ? emailTplSubject.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{company\}\}/g, companyName)
-              : `${campaignName} — for ${firstName} at ${companyName||'your team'}`;
-            body = msg;
-          } else {
-            const lines = msg.split('\n');
-            const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
-            subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${campaignName} — ${firstName}`;
-            body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg;
+        const msg = bulkMsgs[s.id]?.msg || '';
+        let subject, body;
+        if (bulkUseHtml) {
+          subject = emailTplSubject.trim()
+            ? emailTplSubject.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{company\}\}/g, companyName)
+            : `${campaignName} — for ${firstName} at ${companyName||'your team'}`;
+          body = msg; // AI opener as plain text body
+          // Copy full HTML template to clipboard so user can paste in Gmail
+          if (emailTplHtml) {
+            const personalizedHtml = emailTplHtml
+              .replace(/\{\{first_name\}\}/g, firstName)
+              .replace(/\{\{company\}\}/g, companyName)
+              .replace(/\{\{ai_opener\}\}/g, msg);
+            navigator.clipboard.writeText(personalizedHtml).catch(() => {});
           }
-          // Open Gmail compose — all calls synchronous so popup blocker allows them
-          window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-          // Log activity (fire-and-forget)
-          const accIds = linkedIds(s,'Account');
-          const actFields = {
-            'Activity Name': `Email — ${today}`,
-            'Channel': 'Email', 'Status': 'Sent', 'Message': body,
-            'Stakeholder': [s.id], 'Date': new Date().toISOString(),
-            'Logged By': CURRENT_USER?.name || '',
-            ...(accIds.length ? { 'Account': accIds } : {}),
-            ...(selectedCampaign?.id ? { 'Campaign': [selectedCampaign.id] } : {}),
-          };
-          if (onAddRecord) onAddRecord('outreach', actFields);
-          a.createRecord(TABLE_IDS.outreach, actFields).catch(e => console.error('[open-all-gmail] log failed:', e));
-          a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
-            'Stakeholders Reached': [...new Set([...linkedIds(selectedCampaign,'Stakeholders Reached'), s.id])],
-            'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
-          }).catch(() => {});
-          setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
-        });
-        if (onLogActivity) onLogActivity();
+        } else {
+          const lines = msg.split('\n');
+          const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${campaignName} — ${firstName}`;
+          body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg;
+        }
+        window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+        // Log activity
+        const accIds = linkedIds(s,'Account');
+        const actFields = {
+          'Activity Name': `Email — ${new Date().toLocaleDateString('en-US')}`,
+          'Channel': 'Email', 'Status': 'Sent', 'Message': body,
+          'Stakeholder': [s.id], 'Date': new Date().toISOString(),
+          'Logged By': CURRENT_USER?.name || '',
+          ...(accIds.length ? { 'Account': accIds } : {}),
+          ...(selectedCampaign?.id ? { 'Campaign': [selectedCampaign.id] } : {}),
+        };
+        if (onAddRecord) onAddRecord('outreach', actFields);
+        a.createRecord(TABLE_IDS.outreach, actFields).catch(e => console.error('[gmail-queue] log failed:', e));
+        a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, {
+          'Stakeholders Reached': [...new Set([...linkedIds(selectedCampaign,'Stakeholders Reached'), s.id])],
+          'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
+        }).catch(() => {});
+        setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
+        setGmailQueueIdx(idx + 1); // advance to next
       };
 
       // ── Bulk Email: send all ready messages via Gmail API ──
@@ -15713,19 +15889,89 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                             {bulkSending ? '⏳ Processing...' : bulkDraftMode ? `📝 Draft All (${readyCount})` : `✉️ Send All (${readyCount})`}
                           </button>
                         )}
-                        {/* No Gmail integration: open all in Gmail synchronously after generation */}
-                        {!gmailConn && (
-                          <button className="action-btn" style={{ fontSize: 11, background: readyToOpen.length > 0 ? 'rgba(251,191,36,0.18)' : 'rgba(255,255,255,0.05)', color: readyToOpen.length > 0 ? '#fbbf24' : 'var(--globant-muted)', border: `1px solid ${readyToOpen.length > 0 ? 'rgba(251,191,36,0.4)' : 'var(--globant-border)'}`, fontWeight: 700 }}
-                            disabled={readyToOpen.length === 0} onClick={openAllInGmailSync}>
-                            {readyToOpen.length > 0 ? `📬 Open all in Gmail (${readyToOpen.length})` : '📬 Open all in Gmail — generate first'}
+                        {/* No Gmail integration: queue mode — one Gmail window per click */}
+                        {!gmailConn && readyToOpen.length > 0 && gmailQueueIdx === null && (
+                          <button className="action-btn" style={{ fontSize: 11, background: 'rgba(251,191,36,0.18)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.4)', fontWeight: 700 }}
+                            onClick={() => setGmailQueueIdx(0)}>
+                            📬 Start sending ({readyToOpen.length}) — one per click
                           </button>
                         )}
-                        {!gmailConn && needsGeneration.length > 0 && readyToOpen.length === 0 && (
-                          <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>← generate first, then open all</span>
+                        {!gmailConn && needsGeneration.length > 0 && readyToOpen.length === 0 && gmailQueueIdx === null && (
+                          <span style={{ fontSize: 11, color: 'var(--globant-muted)', alignSelf: 'center' }}>← generate first, then open in Gmail</span>
                         )}
                       </>);
                     })()}
                   </div>
+                  {/* Gmail queue panel — shows current contact, click to open Gmail and advance */}
+                  {gmailQueueIdx !== null && (() => {
+                    const gmailConn = localStorage.getItem('oike_gmail_connected') === 'true';
+                    const readyToOpen = allEmailContacts.filter(s => {
+                      const rawBm = bulkMsgs[s.id];
+                      return rawBm?.status === 'ready' && rawBm?.msg && !!F(s,'Email');
+                    });
+                    if (gmailQueueIdx >= readyToOpen.length) {
+                      return (
+                        <div style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 8, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)', textAlign: 'center' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#4ade80', marginBottom: 6 }}>✅ All done! {readyToOpen.length} emails opened.</div>
+                          <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setGmailQueueIdx(null)}>Close queue</button>
+                        </div>
+                      );
+                    }
+                    const current = readyToOpen[gmailQueueIdx];
+                    const firstName = F(current,'Name') || 'there';
+                    const accId = linkedIds(current,'Account')[0];
+                    const acc = accId ? accounts.find(a => a.id === accId) : null;
+                    const companyName = acc ? F(acc,'Account Name') : '';
+                    const msg = bulkMsgs[current.id]?.msg || '';
+                    const campaignName = F(selectedCampaign,'Name') || 'Campaign';
+                    let subject, body;
+                    if (bulkUseHtml) {
+                      subject = emailTplSubject.trim()
+                        ? emailTplSubject.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{company\}\}/g, companyName)
+                        : `${campaignName} — for ${firstName} at ${companyName||'your team'}`;
+                      body = msg;
+                    } else {
+                      const lines = msg.split('\n');
+                      const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                      subject = si !== -1 ? lines[si].replace(/^subject:\s*/i,'').trim() : `${campaignName} — ${firstName}`;
+                      body = si !== -1 ? lines.slice(si+1).join('\n').trim() : msg;
+                    }
+                    return (
+                      <div style={{ marginBottom: 12, borderRadius: 8, border: '1px solid rgba(251,191,36,0.4)', overflow: 'hidden' }}>
+                        <div style={{ padding: '8px 12px', background: 'rgba(251,191,36,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#fbbf24' }}>
+                            📬 {gmailQueueIdx + 1} of {readyToOpen.length} — {firstName} {F(current,'Last name')||''}{companyName ? ` · ${companyName}` : ''}
+                          </span>
+                          <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setGmailQueueIdx(null)}>✕ Stop</button>
+                        </div>
+                        <div style={{ padding: '10px 12px' }}>
+                          <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4 }}>
+                            <strong>To:</strong> {F(current,'Email')} &nbsp;·&nbsp; <strong>Subject:</strong> {subject}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#e5e7eb', lineHeight: 1.5, marginBottom: 8, whiteSpace: 'pre-wrap', background: 'rgba(0,0,0,0.2)', borderRadius: 6, padding: '8px 10px' }}>
+                            {body.slice(0,300)}{body.length > 300 ? '…' : ''}
+                          </div>
+                          {bulkUseHtml && emailTplHtml && (
+                            <div style={{ fontSize: 10, color: '#60a5fa', marginBottom: 8 }}>
+                              💡 HTML template will be copied to clipboard — paste it in Gmail's compose body
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button className="action-btn" style={{ flex: 1, fontSize: 12, fontWeight: 700, background: 'rgba(251,191,36,0.2)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.5)', padding: '8px 14px' }}
+                              onClick={() => openGmailQueueItem(readyToOpen, gmailQueueIdx)}>
+                              📬 Open in Gmail → Next
+                            </button>
+                            {gmailQueueIdx < readyToOpen.length - 1 && (
+                              <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
+                                onClick={() => setGmailQueueIdx(gmailQueueIdx + 1)}>
+                                Skip →
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {hasMessages && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
                       {allEmailContacts.map(s => {
@@ -21815,7 +22061,9 @@ Return ONLY valid JSON.`;
           }
           // admin: no filtering — sees everything
 
-          setData(results);
+          // Enrich stakeholders + accounts with computed fields (_enriched)
+          const enriched = computeEnrichment(results);
+          setData(enriched);
         } catch (e) {
           console.error('Load failed:', e);
         }
@@ -22067,3 +22315,8 @@ Return ONLY valid JSON.`;
     ReactDOM.createRoot(rootEl).render(
       <ErrorBoundary><App /></ErrorBoundary>
     );
+
+    // Register service worker for PWA caching
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(e => console.warn('[SW] Registration failed:', e));
+    }
