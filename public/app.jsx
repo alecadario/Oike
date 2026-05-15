@@ -3082,7 +3082,34 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [csvStatus, setCsvStatus] = useState(null);
       const [importResults, setImportResults] = useState(null);
       const [expandedReplies, setExpandedReplies] = useState({}); // { [stakeholder.id]: bool }
-      const [composeEmail, setComposeEmail] = useState(null); // { stakeholder, subject, body, replyContext: { threadId, inReplyTo, readMsgId } | null }
+      const [composeEmail, setComposeEmail] = useState(null);
+      const [showDismissed, setShowDismissed] = useState(false);
+
+      // Dismissed follow-ups — persisted in localStorage, auto-expire after 1 day
+      const DISMISS_KEY = 'oike_dismissed_followups';
+      const [dismissedFollowups, setDismissedFollowups] = useState(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem(DISMISS_KEY) || '{}');
+          const today = new Date().toDateString();
+          // Keep only dismissals from today
+          const filtered = {};
+          Object.entries(raw).forEach(([id, date]) => { if (date === today) filtered[id] = date; });
+          return filtered;
+        } catch { return {}; }
+      });
+
+      const dismissFollowup = (stakeholderId) => {
+        const today = new Date().toDateString();
+        const next = { ...dismissedFollowups, [stakeholderId]: today };
+        setDismissedFollowups(next);
+        try { localStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch {}
+      };
+      const undismissFollowup = (stakeholderId) => {
+        const next = { ...dismissedFollowups };
+        delete next[stakeholderId];
+        setDismissedFollowups(next);
+        try { localStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch {}
+      }; // { stakeholder, subject, body, replyContext: { threadId, inReplyTo, readMsgId } | null }
       const [showFuNewStk, setShowFuNewStk] = useState(false);
       const [fuNewName, setFuNewName] = useState('');
       const [fuNewLast, setFuNewLast] = useState('');
@@ -3190,6 +3217,10 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         });
         return results.sort((a, b) => b.score - a.score);
       }, [stakeholders, accounts, data.campaigns, accountSearch, selectedInfluence, searchName]);
+
+      // Split into active vs dismissed
+      const activeFocusItems    = dailyFocusItems.filter(item => !dismissedFollowups[item.s.id]);
+      const dismissedFocusItems = dailyFocusItems.filter(item =>  dismissedFollowups[item.s.id]);
 
       // Backwards-compat alias used by summary line and old section header
       const followupPending = dailyFocusItems;
@@ -4195,31 +4226,102 @@ Output ONLY the message, nothing else.`;
               reengage:  { label: '🟣 Re-engage', color: '#a78bfa', bg: 'rgba(167,139,250,0.06)',  border: '#a78bfa', desc: 'Going cold — new angle needed' },
             };
             const groups = {};
-            dailyFocusItems.forEach(item => {
+            activeFocusItems.forEach(item => {
               const tag = item.tag || 'followup';
               if (!groups[tag]) groups[tag] = [];
               groups[tag].push(item);
             });
             const tagOrder = ['urgent', 'followup', 'reengage'];
+
+            const renderFocusCard = ({ s, acc, score, e }, isDismissed = false) => {
+              const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+              const lastOutreach = e.lastOutreach;
+              const lastChannel = F(lastOutreach, 'Channel');
+              const lastMsg = F(lastOutreach, 'Message');
+              const lastStatus = F(lastOutreach, 'Status');
+              const phone = F(s, 'Phone number');
+              const email = F(s, 'Email');
+              const linkedin = F(s, 'LinkedIn');
+              const accDiag = acc?._enriched?.diagnosis;
+              const diagCfg = accDiag ? DIAGNOSIS_CONFIG[accDiag] : null;
+              const tag = e.focusTag || 'followup';
+              const cfg = TAG_CFG[tag] || TAG_CFG.followup;
+              return (
+                <div key={s.id} style={{ padding: '12px 14px', marginBottom: 6, borderRadius: 8, background: isDismissed ? 'rgba(255,255,255,0.02)' : cfg.bg, borderLeft: `3px solid ${isDismissed ? 'var(--globant-border)' : cfg.border}`, opacity: isDismissed ? 0.65 : 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDismissed ? 0 : 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer', color: isDismissed ? 'var(--globant-muted)' : 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>
+                        {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s,'Role')} · {accNames.join(', ')}</span>
+                      {diagCfg && !isDismissed && (
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: diagCfg.bg, color: diagCfg.color }}>
+                          {diagCfg.label}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                      {e.daysSince !== null && <span style={{ fontSize: 11, fontWeight: 700, color: isDismissed ? 'var(--globant-muted)' : cfg.color }}>{e.daysSince}d ago</span>}
+                      {!isDismissed && <span className="badge badge-accent" style={{ fontSize: 9 }}>{e.totalTouches} touch{e.totalTouches !== 1 ? 'es' : ''}</span>}
+                      {!isDismissed && e.hasReplied && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 8, background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>↩ replied</span>}
+                      {isDismissed ? (
+                        <button onClick={() => undismissFollowup(s.id)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>↩ Restore</button>
+                      ) : (
+                        <button onClick={() => dismissFollowup(s.id)} title="Dismiss for today" style={{ fontSize: 11, lineHeight: 1, padding: '3px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>✕</button>
+                      )}
+                    </div>
+                  </div>
+                  {!isDismissed && lastOutreach && (
+                    <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 8, padding: '5px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 6 }}>
+                      <span style={{ marginRight: 6 }}>{channelIcon[lastChannel] || '📋'}</span>
+                      {F(lastOutreach,'Activity Name')} · <span className="badge badge-green" style={{ fontSize: 9 }}>{lastStatus}</span>
+                      {lastMsg && <div style={{ marginTop: 3, fontSize: 10, whiteSpace: 'pre-wrap', maxHeight: 32, overflow: 'hidden' }}>{lastMsg.substring(0, 120)}…</div>}
+                    </div>
+                  )}
+                  {!isDismissed && diagCfg && <div style={{ fontSize: 10, color: diagCfg.color, marginBottom: 8, fontStyle: 'italic' }}>💡 {diagCfg.action}</div>}
+                  {!isDismissed && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'Email')}>{generatingFollowup === s.id ? '⏳' : '✉️ Follow-up'}</button>}
+                      {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'WhatsApp')}>{generatingFollowup === s.id ? '⏳' : '💬 Follow-up'}</button>}
+                      {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'LinkedIn')}>{generatingFollowup === s.id ? '⏳' : '🔗 Follow-up'}</button>}
+                      {phone && <button className="action-btn btn-call" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Call', '')}>📞 Call</button>}
+                      <div style={{ width: 1, background: 'var(--globant-border)', margin: '0 4px' }} />
+                      <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => { setResponseModal({ stakeholder: s, lastOutreach }); setResponseText(''); }}>💬 Responded</button>
+                      <button className="action-btn" style={{ fontSize: 10, padding: '5px 10px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }} onClick={() => { setMeetingModal({ stakeholder: s }); setMeetingNotes(''); setMeetingDate(''); setMeetingTime(''); }}>📅 Meeting</button>
+                      <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => setSelectedStakeholder(s)}>✨ AI</button>
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
             return (
               <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--globant-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 style={{ margin: 0, color: 'var(--globant-green)', fontSize: 14 }}>🎯 Daily Focus ({dailyFocusItems.length})</h3>
+                    <h3 style={{ margin: 0, color: 'var(--globant-green)', fontSize: 14 }}>🎯 Daily Focus ({activeFocusItems.length})</h3>
                     <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Scored by timing · influence · reply history · campaign</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     {tagOrder.filter(t => groups[t]?.length).map(t => (
                       <span key={t} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: TAG_CFG[t].bg, color: TAG_CFG[t].color, border: `1px solid ${TAG_CFG[t].color}40` }}>
                         {TAG_CFG[t].label.split(' ')[0]} {groups[t].length}
                       </span>
                     ))}
+                    {dismissedFocusItems.length > 0 && (
+                      <button onClick={() => setShowDismissed(v => !v)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>
+                        {showDismissed ? '▲' : '▼'} {dismissedFocusItems.length} dismissed
+                      </button>
+                    )}
                   </div>
                 </div>
-                {dailyFocusItems.length === 0 ? (
+                {activeFocusItems.length === 0 && dismissedFocusItems.length === 0 ? (
                   <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '16px' }}>🎉 No follow-ups pending — inbox clear!</p>
                 ) : (
                   <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {activeFocusItems.length === 0 && (
+                      <p style={{ color: 'var(--globant-muted)', fontSize: 13, margin: 0 }}>🎉 All done for today!</p>
+                    )}
                     {tagOrder.map(tag => {
                       const items = groups[tag];
                       if (!items?.length) return null;
@@ -4229,62 +4331,18 @@ Output ONLY the message, nothing else.`;
                           <div style={{ fontSize: 10, fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6, marginTop: 4 }}>
                             {cfg.label} — {cfg.desc}
                           </div>
-                          {items.map(({ s, acc, score, e }) => {
-                            const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
-                            const lastOutreach = e.lastOutreach;
-                            const lastChannel = F(lastOutreach, 'Channel');
-                            const lastMsg = F(lastOutreach, 'Message');
-                            const lastStatus = F(lastOutreach, 'Status');
-                            const phone = F(s, 'Phone number');
-                            const email = F(s, 'Email');
-                            const linkedin = F(s, 'LinkedIn');
-                            const accDiag = acc?._enriched?.diagnosis;
-                            const diagCfg = accDiag ? DIAGNOSIS_CONFIG[accDiag] : null;
-                            return (
-                              <div key={s.id} style={{ padding: '12px 14px', marginBottom: 6, borderRadius: 8, background: cfg.bg, borderLeft: `3px solid ${cfg.border}` }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                                  <div>
-                                    <span style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>
-                                      {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
-                                    </span>
-                                    <span style={{ fontSize: 12, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s,'Role')} · {accNames.join(', ')}</span>
-                                    {diagCfg && (
-                                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: diagCfg.bg, color: diagCfg.color }}>
-                                        {diagCfg.label}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                                    {e.daysSince !== null && <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color }}>{e.daysSince}d ago</span>}
-                                    <span className="badge badge-accent" style={{ fontSize: 9 }}>{e.totalTouches} touch{e.totalTouches !== 1 ? 'es' : ''}</span>
-                                    {e.hasReplied && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 8, background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>↩ replied</span>}
-                                    <span style={{ fontSize: 9, color: 'var(--globant-muted)' }}>score {score}</span>
-                                  </div>
-                                </div>
-                                {lastOutreach && (
-                                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 8, padding: '5px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 6 }}>
-                                    <span style={{ marginRight: 6 }}>{channelIcon[lastChannel] || '📋'}</span>
-                                    {F(lastOutreach,'Activity Name')} · <span className="badge badge-green" style={{ fontSize: 9 }}>{lastStatus}</span>
-                                    {lastMsg && <div style={{ marginTop: 3, fontSize: 10, whiteSpace: 'pre-wrap', maxHeight: 32, overflow: 'hidden' }}>{lastMsg.substring(0, 120)}…</div>}
-                                  </div>
-                                )}
-                                {diagCfg && <div style={{ fontSize: 10, color: diagCfg.color, marginBottom: 8, fontStyle: 'italic' }}>💡 {diagCfg.action}</div>}
-                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                  {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'Email')}>{generatingFollowup === s.id ? '⏳' : '✉️ Follow-up'}</button>}
-                                  {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'WhatsApp')}>{generatingFollowup === s.id ? '⏳' : '💬 Follow-up'}</button>}
-                                  {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }} disabled={generatingFollowup === s.id} onClick={() => handleQuickFollowup(s, 'LinkedIn')}>{generatingFollowup === s.id ? '⏳' : '🔗 Follow-up'}</button>}
-                                  {phone && <button className="action-btn btn-call" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => useMessage(s, 'Call', '')}>📞 Call</button>}
-                                  <div style={{ width: 1, background: 'var(--globant-border)', margin: '0 4px' }} />
-                                  <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => { setResponseModal({ stakeholder: s, lastOutreach }); setResponseText(''); }}>💬 Responded</button>
-                                  <button className="action-btn" style={{ fontSize: 10, padding: '5px 10px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }} onClick={() => { setMeetingModal({ stakeholder: s }); setMeetingNotes(''); setMeetingDate(''); setMeetingTime(''); }}>📅 Meeting</button>
-                                  <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => setSelectedStakeholder(s)}>✨ AI</button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {items.map(item => renderFocusCard(item, false))}
                         </div>
                       );
                     })}
+                    {showDismissed && dismissedFocusItems.length > 0 && (
+                      <div style={{ marginTop: 8, borderTop: '1px dashed var(--globant-border)', paddingTop: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                          ✕ Dismissed today — {dismissedFocusItems.length}
+                        </div>
+                        {dismissedFocusItems.map(item => renderFocusCard(item, true))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
