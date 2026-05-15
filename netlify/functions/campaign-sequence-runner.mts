@@ -208,10 +208,13 @@ async function advanceStatus(baseId: string, stkId: string, airtableKey: string)
   } catch {}
 }
 
-// ── Main scheduled handler ──
-export default async () => {
+// ── Main handler (works for both HTTP triggers and scheduled runs) ──
+export default async (req?: Request) => {
   const airtableKey = Netlify.env.get('AIRTABLE_API_KEY');
-  if (!airtableKey) { console.error('[seq-runner] AIRTABLE_API_KEY not set'); return; }
+  if (!airtableKey) {
+    console.error('[seq-runner] AIRTABLE_API_KEY not set');
+    return new Response(JSON.stringify({ error: 'missing key' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
 
   const today = new Date().toISOString().split('T')[0];
   console.log(`[seq-runner] Starting run for ${today}`);
@@ -296,9 +299,12 @@ export default async () => {
 
         for (const [stkId, en] of Object.entries(enrollments)) {
           if (en.status !== 'active') continue;
-          // Support per-enrollment datetime scheduling (nextDateTime) with fallback to nextDate
-          const enrollDue = en.nextDateTime ? new Date(en.nextDateTime) : new Date(en.nextDate + 'T' + String(seqCfg.sendHour || 9).padStart(2,'0') + ':00:00');
-          if (enrollDue > new Date()) continue;
+          // If enrollment has a specific datetime: use precise comparison.
+          // Fallback to date-only comparison (original behavior) for legacy enrollments.
+          const isDue = en.nextDateTime
+            ? new Date(en.nextDateTime) <= new Date()
+            : en.nextDate <= today;
+          if (!isDue) continue;
           if (en.step >= steps.length) { en.status = 'completed'; enrollmentsChanged = true; continue; }
 
           const step = steps[en.step];
@@ -415,6 +421,10 @@ export default async () => {
   }
 
   console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}`);
+  return new Response(
+    JSON.stringify({ sent: totalSent, skipped: totalSkipped, errors: totalErrors }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } }
+  );
 };
 
 export const config: Config = {
