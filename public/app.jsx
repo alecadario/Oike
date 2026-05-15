@@ -4045,17 +4045,20 @@ Output ONLY the message, nothing else.`;
                   const linkedin = F(s, 'LinkedIn') || '';
                   const notes    = F(lastOutreach, 'Notes') || '';
                   const msgField = F(lastOutreach, 'Message') || '';
-                  // Extract Gmail message ID from Notes field (always stored there)
+                  // Extract all metadata tags: [gmsg:ID][gthread:XYZ][gmsgid:ABC]
                   const gmsgMatch   = notes.match(/\[gmsg:([^\]]+)\]/);
                   const gmsgId      = gmsgMatch ? gmsgMatch[1] : null;
                   const gmailLink   = gmsgId ? `https://mail.google.com/mail/#inbox/${gmsgId}` : null;
-                  // Content: prefer Message field, fall back to Notes (strip [gmsg:] prefix)
-                  const rawContent  = msgField.trim() || notes.replace(/^\[gmsg:[^\]]+\]\s*/,'').trim();
+                  // Strip ALL [g...] metadata tags from the start of Notes, then trim
+                  const strippedNotes = notes.replace(/^(\[g[^\]]+\])+\s*/,'').trim();
+                  // Content: prefer Message field, fall back to stripped Notes
+                  const rawContent  = msgField.trim() || strippedNotes;
                   const contentLines = rawContent.split('\n');
-                  // If Notes-sourced, first line is subject; if Message-sourced, no separate subject
+                  // Notes-sourced (gmail sync) = has [gmsg:] tag AND no Message field
                   const hasGmsg     = !!gmsgMatch && !msgField.trim();
+                  // If gmail-synced: first line = subject, rest = body; otherwise everything is body
                   const subject     = hasGmsg ? (contentLines[0] || '') : '';
-                  const bodyRaw     = hasGmsg ? contentLines.slice(1).join('\n').trim() : rawContent;
+                  const bodyRaw     = hasGmsg ? contentLines.slice(1).join('\n') : rawContent;
                   const bodyText    = bodyRaw.trim();
                   const isExpanded  = expandedReplies?.[s.id];
                   const PREVIEW_LEN = 200;
@@ -4070,13 +4073,16 @@ Output ONLY the message, nothing else.`;
                               {daysSince === 0 ? 'today' : `${daysSince}d ago`}
                             </span>
                           </div>
-                          {/* Email card */}
-                          {rawContent && (
+                          {/* Email card — always show if replied, even without content */}
+                          {(rawContent || gmailLink) && (
                             <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.18)', borderRadius: 8, padding: '10px 12px', marginTop: 4 }}>
                               {subject && (
                                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 6 }}>
                                   📧 {subject}
                                 </div>
+                              )}
+                              {!rawContent && !subject && (
+                                <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No preview — sync inbox to capture email content.</div>
                               )}
                               {bodyText && (
                                 <>
