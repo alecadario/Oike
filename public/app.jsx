@@ -3162,6 +3162,8 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           const e = s._enriched;
           if (!e) return; // not enriched yet (shouldn't happen)
           if (e.contactedToday) return; // already handled today
+          // Skip contacts touched in the last 2 days — too soon to follow up
+          if (e.daysSince !== null && e.daysSince < 3) return;
           // Apply search filters
           if (accountSearch) {
             const term = accountSearch.toLowerCase();
@@ -3182,6 +3184,8 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           const accId = linkedIds(s, 'Account')[0];
           const acc = accId ? accounts.find(a => a.id === accId) : null;
           if (acc?._enriched?.inActiveCampaign) score += 8;
+          // Skip if no valid focus tag (e.g. daysSince 1-2, edge case)
+          if (!e.focusTag) return;
           results.push({ s, acc, score, tag: e.focusTag, e });
         });
         return results.sort((a, b) => b.score - a.score);
