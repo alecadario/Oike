@@ -3084,6 +3084,31 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [expandedReplies, setExpandedReplies] = useState({}); // { [stakeholder.id]: bool }
       const [composeEmail, setComposeEmail] = useState(null);
       const [showDismissed, setShowDismissed] = useState(false);
+      const [showDismissedReplies, setShowDismissedReplies] = useState(false);
+
+      // Dismissed replies — persisted in localStorage, auto-expire after 1 day
+      const DISMISS_REPLIES_KEY = 'oike_dismissed_replies';
+      const [dismissedReplies, setDismissedReplies] = useState(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem(DISMISS_REPLIES_KEY) || '{}');
+          const today = new Date().toDateString();
+          const filtered = {};
+          Object.entries(raw).forEach(([id, date]) => { if (date === today) filtered[id] = date; });
+          return filtered;
+        } catch { return {}; }
+      });
+      const dismissReply = (stakeholderId) => {
+        const today = new Date().toDateString();
+        const next = { ...dismissedReplies, [stakeholderId]: today };
+        setDismissedReplies(next);
+        try { localStorage.setItem(DISMISS_REPLIES_KEY, JSON.stringify(next)); } catch {}
+      };
+      const undismissReply = (stakeholderId) => {
+        const next = { ...dismissedReplies };
+        delete next[stakeholderId];
+        setDismissedReplies(next);
+        try { localStorage.setItem(DISMISS_REPLIES_KEY, JSON.stringify(next)); } catch {}
+      };
 
       // Dismissed follow-ups — persisted in localStorage, auto-expire after 1 day
       const DISMISS_KEY = 'oike_dismissed_followups';
@@ -4118,14 +4143,24 @@ Output ONLY the message, nothing else.`;
           )}
 
           {/* Group 0: Replied to you */}
-          {repliedToYou.length > 0 && (
+          {repliedToYou.length > 0 && (() => {
+            const activeReplies    = repliedToYou.filter(r => !dismissedReplies[r.s.id]);
+            const dismissedReplied = repliedToYou.filter(r =>  dismissedReplies[r.s.id]);
+            return (
             <div className="card" style={{ borderLeft: '3px solid #4ade80', marginBottom: 16 }}>
               <div className="card-header">
-                <h3 style={{ color: '#4ade80' }}>📩 Replied to you ({repliedToYou.length})</h3>
-                <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>They wrote back — your turn</span>
+                <h3 style={{ color: '#4ade80' }}>📩 Replied to you ({activeReplies.length})</h3>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>They wrote back — your turn</span>
+                  {dismissedReplied.length > 0 && (
+                    <button onClick={() => setShowDismissedReplies(v => !v)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>
+                      {showDismissedReplies ? '▲' : '▼'} {dismissedReplied.length} dismissed
+                    </button>
+                  )}
+                </div>
               </div>
               <div>
-                {repliedToYou.map(({ s, lastOutreach, daysSince }) => {
+                {activeReplies.map(({ s, lastOutreach, daysSince }) => {
                   const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
                   const email    = F(s, 'Email') || '';
                   const phone    = F(s, 'Phone') || '';
@@ -4209,14 +4244,36 @@ Output ONLY the message, nothing else.`;
                             onClick={() => { window.open(`https://wa.me/${phone.replace(/\D/g,'')}`, '_blank'); }}>💬 WhatsApp</button>}
                           {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }}
                             onClick={() => window.open(linkedin, '_blank')}>🔗 LinkedIn</button>}
+                          <button onClick={() => dismissReply(s.id)} title="Dismiss for today" style={{ fontSize: 11, padding: '5px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>✕</button>
                         </div>
                       </div>
                     </div>
                   );
                 })}
+                {showDismissedReplies && dismissedReplied.length > 0 && (
+                  <div style={{ borderTop: '1px dashed var(--globant-border)', padding: '10px 0 4px' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingLeft: 4 }}>
+                      ✕ Dismissed today
+                    </div>
+                    {dismissedReplied.map(({ s, daysSince }) => {
+                      const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
+                      return (
+                        <div key={s.id} style={{ padding: '8px 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.5, borderBottom: '1px solid var(--globant-border)' }}>
+                          <div>
+                            <span style={{ fontWeight: 600, fontSize: 12 }}>{F(s,'Name')} {F(s,'Last name')||''}</span>
+                            <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s,'Role')||''}{accNames.length ? ` · ${accNames[0]}` : ''}</span>
+                            <span style={{ fontSize: 11, color: '#4ade80', marginLeft: 8 }}>{daysSince === 0 ? 'today' : `${daysSince}d ago`}</span>
+                          </div>
+                          <button onClick={() => undismissReply(s.id)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>↩ Restore</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Group 1: Daily Focus — scored & tagged */}
           {(() => {
