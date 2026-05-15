@@ -4877,7 +4877,7 @@ Output ONLY the message, nothing else.`;
           const userName  = CURRENT_USER?.name  || '';
 
           // Create a new row for each feedback submission
-          const res = await fetch('/api/airtable-proxy', {
+          const res = await fetch('/api/airtable', {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify({
