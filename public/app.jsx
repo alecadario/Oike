@@ -15144,7 +15144,15 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           });
           let result = {};
           try { result = await res.json(); } catch {}
-          window.__oikeToast(`Sequence run complete: ${result.sent || 0} sent`, 'success');
+          const sentCount = result.sent ?? 0;
+          const skippedCount = result.skipped ?? 0;
+          if (sentCount > 0) {
+            window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped (no Gmail token)` : ''}`, 'success');
+          } else if (skippedCount > 0) {
+            window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped. Check Gmail is connected.`, 'warning');
+          } else {
+            window.__oikeToast('No emails due right now — all contacts are up to date.', 'info');
+          }
           if (onLogActivity) onLogActivity();
         } catch (e) {
           window.__oikeToast('Failed to run sequence: ' + (e.message || 'unknown'), 'error');
