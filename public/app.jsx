@@ -4071,7 +4071,7 @@ Output ONLY the message, nothing else.`;
                             </span>
                           </div>
                           {/* Email card */}
-                          {cleanNotes && (
+                          {rawContent && (
                             <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.18)', borderRadius: 8, padding: '10px 12px', marginTop: 4 }}>
                               {subject && (
                                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 6 }}>
