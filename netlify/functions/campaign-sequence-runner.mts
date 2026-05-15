@@ -240,7 +240,7 @@ export default async (req?: Request) => {
     if (accessTokenCache[senderEmail]) return accessTokenCache[senderEmail];
     // Direct Airtable lookup — reliable, works even if pre-load missed the user
     try {
-      const formula = encodeURIComponent(`{Email}='${senderEmail}'`);
+      const formula = encodeURIComponent(`AND({Email}='${senderEmail}',{Gmail Refresh Token}!='')`);
       const res = await fetch(`https://api.airtable.com/v0/${USERS_BASE_ID}/${USERS_TABLE_ID}?filterByFormula=${formula}&maxRecords=1`, {
         headers: { 'Authorization': `Bearer ${airtableKey}` },
       });
@@ -306,111 +306,104 @@ export default async (req?: Request) => {
 
         let enrollmentsChanged = false;
 
-        for (const [stkId, en] of Object.entries(enrollments)) {
-          if (en.status !== 'active') continue;
-          // If enrollment has a specific datetime: use precise comparison.
-          // Fallback to date-only comparison (original behavior) for legacy enrollments.
-          const isDue = en.nextDateTime
-            ? new Date(en.nextDateTime) <= new Date()
-            : en.nextDate <= today;
-          if (!isDue) {
-            console.log(`[seq-runner] ${stkId} not due yet — nextDate: ${en.nextDate} nextDateTime: ${en.nextDateTime || 'none'}`);
-            continue;
-          }
-          if (en.step >= steps.length) { en.status = 'completed'; enrollmentsChanged = true; continue; }
+        // ── Filter to due enrollments ──
+        const dueEntries = Object.entries(enrollments).filter(([stkId, en]) => {
+          if (en.status !== 'active') return false;
+          if (en.step >= steps.length) { en.status = 'completed'; enrollmentsChanged = true; return false; }
+          const isDue = en.nextDateTime ? new Date(en.nextDateTime) <= new Date() : en.nextDate <= today;
+          if (!isDue) { console.log(`[seq-runner] ${stkId} not due — nextDate: ${en.nextDate}`); return false; }
+          return true;
+        });
 
+        console.log(`[seq-runner] Campaign "${F(campaign,'Name')}": ${dueEntries.length} enrollments due`);
+        if (dueEntries.length === 0) continue;
+
+        // ── Pre-fetch Gmail tokens for all unique senders (parallel) ──
+        const uniqueSenders = [...new Set(dueEntries.map(([,en]) => en.senderEmail).filter(Boolean))];
+        console.log(`[seq-runner] Unique senders: ${uniqueSenders.join(', ')}`);
+        await Promise.all(uniqueSenders.map(email => getTokenFor(email))); // warms cache
+
+        // ── Process all due enrollments in parallel ──
+        const results = await Promise.allSettled(dueEntries.map(async ([stkId, en]) => {
           const step = steps[en.step];
           const stk = stkMap[stkId];
-          if (!stk) continue;
+          if (!stk) throw new Error(`Stakeholder ${stkId} not found`);
           const email = F(stk,'Email');
-          if (!email) continue;
+          if (!email) throw new Error(`No email for ${stkId}`);
 
-          // Check reply condition
+          // Check reply
           const replied = hasReplied(stkId, outreach, en.enrolledDate);
-          if (replied) {
-            en.status = 'replied';
-            enrollmentsChanged = true;
-            console.log(`[seq-runner] ${stkId} replied — marking sequence as replied`);
-            continue;
-          }
-          if (step.condition === 'no_reply' && replied) continue;
+          if (replied) { en.status = 'replied'; return 'replied'; }
+          if (step.condition === 'no_reply' && replied) return 'skipped-replied';
 
-          // Generate and send using the email stored at enrollment time
           const senderEmail = en.senderEmail;
-          console.log(`[seq-runner] Sending step ${en.step+1} to ${email} from ${senderEmail} (campaign: ${F(campaign,'Name')})`);
           const accessToken = await getTokenFor(senderEmail);
           if (!accessToken) {
-            console.warn(`[seq-runner] No Gmail token for ${senderEmail} — skipping`);
-            totalSkipped++;
-            continue;
+            console.warn(`[seq-runner] No Gmail token for "${senderEmail}"`);
+            return 'skipped-no-token';
           }
-          const accId = (Array.isArray(stk.fields?.['Account']) ? stk.fields['Account'][0] : null);
+
+          const accId = Array.isArray(stk.fields?.['Account']) ? stk.fields['Account'][0] : null;
           const acc = accId ? accMap[accId] : null;
-          const recentOutreach = outreach.filter(o => linkedIds(o,'Stakeholder').includes(stkId))
-            .sort((a,b) => (b.fields?.['Date']||'').localeCompare(a.fields?.['Date']||'')).slice(0,3);
+          const recentOutreach = outreach
+            .filter(o => linkedIds(o,'Stakeholder').includes(stkId))
+            .sort((a,b) => (b.fields?.['Date']||'').localeCompare(a.fields?.['Date']||''))
+            .slice(0,3);
 
-          try {
-            const msg = await generateMessage(stk, campaign, step, acc, recentOutreach);
-            const lines = msg.split('\n');
-            const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
-            // For follow-ups: reuse original subject so Gmail threads correctly
-            let subject = en.gmailSubject || `${F(campaign,'Name')} — ${F(stk,'Name')||''}`;
-            let body = msg;
-            if (si !== -1) {
-              // Only use AI subject on step 0; keep original subject for follow-ups so thread stays intact
-              if (!en.gmailThreadId) subject = lines[si].replace(/^subject:\s*/i,'').trim();
-              body = lines.slice(si+1).join('\n').trim();
+          const msg = await generateMessage(stk, campaign, step, acc, recentOutreach);
+          const lines = msg.split('\n');
+          const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+          let subject = en.gmailSubject || `${F(campaign,'Name')} — ${F(stk,'Name')||''}`;
+          let body = msg;
+          if (si !== -1) {
+            if (!en.gmailThreadId) subject = lines[si].replace(/^subject:\s*/i,'').trim();
+            body = lines.slice(si+1).join('\n').trim();
+          }
+
+          const isDraft = (seqCfg as any).sendMode === 'draft';
+          const existingThreadId = en.gmailThreadId;
+
+          let gmailId: string | null = null;
+          if (isDraft) {
+            gmailId = await createGmailDraft(email, subject, body, accessToken, existingThreadId);
+          } else {
+            const result = await sendGmail(email, subject, body, accessToken, existingThreadId);
+            if (result) {
+              gmailId = result.gmailMsgId;
+              if (!en.gmailThreadId) { en.gmailThreadId = result.gmailThreadId; en.gmailSubject = subject; }
             }
+          }
 
-            const isDraft = (step.mode || 'send') === 'draft';
-            const existingThreadId = en.gmailThreadId;
+          if (!gmailId) throw new Error(`Gmail ${isDraft ? 'draft' : 'send'} failed for ${email}`);
 
-            let gmailId: string | null = null;
-            if (isDraft) {
-              gmailId = await createGmailDraft(email, subject, body, accessToken, existingThreadId);
-            } else {
-              const result = await sendGmail(email, subject, body, accessToken, existingThreadId);
-              if (result) {
-                gmailId = result.gmailMsgId;
-                // Save threadId from first send so follow-ups go into the same thread
-                if (!en.gmailThreadId) {
-                  en.gmailThreadId = result.gmailThreadId;
-                  en.gmailSubject = subject;
-                }
-              }
-            }
+          await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
+          if (!isDraft) await advanceStatus(baseId, stkId, airtableKey);
+          console.log(`[seq-runner] ✅ ${isDraft ? 'Draft' : 'Sent'} step ${en.step+1} → ${email}`);
 
-            if (gmailId) {
-              await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
-              if (!isDraft) await advanceStatus(baseId, stkId, airtableKey);
-              totalSent++;
-              console.log(`[seq-runner] ${isDraft ? 'Draft created' : 'Sent'} step ${en.step + 1} for ${email}${existingThreadId ? ' (in thread)' : ' (new thread)'}`);
-            } else {
-              totalErrors++;
-              console.error(`[seq-runner] ${isDraft ? 'Draft' : 'Send'} failed for ${email}`);
-            }
+          // Advance enrollment to next step
+          const nextIdx = en.step + 1;
+          if (nextIdx >= steps.length) {
+            en.status = 'completed';
+          } else {
+            const base = en.nextDateTime ? new Date(en.nextDateTime) : new Date();
+            base.setDate(base.getDate() + steps[nextIdx].waitDays);
+            en.step = nextIdx;
+            en.nextDateTime = base.toISOString();
+            en.nextDate = base.toISOString().split('T')[0];
+          }
+          return 'sent';
+        }));
 
-            // Advance to next step
-            const nextStepIdx = en.step + 1;
-            if (nextStepIdx >= steps.length) {
-              en.status = 'completed';
-            } else {
-              const nextStep = steps[nextStepIdx];
-              // Preserve the same time of day as the original scheduled send
-              const base = en.nextDateTime ? new Date(en.nextDateTime) : new Date();
-              base.setDate(base.getDate() + nextStep.waitDays);
-              en.step = nextStepIdx;
-              en.nextDateTime = base.toISOString();
-              en.nextDate = base.toISOString().split('T')[0]; // backwards compat
-            }
-            enrollmentsChanged = true;
-          } catch(e) {
-            console.error(`[seq-runner] Error processing ${stkId}:`, e);
+        // Tally results
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            if (r.value === 'sent') { totalSent++; enrollmentsChanged = true; }
+            else if (r.value === 'replied') { enrollmentsChanged = true; }
+            else if (r.value === 'skipped-no-token') totalSkipped++;
+          } else {
+            console.error(`[seq-runner] Error:`, r.reason);
             totalErrors++;
           }
-
-          // Throttle between sends
-          await new Promise(r => setTimeout(r, 1500));
         }
 
         // Save updated enrollments + last run metadata back to Airtable
