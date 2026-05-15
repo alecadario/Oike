@@ -14793,6 +14793,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [seqDirty, setSeqDirty] = useState(false);
       const [savingSeq, setSavingSeq] = useState(false);
       const [enrolling, setEnrolling] = useState(false);
+      const [runningSeq, setRunningSeq] = useState(false);
       const [showEmailTpl, setShowEmailTpl] = useState(false);
       const [showCampaignLandings, setShowCampaignLandings] = useState(false);
       const [emailTplHtml, setEmailTplHtml] = useState('');
@@ -14970,6 +14971,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           'Assigned Stakeholders': [...new Set([...linkedIds(selectedCampaign,'Assigned Stakeholders'), s.id])],
         }).catch(() => {});
         setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], status: 'sent' } }));
+        window.__oikeToast(`✉️ Email queued for ${F(s, 'Name') || 'contact'} — opening Gmail`, 'success');
         setGmailQueueIdx(idx + 1); // advance to next
       };
 
@@ -15118,6 +15120,24 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const a = api || new AirtableAPI();
         await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': json });
         if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
+      };
+
+      // Feature 4: Trigger sequence runner manually
+      const runSequenceNow = async () => {
+        setRunningSeq(true);
+        try {
+          const res = await fetch('/.netlify/functions/campaign-sequence-runner', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+          });
+          let result = {};
+          try { result = await res.json(); } catch {}
+          window.__oikeToast(`Sequence run complete: ${result.sent || 0} sent`, 'success');
+          if (onLogActivity) onLogActivity();
+        } catch (e) {
+          window.__oikeToast('Failed to run sequence: ' + (e.message || 'unknown'), 'error');
+        }
+        setRunningSeq(false);
       };
 
       // ── Render campaign email HTML from content sections ──
@@ -15669,6 +15689,12 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 <span style={{ fontSize:12, color:'var(--globant-muted)' }}>Reached: <strong style={{ color:'#4ade80' }}>{reached}</strong>{goal>0 ? ` / ${goal} goal` : ''}</span>
                 {assetUrl && <a href={assetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:'var(--globant-green)' }}>🔗 View Asset</a>}
               </div>
+              {F(selectedCampaign, 'Last Run') && (
+                <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>
+                  Last run: {new Date(F(selectedCampaign, 'Last Run')).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {F(selectedCampaign, 'Last Run Result') && <span style={{ marginLeft: 8, color: 'var(--globant-green)' }}>· {F(selectedCampaign, 'Last Run Result')}</span>}
+                </div>
+              )}
             </div>
 
             {/* Message Template — inline editable */}
@@ -15935,128 +15961,132 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       </div>
                     </div>
 
-                    {/* Step builder */}
+                    {/* Step builder — vertical timeline */}
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Steps</div>
                     {seqSteps.length === 0 && (
                       <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 10 }}>No steps yet — click "Add Step" to define the sequence.</div>
                     )}
-                    {seqSteps.map((step, i) => (
-                      <div key={i} style={{ marginBottom: 8, padding: '10px 12px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '28px 90px 110px 120px 1fr 28px', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textAlign: 'center' }}>#{i+1}</span>
-                          <div>
-                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>WAIT DAYS</div>
-                            <input type="number" min="0" className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                              value={step.waitDays} onChange={e => updateSeqStep(i, 'waitDays', parseInt(e.target.value)||0)} />
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CHANNEL</div>
-                            <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                              value={step.channel} onChange={e => updateSeqStep(i, 'channel', e.target.value)}>
-                              <option value="Email">Email</option>
-                              <option value="LinkedIn">LinkedIn</option>
-                              <option value="WhatsApp">WhatsApp</option>
-                            </select>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>CONDITION</div>
-                            <select className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                              value={step.condition} onChange={e => updateSeqStep(i, 'condition', e.target.value)}>
-                              <option value="always">Always</option>
-                              <option value="no_reply">Only if no reply</option>
-                            </select>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 2 }}>STEP NOTE (optional)</div>
-                            <input className="input-field" style={{ fontSize: 12, padding: '4px 6px', width: '100%' }}
-                              placeholder="e.g. Follow-up, Breakup email..."
-                              value={step.note} onChange={e => updateSeqStep(i, 'note', e.target.value)} />
-                          </div>
-                          <button onClick={() => removeSeqStep(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: 0 }}>✕</button>
-                        </div>
-                        {/* Content type toggle */}
-                        <div style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Email content</div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {[
-                              { val: 'ai_text', label: '🤖 AI plain text', desc: 'AI writes a personalized message' },
-                              { val: 'html',    label: '📧 HTML template',  desc: emailTplHtml ? 'Uses your saved HTML template' : '⚠️ No HTML template saved yet' },
-                            ].map(opt => {
-                              const active = (step.contentType || 'ai_text') === opt.val;
-                              const disabled = opt.val === 'html' && !emailTplHtml;
-                              return (
-                                <button key={opt.val}
-                                  onClick={() => !disabled && updateSeqStep(i, 'contentType', opt.val)}
-                                  style={{ flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: active ? 700 : 400, opacity: disabled ? 0.5 : 1,
-                                    background: active ? (opt.val === 'html' ? 'rgba(96,165,250,0.18)' : 'rgba(91,191,181,0.18)') : 'rgba(0,0,0,0.15)',
-                                    color: active ? (opt.val === 'html' ? '#60a5fa' : 'var(--globant-green)') : 'var(--globant-muted)',
-                                    border: `1px solid ${active ? (opt.val === 'html' ? 'rgba(96,165,250,0.4)' : 'rgba(91,191,181,0.4)') : 'var(--globant-border)'}`,
-                                  }}>
-                                  {opt.label}
-                                  <span style={{ display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 }}>{opt.desc}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        {/* Send mode toggle */}
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                          {[{val:'send', label:'🤖 Auto-send', desc:'AI generates and sends directly'}, {val:'draft', label:'📝 Draft first', desc:'Creates Gmail draft for your review'}].map(opt => (
-                            <button key={opt.val}
-                              onClick={() => updateSeqStep(i, 'mode', opt.val)}
-                              style={{ flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: (step.mode||'send') === opt.val ? 700 : 400,
-                                background: (step.mode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.18)' : 'rgba(251,191,36,0.18)') : 'rgba(0,0,0,0.15)',
-                                color: (step.mode||'send') === opt.val ? (opt.val === 'send' ? 'var(--globant-green)' : '#fbbf24') : 'var(--globant-muted)',
-                                border: `1px solid ${(step.mode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.4)' : 'rgba(251,191,36,0.4)') : 'var(--globant-border)'}`,
-                              }}>
-                              {opt.label}
-                              <span style={{ display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 }}>{opt.desc}</span>
-                            </button>
-                          ))}
-                        </div>
-                        {/* Preview for this step */}
-                        {(step.contentType || 'ai_text') === 'html' ? (
-                          emailTplHtml ? (
-                            <div>
-                              <div style={{ fontSize:10, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>📧 HTML Template Preview</div>
-                              <div style={{ borderRadius:6, overflow:'hidden', border:'1px solid rgba(96,165,250,0.25)', background:'#fff' }}>
-                                <iframe
-                                  srcDoc={emailTplHtml}
-                                  style={{ width:'100%', height:320, border:'none', display:'block' }}
-                                  sandbox="allow-same-origin"
-                                  title={`HTML preview step ${i+1}`}
-                                />
-                              </div>
-                              <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>
-                                AI will inject a personalized opener per contact before sending.
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ fontSize:11, color:'#fbbf24', padding:'6px 10px', background:'rgba(251,191,36,0.08)', borderRadius:6, border:'1px solid rgba(251,191,36,0.2)' }}>
-                              ⚠️ No HTML template saved yet — build one in the Email Template section below, then come back and select it here.
-                            </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {seqSteps.map((step, i) => {
+                      const chColor = step.channel === 'Email' ? '#60a5fa' : step.channel === 'LinkedIn' ? '#6366f1' : '#4ade80';
+                      const chBg   = step.channel === 'Email' ? 'rgba(96,165,250,0.2)' : step.channel === 'LinkedIn' ? 'rgba(99,102,241,0.2)' : 'rgba(74,222,128,0.2)';
+                      const chIcon = step.channel === 'Email' ? '✉️' : step.channel === 'LinkedIn' ? '🔗' : '💬';
+                      return (
+                        React.createElement('div', { key: i, style: { display: 'flex', gap: 0 } },
+                          /* Timeline spine */
+                          React.createElement('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: 40, flexShrink: 0 } },
+                            React.createElement('div', { style: { width: 28, height: 28, borderRadius: '50%', background: chBg, border: `2px solid ${chColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0, zIndex: 1 } }, chIcon),
+                            i < seqSteps.length - 1 && React.createElement('div', { style: { width: 2, flex: 1, minHeight: 20, background: 'var(--globant-border)', margin: '2px 0' } })
+                          ),
+                          /* Step card */
+                          React.createElement('div', { style: { flex: 1, marginBottom: 12, marginLeft: 10, padding: '12px 14px', borderRadius: 10, background: 'var(--globant-surface)', border: '1px solid var(--globant-border)' } },
+                            /* Card header */
+                            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
+                              React.createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+                                React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase' } }, `Step ${i + 1}`),
+                                i === 0
+                                  ? React.createElement('span', { style: { fontSize: 11, color: 'var(--globant-muted)' } }, 'Sends on enrollment day')
+                                  : React.createElement('span', { style: { fontSize: 11, color: 'var(--globant-muted)', display: 'flex', alignItems: 'center', gap: 4 } },
+                                      'Wait ',
+                                      React.createElement('input', { type: 'number', min: 1, value: step.waitDays, onChange: e => { updateSeqStep(i, 'waitDays', parseInt(e.target.value)||1); },
+                                        style: { width: 42, textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', borderRadius: 4, color: 'var(--globant-text)', fontSize: 11, padding: '1px 4px' } }),
+                                      ' days'
+                                    )
+                              ),
+                              React.createElement('button', { onClick: () => removeSeqStep(i), style: { background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 14, padding: '0 4px' } }, '✕')
+                            ),
+                            /* Channel + Condition + Note row */
+                            React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 } },
+                              React.createElement('div', null,
+                                React.createElement('label', { style: { fontSize: 10, color: 'var(--globant-muted)', display: 'block', marginBottom: 3 } }, 'Channel'),
+                                React.createElement('select', { value: step.channel, onChange: e => updateSeqStep(i, 'channel', e.target.value), className: 'input-field', style: { fontSize: 11, padding: '4px 8px', minWidth: 100 } },
+                                  React.createElement('option', null, 'Email'),
+                                  React.createElement('option', null, 'LinkedIn'),
+                                  React.createElement('option', null, 'WhatsApp')
+                                )
+                              ),
+                              React.createElement('div', null,
+                                React.createElement('label', { style: { fontSize: 10, color: 'var(--globant-muted)', display: 'block', marginBottom: 3 } }, 'Send if'),
+                                React.createElement('select', { value: step.condition, onChange: e => updateSeqStep(i, 'condition', e.target.value), className: 'input-field', style: { fontSize: 11, padding: '4px 8px', minWidth: 130 } },
+                                  React.createElement('option', { value: 'always' }, 'Always'),
+                                  React.createElement('option', { value: 'no_reply' }, 'Only if no reply')
+                                )
+                              ),
+                              React.createElement('div', { style: { flex: 1, minWidth: 120 } },
+                                React.createElement('label', { style: { fontSize: 10, color: 'var(--globant-muted)', display: 'block', marginBottom: 3 } }, 'Note (optional)'),
+                                React.createElement('input', { value: step.note || '', onChange: e => updateSeqStep(i, 'note', e.target.value), className: 'input-field', placeholder: 'e.g. Follow-up angle', style: { fontSize: 11, padding: '4px 8px', width: '100%', boxSizing: 'border-box' } })
+                              )
+                            ),
+                            /* Content type toggle */
+                            React.createElement('div', { style: { marginBottom: 8 } },
+                              React.createElement('div', { style: { fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Email content'),
+                              React.createElement('div', { style: { display: 'flex', gap: 6 } },
+                                ...[
+                                  { val: 'ai_text', label: '🤖 AI plain text', desc: 'AI writes a personalized message' },
+                                  { val: 'html',    label: '📧 HTML template',  desc: emailTplHtml ? 'Uses your saved HTML template' : '⚠️ No HTML template saved yet' },
+                                ].map(opt => {
+                                  const active = (step.contentType || 'ai_text') === opt.val;
+                                  const disabled = opt.val === 'html' && !emailTplHtml;
+                                  return React.createElement('button', { key: opt.val,
+                                    onClick: () => !disabled && updateSeqStep(i, 'contentType', opt.val),
+                                    style: { flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: active ? 700 : 400, opacity: disabled ? 0.5 : 1,
+                                      background: active ? (opt.val === 'html' ? 'rgba(96,165,250,0.18)' : 'rgba(91,191,181,0.18)') : 'rgba(0,0,0,0.15)',
+                                      color: active ? (opt.val === 'html' ? '#60a5fa' : 'var(--globant-green)') : 'var(--globant-muted)',
+                                      border: `1px solid ${active ? (opt.val === 'html' ? 'rgba(96,165,250,0.4)' : 'rgba(91,191,181,0.4)') : 'var(--globant-border)'}` } },
+                                    opt.label,
+                                    React.createElement('span', { style: { display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 } }, opt.desc)
+                                  );
+                                })
+                              )
+                            ),
+                            /* Send mode toggle */
+                            React.createElement('div', { style: { display: 'flex', gap: 6, marginBottom: 8 } },
+                              ...[{val:'send', label:'🤖 Auto-send', desc:'AI generates and sends directly'}, {val:'draft', label:'📝 Draft first', desc:'Creates Gmail draft for your review'}].map(opt =>
+                                React.createElement('button', { key: opt.val, onClick: () => updateSeqStep(i, 'mode', opt.val),
+                                  style: { flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: (step.mode||'send') === opt.val ? 700 : 400,
+                                    background: (step.mode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.18)' : 'rgba(251,191,36,0.18)') : 'rgba(0,0,0,0.15)',
+                                    color: (step.mode||'send') === opt.val ? (opt.val === 'send' ? 'var(--globant-green)' : '#fbbf24') : 'var(--globant-muted)',
+                                    border: `1px solid ${(step.mode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.4)' : 'rgba(251,191,36,0.4)') : 'var(--globant-border)'}` } },
+                                  opt.label,
+                                  React.createElement('span', { style: { display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 } }, opt.desc)
+                                )
+                              )
+                            ),
+                            /* Preview for this step */
+                            (step.contentType || 'ai_text') === 'html' ? (
+                              emailTplHtml ? (
+                                React.createElement('div', null,
+                                  React.createElement('div', { style: { fontSize:10, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 } }, '📧 HTML Template Preview'),
+                                  React.createElement('div', { style: { borderRadius:6, overflow:'hidden', border:'1px solid rgba(96,165,250,0.25)', background:'#fff' } },
+                                    React.createElement('iframe', { srcDoc: emailTplHtml, style: { width:'100%', height:320, border:'none', display:'block' }, sandbox: 'allow-same-origin', title: `HTML preview step ${i+1}` })
+                                  ),
+                                  React.createElement('div', { style: { fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' } }, 'AI will inject a personalized opener per contact before sending.')
+                                )
+                              ) : (
+                                React.createElement('div', { style: { fontSize:11, color:'#fbbf24', padding:'6px 10px', background:'rgba(251,191,36,0.08)', borderRadius:6, border:'1px solid rgba(251,191,36,0.2)' } },
+                                  '⚠️ No HTML template saved yet — build one in the Email Template section below, then come back and select it here.'
+                                )
+                              )
+                            ) : (
+                              React.createElement('div', null,
+                                React.createElement('button', { onClick: () => generateStepPreview(i, step), disabled: generatingStepPreview === i,
+                                  style: { background:'none', border:'1px dashed rgba(167,139,250,0.4)', borderRadius:6, color:'#a78bfa', cursor:'pointer', fontSize:11, padding:'4px 12px', width:'100%', fontWeight:600 } },
+                                  generatingStepPreview === i ? '⏳ Generating preview...' : stepPreviews[i] ? '🔄 Re-generate preview' : '👁️ Preview AI message for this step'
+                                ),
+                                stepPreviews[i] && React.createElement('div', { style: { marginTop:8, padding:'10px 12px', background:'rgba(167,139,250,0.06)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:6 } },
+                                  React.createElement('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 } },
+                                    React.createElement('span', { style: { fontSize:10, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.5 } }, `Sample message — Step ${i+1}`),
+                                    React.createElement('button', { onClick: () => { try { navigator.clipboard.writeText(stepPreviews[i]); } catch {} }, style: { background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:10 } }, '📋 Copy')
+                                  ),
+                                  React.createElement('div', { style: { fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' } }, stepPreviews[i])
+                                )
+                              )
+                            )
                           )
-                        ) : (
-                          <div>
-                            <button
-                              onClick={() => generateStepPreview(i, step)}
-                              disabled={generatingStepPreview === i}
-                              style={{ background:'none', border:'1px dashed rgba(167,139,250,0.4)', borderRadius:6, color:'#a78bfa', cursor:'pointer', fontSize:11, padding:'4px 12px', width:'100%', fontWeight:600 }}>
-                              {generatingStepPreview === i ? '⏳ Generating preview...' : stepPreviews[i] ? '🔄 Re-generate preview' : '👁️ Preview AI message for this step'}
-                            </button>
-                            {stepPreviews[i] && (
-                              <div style={{ marginTop:8, padding:'10px 12px', background:'rgba(167,139,250,0.06)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:6 }}>
-                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                                  <span style={{ fontSize:10, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.5 }}>Sample message — Step {i+1}</span>
-                                  <button onClick={() => { try { navigator.clipboard.writeText(stepPreviews[i]); } catch {} }} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:10 }}>📋 Copy</button>
-                                </div>
-                                <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{stepPreviews[i]}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                        )
+                      );
+                    })}
+                    </div>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                       <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={addSeqStep}>+ Add Step</button>
                       {seqDirty && (
@@ -16067,50 +16097,97 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                     </div>
 
                     {/* Enrollment controls */}
-                    {seqSteps.length > 0 && (
-                      <>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Enrollments</div>
-                        <div style={{ display: 'flex', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Active: <strong style={{ color: '#4ade80' }}>{activeCount}</strong></span>
-                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Replied: <strong style={{ color: '#60a5fa' }}>{repliedCount}</strong></span>
-                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Completed: <strong style={{ color: 'var(--globant-muted)' }}>{completedCount}</strong></span>
-                          <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Pending to enroll: <strong style={{ color: '#fbbf24' }}>{pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed').length}</strong></span>
-                        </div>
-                        <button className="action-btn btn-primary" style={{ fontSize: 11, marginBottom: 12 }}
-                          onClick={enrollInSequence} disabled={enrolling || pendingEmailContacts.length === 0}>
-                          {enrolling ? '⏳ Enrolling...' : `🗓️ Enroll pending contacts (${pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed').length})`}
-                        </button>
-                        {enrolledIds.length > 0 && (
-                          <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--globant-border)', borderRadius: 6 }}>
-                            {enrolledIds.map(stkId => {
-                              const en = enrollments[stkId];
-                              const stk = stakeholders.find(s => s.id === stkId);
-                              if (!stk) return null;
-                              const stepLabel = en.step < seqSteps.length ? `Step ${en.step+1}${seqSteps[en.step]?.note ? ` — ${seqSteps[en.step].note}` : ''}` : 'All steps done';
-                              const STATUS_C = { active: '#fbbf24', completed: 'var(--globant-muted)', replied: '#60a5fa', paused: '#a78bfa' };
-                              return (
-                                <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
-                                  <div>
-                                    <span style={{ fontWeight: 600 }}>{F(stk,'Name')}{F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}</span>
-                                    <span style={{ color: 'var(--globant-muted)', marginLeft: 8 }}>{stepLabel} · next: {en.nextDate}</span>
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: STATUS_C[en.status]||'var(--globant-muted)', padding: '2px 7px', borderRadius: 10, background: `${STATUS_C[en.status]||'#666'}20`, border: `1px solid ${STATUS_C[en.status]||'#666'}40` }}>{en.status}</span>
-                                    <button onClick={() => unenrollFromSequence(stkId)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }} title="Remove from sequence">✕</button>
-                                  </div>
+                    {seqSteps.length > 0 && (() => {
+                      const enrollmentValues = Object.values(enrollments);
+                      const totalEnrolled = enrollmentValues.length;
+                      const countPaused = enrollmentValues.filter(e => e.status === 'paused').length;
+                      const pctDone = totalEnrolled > 0 ? Math.round((completedCount + repliedCount) / totalEnrolled * 100) : 0;
+                      const getDueLabel = (nextDate) => {
+                        if (!nextDate) return null;
+                        const diff = Math.ceil((new Date(nextDate) - new Date()) / (1000 * 60 * 60 * 24));
+                        if (diff <= 0) return { label: '🔴 Due today', color: '#ef4444' };
+                        if (diff === 1) return { label: '🟡 Tomorrow', color: '#fbbf24' };
+                        if (diff <= 3) return { label: `🟠 In ${diff}d`, color: '#fb923c' };
+                        return { label: `📅 In ${diff}d`, color: 'var(--globant-muted)' };
+                      };
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      return (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Enrollments</div>
+                            <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '5px 12px' }}
+                              disabled={runningSeq}
+                              onClick={runSequenceNow}>
+                              {runningSeq ? '⏳ Running…' : '⚡ Send due steps now'}
+                            </button>
+                          </div>
+                          {/* Feature 1: Progress bar */}
+                          {totalEnrolled > 0 && (
+                            <div style={{ marginBottom: 14 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                <div style={{ display: 'flex', gap: 12, fontSize: 11, flexWrap: 'wrap' }}>
+                                  <span style={{ color: '#60a5fa' }}>🔵 {activeCount} active</span>
+                                  <span style={{ color: '#4ade80' }}>✅ {repliedCount} replied</span>
+                                  <span style={{ color: 'var(--globant-muted)' }}>⬜ {completedCount} completed</span>
+                                  {countPaused > 0 && <span style={{ color: '#fbbf24' }}>⏸ {countPaused} paused</span>}
                                 </div>
-                              );
-                            })}
+                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>{pctDone}% done</span>
+                              </div>
+                              <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: pctDone + '%', background: 'linear-gradient(90deg, #4ade80, #60a5fa)', borderRadius: 3, transition: 'width 0.4s ease' }} />
+                              </div>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Pending to enroll: <strong style={{ color: '#fbbf24' }}>{pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed').length}</strong></span>
                           </div>
-                        )}
-                        <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(167,139,250,0.08)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
-                          <div style={{ fontSize: 11, color: '#a78bfa', fontWeight: 600, marginBottom: 3 }}>ℹ️ How the sequence runner works</div>
-                          <div style={{ fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>
-                            A scheduled job runs daily at 8am UTC. It checks all active enrollments, generates a personalized AI message for each due contact, and sends it via your connected Gmail. Contacts with a reply skip steps marked "Only if no reply".
+                          <button className="action-btn btn-primary" style={{ fontSize: 11, marginBottom: 12 }}
+                            onClick={enrollInSequence} disabled={enrolling || pendingEmailContacts.length === 0}>
+                            {enrolling ? '⏳ Enrolling...' : `🗓️ Enroll pending contacts (${pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed').length})`}
+                          </button>
+                          {enrolledIds.length > 0 && (
+                            <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--globant-border)', borderRadius: 6 }}>
+                              {enrolledIds.map(stkId => {
+                                const en = enrollments[stkId];
+                                const stk = stakeholders.find(s => s.id === stkId);
+                                if (!stk) return null;
+                                const stepLabel = en.step < seqSteps.length ? `Step ${en.step+1}${seqSteps[en.step]?.note ? ` — ${seqSteps[en.step].note}` : ''}` : 'All steps done';
+                                const STATUS_C = { active: '#60a5fa', completed: 'var(--globant-muted)', replied: '#4ade80', paused: '#a78bfa' };
+                                const isDueToday = en.status === 'active' && en.nextDate && en.nextDate <= todayStr;
+                                const dueInfo = en.status === 'active' ? getDueLabel(en.nextDate) : null;
+                                return (
+                                  <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
+                                    <div>
+                                      <span style={{ fontWeight: 600 }}>{F(stk,'Name')}{F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}</span>
+                                      <span style={{ color: 'var(--globant-muted)', marginLeft: 8 }}>{stepLabel}</span>
+                                      {dueInfo && (
+                                        <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: dueInfo.color }}>{dueInfo.label}</span>
+                                      )}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <span style={{ fontSize: 10, fontWeight: 700,
+                                        color: isDueToday ? '#ef4444' : (STATUS_C[en.status]||'var(--globant-muted)'),
+                                        padding: '2px 7px', borderRadius: 10,
+                                        background: isDueToday ? 'rgba(239,68,68,0.15)' : `${STATUS_C[en.status]||'#666'}20`,
+                                        border: `1px solid ${isDueToday ? 'rgba(239,68,68,0.4)' : (STATUS_C[en.status]||'#666') + '40'}`,
+                                        animation: isDueToday ? 'pulse 2s infinite' : 'none'
+                                      }}>{en.status}</span>
+                                      <button onClick={() => unenrollFromSequence(stkId)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }} title="Remove from sequence">✕</button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(167,139,250,0.08)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)' }}>
+                            <div style={{ fontSize: 11, color: '#a78bfa', fontWeight: 600, marginBottom: 3 }}>ℹ️ How the sequence runner works</div>
+                            <div style={{ fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>
+                              A scheduled job runs hourly. It checks all active enrollments, generates a personalized AI message for each due contact, and sends it via your connected Gmail. Contacts with a reply skip steps marked "Only if no reply". Use "Send due steps now" to trigger immediately.
+                            </div>
                           </div>
-                        </div>
-                      </>
-                    )}
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               })()}
