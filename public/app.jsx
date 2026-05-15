@@ -4039,15 +4039,19 @@ Output ONLY the message, nothing else.`;
                   const phone    = F(s, 'Phone') || '';
                   const linkedin = F(s, 'LinkedIn') || '';
                   const notes    = F(lastOutreach, 'Notes') || '';
-                  // Parse Notes: [gmsg:ID]\nSubject\n\nBody
+                  const msgField = F(lastOutreach, 'Message') || '';
+                  // Extract Gmail message ID from Notes field (always stored there)
                   const gmsgMatch   = notes.match(/\[gmsg:([^\]]+)\]/);
                   const gmsgId      = gmsgMatch ? gmsgMatch[1] : null;
                   const gmailLink   = gmsgId ? `https://mail.google.com/mail/#inbox/${gmsgId}` : null;
-                  const cleanNotes  = notes.replace(/^\[gmsg:[^\]]+\]\s*/,'').trim();
-                  const noteLines   = cleanNotes.split('\n');
-                  const subject     = noteLines[0] || '';
-                  const bodyLines   = noteLines.slice(1).filter((l,i,arr) => i > 0 || l.trim()); // skip first blank
-                  const bodyText    = bodyLines.join('\n').trim();
+                  // Content: prefer Message field, fall back to Notes (strip [gmsg:] prefix)
+                  const rawContent  = msgField.trim() || notes.replace(/^\[gmsg:[^\]]+\]\s*/,'').trim();
+                  const contentLines = rawContent.split('\n');
+                  // If Notes-sourced, first line is subject; if Message-sourced, no separate subject
+                  const hasGmsg     = !!gmsgMatch && !msgField.trim();
+                  const subject     = hasGmsg ? (contentLines[0] || '') : '';
+                  const bodyRaw     = hasGmsg ? contentLines.slice(1).join('\n').trim() : rawContent;
+                  const bodyText    = bodyRaw.trim();
                   const isExpanded  = expandedReplies?.[s.id];
                   const PREVIEW_LEN = 200;
                   return (
