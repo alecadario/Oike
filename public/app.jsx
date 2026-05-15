@@ -373,15 +373,15 @@
         const influence = F(s, 'Level of Influence') || '';
 
         if (daysSince === null) {
-          focusScore += 30; focusTag = 'nuevo';         // Never contacted
+          focusScore += 30; focusTag = 'new';           // Never contacted
         } else if (daysSince >= 3 && daysSince <= 7) {
-          focusScore += 55; focusTag = 'urgente';       // Sweet spot follow-up window
+          focusScore += 55; focusTag = 'urgent';        // Sweet spot follow-up window
         } else if (daysSince > 7 && daysSince <= 21) {
-          focusScore += 30; focusTag = 'seguimiento';   // Needs follow-up
+          focusScore += 30; focusTag = 'followup';      // Needs follow-up
         } else if (daysSince > 21 && daysSince <= 45) {
-          focusScore += 15; focusTag = 'reactivar';     // Going cold
+          focusScore += 15; focusTag = 'reengage';      // Going cold
         } else if (daysSince > 45) {
-          focusScore += 5;  focusTag = 'reactivar';     // Very cold
+          focusScore += 5;  focusTag = 'reengage';      // Very cold
         }
         if (influence === 'Decision Maker') focusScore += 25;
         else if (influence === 'Champion') focusScore += 15;
@@ -3081,6 +3081,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const [generatingFollowup, setGeneratingFollowup] = useState(null); // stakeholder.id being generated
       const [csvStatus, setCsvStatus] = useState(null);
       const [importResults, setImportResults] = useState(null);
+      const [expandedReplies, setExpandedReplies] = useState({}); // { [stakeholder.id]: bool }
       const [showFuNewStk, setShowFuNewStk] = useState(false);
       const [fuNewName, setFuNewName] = useState('');
       const [fuNewLast, setFuNewLast] = useState('');
@@ -4038,26 +4039,67 @@ Output ONLY the message, nothing else.`;
                   const phone    = F(s, 'Phone') || '';
                   const linkedin = F(s, 'LinkedIn') || '';
                   const notes    = F(lastOutreach, 'Notes') || '';
-                  const snippet  = notes.replace(/^\[g[^\]]+\]\s*/g, '').split('\n').slice(1).join(' ').slice(0, 120);
+                  // Parse Notes: [gmsg:ID]\nSubject\n\nBody
+                  const gmsgMatch   = notes.match(/\[gmsg:([^\]]+)\]/);
+                  const gmsgId      = gmsgMatch ? gmsgMatch[1] : null;
+                  const gmailLink   = gmsgId ? `https://mail.google.com/mail/#inbox/${gmsgId}` : null;
+                  const cleanNotes  = notes.replace(/^\[gmsg:[^\]]+\]\s*/,'').trim();
+                  const noteLines   = cleanNotes.split('\n');
+                  const subject     = noteLines[0] || '';
+                  const bodyLines   = noteLines.slice(1).filter((l,i,arr) => i > 0 || l.trim()); // skip first blank
+                  const bodyText    = bodyLines.join('\n').trim();
+                  const isExpanded  = expandedReplies?.[s.id];
+                  const PREVIEW_LEN = 200;
                   return (
-                    <div key={s.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--globant-border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-                          <span style={{ fontWeight: 700, fontSize: 13 }}>{F(s, 'Name')} {F(s, 'Last name') || ''}</span>
-                          <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role') || ''}{accNames.length ? ` · ${accNames[0]}` : ''}</span>
-                          <span style={{ fontSize: 11, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 8px', borderRadius: 20 }}>
-                            {daysSince === 0 ? 'today' : `${daysSince}d ago`}
-                          </span>
+                    <div key={s.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--globant-border)' }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                            <span style={{ fontWeight: 700, fontSize: 13 }}>{F(s, 'Name')} {F(s, 'Last name') || ''}</span>
+                            <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{F(s, 'Role') || ''}{accNames.length ? ` · ${accNames[0]}` : ''}</span>
+                            <span style={{ fontSize: 11, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 8px', borderRadius: 20 }}>
+                              {daysSince === 0 ? 'today' : `${daysSince}d ago`}
+                            </span>
+                          </div>
+                          {/* Email card */}
+                          {cleanNotes && (
+                            <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.18)', borderRadius: 8, padding: '10px 12px', marginTop: 4 }}>
+                              {subject && (
+                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 6 }}>
+                                  📧 {subject}
+                                </div>
+                              )}
+                              {bodyText && (
+                                <>
+                                  <div style={{ fontSize: 12, color: 'var(--globant-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                    {isExpanded ? bodyText : (bodyText.length > PREVIEW_LEN ? bodyText.slice(0, PREVIEW_LEN) + '…' : bodyText)}
+                                  </div>
+                                  {bodyText.length > PREVIEW_LEN && (
+                                    <button
+                                      onClick={() => setExpandedReplies(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                                      style={{ marginTop: 6, fontSize: 11, background: 'none', border: 'none', color: '#4ade80', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                                      {isExpanded ? 'Show less ▲' : 'Show more ▼'}
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {gmailLink && (
+                                <a href={gmailLink} target="_blank" rel="noreferrer"
+                                  style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: '#60a5fa', textDecoration: 'none', background: 'rgba(96,165,250,0.1)', padding: '3px 10px', borderRadius: 12, border: '1px solid rgba(96,165,250,0.25)' }}>
+                                  📨 Open in Gmail
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {snippet && <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginTop: 2, fontStyle: 'italic' }}>"{snippet}"</div>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                        {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }}
-                          onClick={() => setSelectedStakeholder(s)}>✉️ Reply</button>}
-                        {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }}
-                          onClick={() => { window.open(`https://wa.me/${phone.replace(/\D/g,'')}`, '_blank'); }}>💬 WhatsApp</button>}
-                        {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }}
-                          onClick={() => window.open(linkedin, '_blank')}>🔗 LinkedIn</button>}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                          {email && <button className="action-btn btn-email" style={{ fontSize: 10, padding: '5px 10px' }}
+                            onClick={() => setSelectedStakeholder(s)}>✉️ Reply</button>}
+                          {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 10, padding: '5px 10px' }}
+                            onClick={() => { window.open(`https://wa.me/${phone.replace(/\D/g,'')}`, '_blank'); }}>💬 WhatsApp</button>}
+                          {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 10, padding: '5px 10px' }}
+                            onClick={() => window.open(linkedin, '_blank')}>🔗 LinkedIn</button>}
+                        </div>
                       </div>
                     </div>
                   );
@@ -4069,17 +4111,17 @@ Output ONLY the message, nothing else.`;
           {/* Group 1: Daily Focus — scored & tagged */}
           {(() => {
             const TAG_CFG = {
-              urgente:    { label: '🔴 Urgente',    color: '#ef4444', bg: 'rgba(239,68,68,0.08)',    border: '#ef4444', desc: 'Ideal follow-up window (3–7d)' },
-              seguimiento:{ label: '🟡 Seguimiento', color: '#fbbf24', bg: 'rgba(251,191,36,0.06)',   border: '#fbbf24', desc: 'Follow-up overdue (8–21d)' },
-              reactivar:  { label: '🟣 Reactivar',  color: '#a78bfa', bg: 'rgba(167,139,250,0.06)',  border: '#a78bfa', desc: 'Going cold — new angle needed' },
+              urgent:    { label: '🔴 Urgent',    color: '#ef4444', bg: 'rgba(239,68,68,0.08)',    border: '#ef4444', desc: 'Ideal follow-up window (3–7d)' },
+              followup:  { label: '🟡 Follow-up', color: '#fbbf24', bg: 'rgba(251,191,36,0.06)',   border: '#fbbf24', desc: 'Follow-up overdue (8–21d)' },
+              reengage:  { label: '🟣 Re-engage', color: '#a78bfa', bg: 'rgba(167,139,250,0.06)',  border: '#a78bfa', desc: 'Going cold — new angle needed' },
             };
             const groups = {};
             dailyFocusItems.forEach(item => {
-              const tag = item.tag || 'seguimiento';
+              const tag = item.tag || 'followup';
               if (!groups[tag]) groups[tag] = [];
               groups[tag].push(item);
             });
-            const tagOrder = ['urgente', 'seguimiento', 'reactivar'];
+            const tagOrder = ['urgent', 'followup', 'reengage'];
             return (
               <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--globant-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
