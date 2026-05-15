@@ -624,7 +624,7 @@
           await onUpdateNotes(updated);
         } catch (e) {
           console.error('Delete file block failed:', e);
-          alert('Failed to delete — try again.');
+          window.__oikeToast('Failed to delete — try again.', 'error');
         } finally {
           setDeletingIdx(null);
         }
@@ -736,7 +736,7 @@
           setStkNotes(stkNotesDraft);
           setEditingStkNotes(false);
           if (onRefresh) onRefresh();
-        } catch (e) { alert('Error saving notes: ' + (e.message || 'unknown')); }
+        } catch (e) { window.__oikeToast('Error saving notes: ' + (e.message || 'unknown'), 'error'); }
         setSavingStkNotes(false);
       };
       const handleStkFileUpload = async (e) => {
@@ -790,7 +790,7 @@ Be concise and actionable.`;
           setStkNotes(updated);
           if (onRefresh) onRefresh();
         } catch (err) {
-          alert('Error processing file: ' + (err.message || 'unknown'));
+          window.__oikeToast('Error processing file: ' + (err.message || 'unknown'), 'error');
         }
         setUploadingStkFile(false);
         e.target.value = '';
@@ -857,7 +857,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           }
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
+          window.__oikeToast('Failed to generate. Error: ' + (e.message || 'unknown error'), 'error');
         }
         setGenLoading('');
       };
@@ -908,12 +908,12 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               setLocalLinkedin(text2);
               try { localStorage.setItem(LINKEDIN_CACHE_KEY, text2); } catch {};
             } else {
-              alert('LinkedIn AI is still generating. Wait a moment and try Refresh Data, then open the contact again.');
+              window.__oikeToast('LinkedIn AI is still generating. Wait a moment and try Refresh Data, then open the contact again.', 'warning');
             }
           }
         } catch (e) {
           console.error('[LinkedIn] Error:', e);
-          alert('Failed to refresh LinkedIn data. Check console for details.');
+          window.__oikeToast('Failed to refresh LinkedIn data. Check console for details.', 'error');
         }
         setGenLoading('');
       };
@@ -937,7 +937,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           const data = await res.json().catch(() => ({}));
           if (res.status === 401) { logoutUser(); return; }
           if (!res.ok) {
-            alert('Enrichment failed: ' + (data.error || `HTTP ${res.status}`));
+            window.__oikeToast('Enrichment failed: ' + (data.error || `HTTP ${res.status}`), 'error');
             return;
           }
           if (data.ok && data.email) {
@@ -945,7 +945,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             setEmailMeta({ confidence: data.confidence, source: data.source, qualification: data.qualification });
             if (onRefresh) onRefresh();
           } else if (data.cached) {
-            alert('Already enriched recently — no credits consumed.');
+            window.__oikeToast('Already enriched recently — no credits consumed.', 'warning');
           } else {
             // No provider found the email — offer manual LinkedIn search fallback
             const domainInfo = data.domain_used ? `Domain tried: ${data.domain_used}` : 'No company domain was available on the account';
@@ -967,7 +967,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           }
         } catch (e) {
           console.error('[enrich] Error:', e);
-          alert('Enrichment error: ' + (e.message || 'unknown'));
+          window.__oikeToast('Enrichment error: ' + (e.message || 'unknown'), 'error');
         }
         setEnrichLoading(false);
       };
@@ -1179,7 +1179,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                     if (!quickMsg.trim()) return;
                     // Guard: stakeholder must be saved in Airtable, not tmp
                     if (stakeholder.id && stakeholder.id.startsWith('tmp_')) {
-                      alert('This contact is still saving. Wait a moment and try again.');
+                      window.__oikeToast('This contact is still saving. Wait a moment and try again.', 'warning');
                       return;
                     }
                     setSendingQuickMsg(true);
@@ -1328,7 +1328,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                             setQuickDate('');
                           } catch (e) {
                             console.error(e);
-                            alert('Failed to log activity');
+                            window.__oikeToast('Failed to log activity', 'error');
                           }
                           setSavingQuick(false);
                         }}>
@@ -1568,7 +1568,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           }
           setEditingGoal(false);
         } catch (e) {
-          alert('Failed to save goal: ' + e.message);
+          window.__oikeToast('Failed to save goal: ' + e.message, 'error');
         } finally {
           setSavingGoal(false);
         }
@@ -1594,7 +1594,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
           if (onUpdateRecord) onUpdateRecord('users', editingKpiId, fields);
           setEditingKpiId(null);
         } catch (e) {
-          alert('Failed to save KPI targets: ' + e.message);
+          window.__oikeToast('Failed to save KPI targets: ' + e.message, 'error');
         } finally {
           setSavingKpi(false);
         }
@@ -2575,7 +2575,7 @@ Keep it natural — write for the ear, not the eye.`,
       };
 
       const handleGenerate = async () => {
-        if (!selectedChannel) { alert('Select a channel first'); return; }
+        if (!selectedChannel) { window.__oikeToast('Select a channel first', 'warning'); return; }
 
         // Warning for protected statuses — get confirmation before generating
         const currentStakeholderStatus = F(stakeholder, 'Status') || '';
@@ -2712,7 +2712,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
           setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
+          window.__oikeToast('Failed to generate. Error: ' + (e.message || 'unknown error'), 'error');
         }
         setLoadingAI(false);
       };
@@ -2720,7 +2720,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
       const handleSendViaGmail = async () => {
         if (!currentMessage.trim()) return;
         const stakeholderEmail = F(stakeholder, 'Email') || '';
-        if (!stakeholderEmail) { alert('This contact has no email address.'); return; }
+        if (!stakeholderEmail) { window.__oikeToast('This contact has no email address.', 'warning'); return; }
 
         // Parse subject from generated message (first line must be "Subject: ...")
         const lines = currentMessage.split('\n');
@@ -2767,7 +2767,7 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             const ccParam = ccList.length > 0 ? `&cc=${encodeURIComponent(ccList.join(','))}` : '';
             window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(stakeholderEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(messageBody)}${ccParam}`, '_blank');
             if (result.error?.includes('connect') || result.error?.includes('scope') || result.error?.includes('auth')) {
-              alert('Reconnect Gmail in Settings → Integrations to send directly from the app. Opening Gmail compose instead.');
+              window.__oikeToast('Reconnect Gmail in Settings → Integrations to send directly from the app. Opening Gmail compose instead.', 'error');
             }
             setSendingGmail(false);
             return;
@@ -2830,11 +2830,11 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.error || 'Draft failed');
-            alert('✅ Draft saved to Gmail Borradores!');
+            window.__oikeToast('✅ Draft saved to Gmail Borradores!', 'success');
             if (onSuccess) onSuccess();
             onClose();
           } catch (e) {
-            alert('Failed to save Gmail draft: ' + (e.message || 'unknown error'));
+            window.__oikeToast('Failed to save Gmail draft: ' + (e.message || 'unknown error'), 'error');
           }
           setSavingDraft(false);
           return;
@@ -2856,11 +2856,11 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
             ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
             ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
           });
-          alert('Draft saved to Airtable.');
+          window.__oikeToast('Draft saved to Airtable.', 'success');
           onClose();
         } catch (e) {
           console.error('Save draft failed:', e);
-          alert('Failed to save draft.');
+          window.__oikeToast('Failed to save draft.', 'error');
         }
         setSavingDraft(false);
       };
@@ -3563,16 +3563,16 @@ Output ONLY the message, nothing else.`;
           return full && stkName && full.toLowerCase() === stkName.toLowerCase();
         });
         if (!stkRec) {
-          alert(`Stakeholder "${stkName}" not found. The contact may have been deleted — open the task and edit or skip.`);
+          window.__oikeToast(`Stakeholder "${stkName}" not found. The contact may have been deleted — open the task and edit or skip.`, 'warning');
           return;
         }
         // Check channel availability
         const phone = F(stkRec, 'Phone number');
         const email = F(stkRec, 'Email');
         const linkedin = F(stkRec, 'LinkedIn');
-        if (channel === 'Email' && !email) { alert('No email on file for this contact.'); return; }
-        if (channel === 'WhatsApp' && !phone) { alert('No phone on file for this contact.'); return; }
-        if (channel === 'LinkedIn' && !linkedin) { alert('No LinkedIn URL on file for this contact.'); return; }
+        if (channel === 'Email' && !email) { window.__oikeToast('No email on file for this contact.', 'warning'); return; }
+        if (channel === 'WhatsApp' && !phone) { window.__oikeToast('No phone on file for this contact.', 'warning'); return; }
+        if (channel === 'LinkedIn' && !linkedin) { window.__oikeToast('No LinkedIn URL on file for this contact.', 'warning'); return; }
 
         setTaskBusyId(task.id);
         try {
@@ -3676,7 +3676,7 @@ Output ONLY the message, nothing else.`;
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to create contact', 'error'); if (onLogActivity) onLogActivity(); });
       };
 
       // Stakeholder row renderer
@@ -4321,6 +4321,7 @@ Output ONLY the message, nothing else.`;
                       {e.daysSince !== null && <span style={{ fontSize: 11, fontWeight: 700, color: isDismissed ? 'var(--globant-muted)' : cfg.color }}>{e.daysSince}d ago</span>}
                       {!isDismissed && <span className="badge badge-accent" style={{ fontSize: 9 }}>{e.totalTouches} touch{e.totalTouches !== 1 ? 'es' : ''}</span>}
                       {!isDismissed && e.hasReplied && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 8, background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>↩ replied</span>}
+                      {!isDismissed && <span title="Focus score: timing (up to +55) + influence (+10–25) + has replied (+20) + campaign (+12–20)" style={{ fontSize: 9, color: 'var(--globant-muted)', cursor: 'help' }}>score {score}</span>}
                       {isDismissed ? (
                         <button onClick={() => undismissFollowup(s.id)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>↩ Restore</button>
                       ) : (
@@ -4373,7 +4374,11 @@ Output ONLY the message, nothing else.`;
                   </div>
                 </div>
                 {activeFocusItems.length === 0 && dismissedFocusItems.length === 0 ? (
-                  <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '16px' }}>🎉 No follow-ups pending — inbox clear!</p>
+                  <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6, color: 'var(--globant-text)' }}>Inbox clear!</div>
+                    <div style={{ fontSize: 13, color: 'var(--globant-muted)' }}>No follow-ups due today. Check back tomorrow or add new contacts.</div>
+                  </div>
                 ) : (
                   <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {activeFocusItems.length === 0 && (
@@ -4413,7 +4418,10 @@ Output ONLY the message, nothing else.`;
               <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Never contacted — use AI or direct channel to reach out</span>
             </div>
             {filtered.length === 0 ? (
-              <p style={{ color: 'var(--globant-muted)', fontSize: 13, padding: '8px 0' }}>All contacts have been reached{accountSearch ? ` for "${accountSearch}"` : ''}!</p>
+              <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--globant-muted)', fontSize: 13 }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+                <div>All contacts have been reached out to{accountSearch ? ` for "${accountSearch}"` : ''}!</div>
+              </div>
             ) : (
               <table className="data-table">
                 <thead>
@@ -4725,6 +4733,129 @@ Output ONLY the message, nothing else.`;
       );
     }
 
+    // ============ GLOBAL SEARCH MODAL ============
+    function GlobalSearchModal({ data, onClose, onNavigate }) {
+      const [q, setQ] = React.useState('');
+      const inputRef = React.useRef(null);
+      React.useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+      const stakeholders = data?.stakeholders || [];
+      const accounts = data?.accounts || [];
+      const campaigns = data?.campaigns || [];
+
+      const results = React.useMemo(() => {
+        if (q.trim().length < 2) return [];
+        const term = q.toLowerCase();
+        const hits = [];
+        stakeholders.slice(0, 200).forEach(s => {
+          const name = ((s.fields?.['Name'] || '') + ' ' + (s.fields?.['Last name'] || '')).toLowerCase();
+          const role = (s.fields?.['Role'] || '').toLowerCase();
+          if (name.includes(term) || role.includes(term)) hits.push({ type: 'contact', label: ((s.fields?.['Name'] || '') + ' ' + (s.fields?.['Last name'] || '')).trim(), sub: s.fields?.['Role'] || '', id: s.id, nav: 'contacts' });
+        });
+        accounts.slice(0, 200).forEach(a => {
+          const name = (a.fields?.['Account Name'] || '').toLowerCase();
+          if (name.includes(term)) hits.push({ type: 'account', label: a.fields?.['Account Name'] || '', sub: a.fields?.['Industry'] || '', id: a.id, nav: 'accounts' });
+        });
+        campaigns.slice(0, 100).forEach(c => {
+          const name = (c.fields?.['Name'] || '').toLowerCase();
+          if (name.includes(term)) hits.push({ type: 'campaign', label: c.fields?.['Name'] || '', sub: c.fields?.['Status'] || '', id: c.id, nav: 'campaigns' });
+        });
+        return hits.slice(0, 12);
+      }, [q, stakeholders, accounts, campaigns]);
+
+      const typeIcon = { contact: '👤', account: '🏢', campaign: '📣' };
+
+      return (
+        React.createElement('div', { className: 'modal-overlay', onClick: onClose, style: { zIndex: 2000, alignItems: 'flex-start', paddingTop: '15vh' } },
+          React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation(), style: { width: '100%', maxWidth: 520, borderRadius: 14, padding: 0, overflow: 'hidden' } },
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--globant-border)' } },
+              React.createElement('span', { style: { fontSize: 16 } }, '🔍'),
+              React.createElement('input', { ref: inputRef, value: q, onChange: e => setQ(e.target.value), placeholder: 'Search contacts, accounts, campaigns…', style: { flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 15, color: 'var(--globant-text)' } }),
+              React.createElement('span', { style: { fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 4 } }, 'ESC')
+            ),
+            React.createElement('div', { style: { maxHeight: 360, overflowY: 'auto' } },
+              q.trim().length < 2 && React.createElement('div', { style: { padding: '20px 16px', color: 'var(--globant-muted)', fontSize: 13, textAlign: 'center' } }, 'Type at least 2 characters…'),
+              q.trim().length >= 2 && results.length === 0 && React.createElement('div', { style: { padding: '20px 16px', color: 'var(--globant-muted)', fontSize: 13, textAlign: 'center' } }, 'No results for "' + q + '"'),
+              results.map((r, i) =>
+                React.createElement('div', {
+                  key: r.id + i,
+                  onClick: () => { onNavigate(r.nav); onClose(); },
+                  style: { padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid var(--globant-border)' },
+                  onMouseEnter: e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; },
+                  onMouseLeave: e => { e.currentTarget.style.background = 'none'; },
+                },
+                  React.createElement('span', { style: { fontSize: 16 } }, typeIcon[r.type]),
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, r.label),
+                    r.sub && React.createElement('div', { style: { fontSize: 11, color: 'var(--globant-muted)' } }, r.sub)
+                  ),
+                  React.createElement('span', { style: { marginLeft: 'auto', fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.05)', padding: '2px 7px', borderRadius: 8 } }, r.type)
+                )
+              )
+            ),
+            React.createElement('div', { style: { padding: '8px 16px', borderTop: '1px solid var(--globant-border)', fontSize: 10, color: 'var(--globant-muted)', display: 'flex', gap: 12 } },
+              React.createElement('span', null, '↵ to navigate'),
+              React.createElement('span', null, 'ESC to close'),
+              React.createElement('span', null, '⌘K to toggle')
+            )
+          )
+        )
+      );
+    }
+
+    // ============ SHORTCUTS MODAL ============
+    function ShortcutsModal({ onClose }) {
+      const shortcuts = [
+        { key: '⌘K', desc: 'Global search' },
+        { key: '?', desc: 'Show this panel' },
+        { key: 'ESC', desc: 'Close modal / panel' },
+      ];
+      return (
+        React.createElement('div', { className: 'modal-overlay', onClick: onClose, style: { zIndex: 2000 } },
+          React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation(), style: { maxWidth: 360, borderRadius: 14 } },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+              React.createElement('h3', { style: { margin: 0, fontSize: 15 } }, '⌨️ Keyboard shortcuts'),
+              React.createElement('button', { onClick: onClose, style: { background: 'none', border: 'none', color: 'var(--globant-muted)', fontSize: 18, cursor: 'pointer' } }, '×')
+            ),
+            shortcuts.map(s =>
+              React.createElement('div', { key: s.key, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--globant-border)' } },
+                React.createElement('span', { style: { fontSize: 13, color: 'var(--globant-muted)' } }, s.desc),
+                React.createElement('kbd', { style: { fontSize: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--globant-border)', borderRadius: 5, padding: '2px 8px', fontFamily: 'monospace' } }, s.key)
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ============ FEEDBACK MODAL ============
+    function FeedbackModal({ onClose }) {
+      const [text, setText] = React.useState('');
+      const [sent, setSent] = React.useState(false);
+      const send = () => {
+        if (!text.trim()) return;
+        console.log('[Oike Feedback]', text);
+        setSent(true);
+        setTimeout(onClose, 1500);
+      };
+      return (
+        React.createElement('div', { className: 'modal-overlay', onClick: onClose, style: { zIndex: 2000 } },
+          React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation(), style: { maxWidth: 400, borderRadius: 14 } },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
+              React.createElement('h3', { style: { margin: 0, fontSize: 15 } }, '💬 Send feedback'),
+              React.createElement('button', { onClick: onClose, style: { background: 'none', border: 'none', color: 'var(--globant-muted)', fontSize: 18, cursor: 'pointer' } }, '×')
+            ),
+            sent
+              ? React.createElement('p', { style: { color: '#4ade80', textAlign: 'center', fontSize: 14 } }, '✅ Thanks for your feedback!')
+              : React.createElement(React.Fragment, null,
+                  React.createElement('textarea', { className: 'input-field', rows: 4, value: text, onChange: e => setText(e.target.value), placeholder: "What's working? What's broken? What do you wish existed?", style: { width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13, marginBottom: 12 } }),
+                  React.createElement('button', { className: 'action-btn btn-primary', onClick: send, style: { width: '100%', padding: '10px' } }, 'Send feedback')
+                )
+          )
+        )
+      );
+    }
+
     // ============ SHARED EDIT MODAL ============
     function EditModal({ title, fields, initialValues, onSave, onClose }) {
       const [values, setValues] = useState(() => {
@@ -4843,7 +4974,7 @@ Output ONLY the message, nothing else.`;
           }
           setCtxNewAccountName(''); setCtxNewAccountWebsite('');
           setShowNewAccount(false);
-        } catch (e) { console.error(e); alert('Failed to create account'); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to create account', 'error'); }
         setCtxCreatingAccount(false);
       };
 
@@ -4874,7 +5005,7 @@ Output ONLY the message, nothing else.`;
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to create contact'); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to create contact', 'error'); if (onLogActivity) onLogActivity(); });
       };
 
       // ─── CSV IMPORT ───
@@ -5181,7 +5312,7 @@ Output ONLY the message, nothing else.`;
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[deleteContact] failed:', e);
-          alert('Failed to delete: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to delete: ' + (e.message || 'unknown'), 'error');
         }
       };
 
@@ -5206,7 +5337,7 @@ Output ONLY the message, nothing else.`;
         const a = api || new AirtableAPI();
         a.updateRecord(TABLE_IDS.stakeholders, editingContact.id, updatedFields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to save contact: ' + (e.message || 'Unknown error')); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to save contact: ' + (e.message || 'Unknown error'), 'error'); if (onLogActivity) onLogActivity(); });
       };
 
       const influenceLevels = useMemo(() => {
@@ -5235,7 +5366,7 @@ Output ONLY the message, nothing else.`;
       const bulkGeneratePains = async (targets) => {
         if (bulkPainProgress) return;
         const pending = targets.filter(s => !(F(s,'Pain Points (Generated)') || '').trim());
-        if (pending.length === 0) { alert('Todos los contactos filtrados ya tienen pains generados.'); return; }
+        if (pending.length === 0) { window.__oikeToast('Todos los contactos filtrados ya tienen pains generados.', 'warning'); return; }
         setBulkPainProgress({ done: 0, total: pending.length });
         const a = api || new AirtableAPI();
         for (let i = 0; i < pending.length; i++) {
@@ -5647,7 +5778,7 @@ Pain points must be specific to their role, reference industry challenges, and c
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('Activity edit error', e);
-          alert('Failed to save activity changes');
+          window.__oikeToast('Failed to save activity changes', 'error');
           if (onLogActivity) onLogActivity();
         }
       };
@@ -5977,7 +6108,7 @@ Pain points must be specific to their role, reference industry challenges, and c
         const a = api || new AirtableAPI();
         a.updateRecord(TABLE_IDS.stakeholders, cpEditingContact.id, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to save. ' + e.message); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to save. ' + e.message, 'error'); if (onLogActivity) onLogActivity(); });
       };
       const [cpMeetingModal, setCpMeetingModal] = useState(null);
       const [cpMeetingNotes, setCpMeetingNotes] = useState('');
@@ -6051,7 +6182,7 @@ Pain points must be specific to their role, reference industry challenges, and c
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('Account edit error', e);
-          alert('Failed to save account changes');
+          window.__oikeToast('Failed to save account changes', 'error');
           if (onLogActivity) onLogActivity();
         }
       };
@@ -6135,7 +6266,7 @@ Pain points must be specific to their role, reference industry challenges, and c
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error(e);
-          alert('Failed to save Intel Notes');
+          window.__oikeToast('Failed to save Intel Notes', 'error');
         }
         setSavingNotes(false);
       };
@@ -6228,7 +6359,7 @@ Generate 4-5 items. No intro, no outro, just the formatted items.`;
             return next;
           });
         } catch(e) {
-          console.error(e); alert('Failed to generate news: ' + (e.message || 'unknown error'));
+          console.error(e); window.__oikeToast('Failed to generate news: ' + (e.message || 'unknown error'), 'error');
         } finally { setLoadingNewsAI(false); }
       };
 
@@ -6270,7 +6401,7 @@ Generate 4-5 items. No intro, no outro, just the formatted items.`;
         });
 
         if (targets.length === 0) {
-          alert('All stakeholders already have pain points generated. To regenerate, clear them in Airtable first.');
+          window.__oikeToast('All stakeholders already have pain points generated. To regenerate, clear them in Airtable first.', 'warning');
           return;
         }
 
@@ -6366,7 +6497,7 @@ Return ONLY a valid JSON object with exactly these keys (no markdown, no explana
           saveMeddpicc(parsed);
           setEditingMeddpicc(false);
         } catch(e) {
-          console.error(e); alert('Failed to generate MEDDPICC: ' + (e.message||'unknown error'));
+          console.error(e); window.__oikeToast('Failed to generate MEDDPICC: ' + (e.message || 'unknown error'), 'error');
         } finally { setLoadingMeddpicc(false); }
       };
 
@@ -6439,7 +6570,7 @@ Be specific. Use names. No generic advice. Under 300 words total.`;
           setExecSummary(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 700 }) || 'Could not generate summary.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
+          window.__oikeToast('Failed to generate. Error: ' + (e.message || 'unknown error'), 'error');
         }
         setLoadingSummary(false);
       };
@@ -6494,7 +6625,7 @@ Be specific, not generic. The CP needs to sound informed and prepared.`;
           setTalkingPoints(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 600 }) || 'Could not generate talking points.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate talking points. Error: ' + (e.message || 'unknown error'));
+          window.__oikeToast('Failed to generate talking points. Error: ' + (e.message || 'unknown error'), 'error');
         }
         setLoadingTP(false);
       };
@@ -6555,7 +6686,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
           setContactRecs(await callOpenAI({ prompt, temperature: 0.7, max_tokens: 700 }) || 'No recommendations generated.');
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
+          window.__oikeToast('Failed to generate. Error: ' + (e.message || 'unknown error'), 'error');
         }
         setLoadingRecs(false);
       };
@@ -6656,7 +6787,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
       const createAccount = async () => {
         if (!newAccName.trim()) return;
         const exists = accounts.some(a => (F(a, 'Account Name') || '').toLowerCase() === newAccName.trim().toLowerCase());
-        if (exists) { alert('Account already exists!'); return; }
+        if (exists) { window.__oikeToast('Account already exists!', 'warning'); return; }
         const fields = { 'Account Name': newAccName.trim() };
         if (newAccWebsite.trim()) fields['Website'] = newAccWebsite.trim();
         // Optimistic: show instantly
@@ -6666,7 +6797,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.accounts, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to create account'); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to create account', 'error'); if (onLogActivity) onLogActivity(); });
       };
 
       // Manual Stakeholder Creation
@@ -6692,7 +6823,7 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.stakeholders, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to create stakeholder'); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to create stakeholder', 'error'); if (onLogActivity) onLogActivity(); });
       };
 
       // CSV Account Import
@@ -6817,7 +6948,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error(e);
-          alert('Failed to process file: ' + (e.message || 'Unknown error. Check file type and OpenAI API key.'));
+          window.__oikeToast('Failed to process file: ' + (e.message || 'Unknown error. Check file type and OpenAI API key.'), 'error');
         }
         setUploadingFile(false);
         e.target.value = '';
@@ -6838,7 +6969,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[addSolutionToAccount] Error:', e);
-          alert('Failed to add solution: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to add solution: ' + (e.message || 'unknown'), 'error');
         }
       };
 
@@ -6849,7 +6980,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Solutions': currentSolIds.filter(id => id !== solId) });
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to remove solution'); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to remove solution', 'error'); }
         setRemovingSol(null);
       };
 
@@ -6868,7 +6999,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           }
           setNewSolName('');
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to create solution'); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to create solution', 'error'); }
         setCreatingSol(false);
       };
 
@@ -6897,7 +7028,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
       };
 
       const saveOppForm = async () => {
-        if (!oppForm.name.trim()) { alert('Opportunity name is required'); return; }
+        if (!oppForm.name.trim()) { window.__oikeToast('Opportunity name is required', 'warning'); return; }
         setSavingOppForm(true);
         try {
           const a = api || new AirtableAPI();
@@ -6927,7 +7058,7 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error(e);
-          alert('Failed to save opportunity: ' + e.message);
+          window.__oikeToast('Failed to save opportunity: ' + e.message, 'error');
         }
         setSavingOppForm(false);
       };
@@ -7146,7 +7277,7 @@ Rules:
           setRadarData(parsed);
         } catch (e) {
           console.error('Radar generation failed:', e);
-          alert('Radar generation failed: ' + (e?.message || String(e)));
+          window.__oikeToast('Radar generation failed: ' + (e?.message || String(e)), 'error');
         }
         setLoadingRadar(false);
       };
@@ -7188,10 +7319,10 @@ Rules:
           if (onUpdateRecord) onUpdateRecord('accounts', account.id, { 'Intel Notes': newNotes });
           await api.updateRecord(TABLE_IDS.accounts, account.id, { 'Intel Notes': newNotes });
           if (onLogActivity) onLogActivity();
-          alert('✅ Radar saved to Intel Notes!');
+          window.__oikeToast('✅ Radar saved to Intel Notes!', 'success');
         } catch (e) {
           console.error('Save radar failed:', e);
-          alert('Failed to save Radar: ' + (e?.message || String(e)));
+          window.__oikeToast('Failed to save Radar: ' + (e?.message || String(e)), 'error');
         }
         setSavingRadar(false);
       };
@@ -7732,7 +7863,7 @@ Rules:
                         await api.updateRecord(TABLE_IDS.accounts, account.id, { [field]: val });
                         if (onUpdateRecord) onUpdateRecord('accounts', account.id, { [field]: val });
                         if (onLogActivity) onLogActivity();
-                      } catch (e) { alert('Failed to assign: ' + e.message); }
+                      } catch (e) { window.__oikeToast('Failed to assign: ' + e.message, 'error'); }
                     };
 
                     const sStyle = { width: '100%', padding: '7px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 12, boxSizing: 'border-box' };
@@ -8252,7 +8383,7 @@ Rules:
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
                                         <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
                                         <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }} disabled={!newOppStkName.trim() || creatingOppStk}
-                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; const stkFields = { 'Name': firstName, ...(lastName ? { 'Last name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [account.id] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }; const dup = findDuplicateStakeholder(stkFields, stakeholders); if (dup && !confirmDuplicateStakeholder(dup)) { setCreatingOppStk(false); return; } await api.createRecord(TABLE_IDS.stakeholders, stkFields); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to create stakeholder'); } setCreatingOppStk(false); }}>
+                                          onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; const stkFields = { 'Name': firstName, ...(lastName ? { 'Last name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [account.id] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }; const dup = findDuplicateStakeholder(stkFields, stakeholders); if (dup && !confirmDuplicateStakeholder(dup)) { setCreatingOppStk(false); return; } await api.createRecord(TABLE_IDS.stakeholders, stkFields); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); window.__oikeToast('Failed to create stakeholder', 'error'); } setCreatingOppStk(false); }}>
                                           {creatingOppStk ? '⏳' : '✨ Create'}
                                         </button>
                                       </div>
@@ -8303,7 +8434,7 @@ Rules:
                               {editingOppNotes && (
                                 <div style={{ display: 'flex', gap: 8 }}>
                                   <button className="action-btn btn-primary" style={{ fontSize: 11 }} disabled={savingOppNotes}
-                                    onClick={async () => { setSavingOppNotes(true); try { await api.updateRecord(TABLE_IDS.opportunities, o.id, { 'Reason': oppNotes, 'Next step': oppNextStep, 'Stakeholders': oppStakeholder, 'Solutions': oppSolutionIds }); setEditingOppNotes(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); alert('Failed to save'); } setSavingOppNotes(false); }}>
+                                    onClick={async () => { setSavingOppNotes(true); try { await api.updateRecord(TABLE_IDS.opportunities, o.id, { 'Reason': oppNotes, 'Next step': oppNextStep, 'Stakeholders': oppStakeholder, 'Solutions': oppSolutionIds }); setEditingOppNotes(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); window.__oikeToast('Failed to save', 'error'); } setSavingOppNotes(false); }}>
                                     {savingOppNotes ? '⏳ Saving...' : '💾 Save'}
                                   </button>
                                   <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setEditingOppNotes(false); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); }}>Cancel</button>
@@ -9670,7 +9801,7 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
         } catch (err) {
           console.error('Generate Exec Summary failed:', err);
           const msg = err?.message || String(err) || 'unknown error';
-          alert(`Failed to generate summary: ${msg}\n\nPossible causes:\n• OpenAI rate limit / timeout\n• Session expired (refresh the page)\n• Airtable field doesn't exist in your base\n\nCheck the browser console for more details.`);
+          window.__oikeToast(`Failed to generate summary: ${msg}. Check browser console for details.`, 'error');
         }
         setEvGeneratingSummary(false);
       };
@@ -9695,7 +9826,7 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
           if (onLogActivity) onLogActivity();
         } catch (err) {
           console.error('Event file upload failed:', err);
-          alert('File upload failed — try again with a smaller file or a different format.');
+          window.__oikeToast('File upload failed — try again with a smaller file or a different format.', 'error');
         }
         setEvUploadingFile(false);
         e.target.value = '';
@@ -9713,7 +9844,7 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('Event edit error', e);
-          alert('Failed to save event changes');
+          window.__oikeToast('Failed to save event changes', 'error');
           if (onLogActivity) onLogActivity();
         }
       };
@@ -9737,7 +9868,7 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
         const a = api || new AirtableAPI();
         a.createRecord(TABLE_IDS.events, fields)
           .then(() => { if (onLogActivity) onLogActivity(); })
-          .catch(e => { console.error(e); alert('Failed to create event'); if (onLogActivity) onLogActivity(); });
+          .catch(e => { console.error(e); window.__oikeToast('Failed to create event', 'error'); if (onLogActivity) onLogActivity(); });
       };
 
       const upcoming = events.filter(ev => {
@@ -9863,7 +9994,7 @@ Return ONLY the JSON array, nothing else.`;
           setAiSuggestions(ids);
         } catch (e) {
           console.error('Smart suggestions failed:', e);
-          alert('Failed to generate suggestions. Check console.');
+          window.__oikeToast('Failed to generate suggestions. Check console.', 'error');
         }
         setLoadingSuggestions(false);
       };
@@ -9884,7 +10015,7 @@ Return ONLY the JSON array, nothing else.`;
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('Uninvite failed:', e);
-          alert('Failed to remove invitation');
+          window.__oikeToast('Failed to remove invitation', 'error');
         }
         setRemovingInvite(null);
       };
@@ -10109,7 +10240,7 @@ Return ONLY the JSON array, nothing else.`;
                             if (onUpdateRecord) onUpdateRecord('events', selectedEventId, { 'Stakeholder Invitation': inviteTemplateValue });
                             setEditingInviteTemplate(false);
                             if (onLogActivity) onLogActivity();
-                          } catch(e) { console.error(e); alert('Failed to save template'); }
+                          } catch(e) { console.error(e); window.__oikeToast('Failed to save template', 'error'); }
                           setSavingInviteTemplate(false);
                         }}>
                         {savingInviteTemplate ? '⏳' : '💾 Save'}
@@ -10738,7 +10869,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           }
           setShowIcpModal(false);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to save ICP: ' + e.message); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to save ICP: ' + e.message, 'error'); }
         setSavingIcp(false);
       };
 
@@ -11019,7 +11150,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           await a.updateRecord(TABLE_IDS.solutions, selectedSol.id, fields);
           setShowEditSol(false);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to save: ' + e.message); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to save: ' + e.message, 'error'); }
         setSavingEditSol(false);
       };
 
@@ -11060,7 +11191,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           await a.updateRecord(TABLE_IDS.opportunities, solHubEditingOpp.id, fields);
           setSolHubEditingOpp(null);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to save: ' + e.message); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to save: ' + e.message, 'error'); }
         setSavingSolHubOpp(false);
       };
 
@@ -11072,7 +11203,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
       };
 
       const handleCreateSolution = async () => {
-        if (!newSolForm.name.trim()) { alert('Solution name is required'); return; }
+        if (!newSolForm.name.trim()) { window.__oikeToast('Solution name is required', 'warning'); return; }
         setSavingNewSol(true);
         try {
           const a = api || new AirtableAPI();
@@ -11100,7 +11231,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           if (newRec?.id) selectSol(newRec.id);
         } catch (e) {
           console.error(e);
-          alert('Failed to create solution: ' + e.message);
+          window.__oikeToast('Failed to create solution: ' + e.message, 'error');
         }
         setSavingNewSol(false);
       };
@@ -11168,7 +11299,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           setSolNotes(notesValue);
           setEditingNotes(false);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('Failed to save notes'); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to save notes', 'error'); }
         setSavingNotes(false);
       };
 
@@ -11187,7 +11318,7 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
           await a.updateRecord(TABLE_IDS.solutions, selectedSol.id, { 'Extra imput': updated });
           setSolNotes(updated);
           if (onLogActivity) onLogActivity();
-        } catch (e) { console.error(e); alert('File upload failed'); }
+        } catch (e) { console.error(e); window.__oikeToast('File upload failed', 'error'); }
         setUploadingFile(false);
         e.target.value = '';
       };
@@ -11295,7 +11426,7 @@ Be specific. Use real names from the data. No generic advice. Under 350 words to
           }
         } catch (e) {
           console.error(e);
-          alert('Failed to generate. Error: ' + (e.message || 'unknown error'));
+          window.__oikeToast('Failed to generate. Error: ' + (e.message || 'unknown error'), 'error');
         }
         setLoadingSolSummary(false);
       };
@@ -11370,7 +11501,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
               .then(() => { if (onLogActivity) onLogActivity(); })
               .catch(e => console.warn('[ai recs] Airtable save failed (kept in memory):', e.message));
           }
-        } catch (e) { console.error(e); alert('Failed to generate recommendations'); }
+        } catch (e) { console.error(e); window.__oikeToast('Failed to generate recommendations', 'error'); }
         setLoadingRecs(false);
       };
 
@@ -11474,7 +11605,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[addAccountToSolution] Error:', e);
-          alert('Error adding account: ' + (e.message || 'unknown'));
+          window.__oikeToast('Error adding account: ' + (e.message || 'unknown'), 'error');
         }
         setAddingAccount(false);
       };
@@ -12570,7 +12701,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             }
           } catch {}
           if (rec?.id) selectProposal(rec.id);
-        } catch(e) { console.error(e); alert('Error creating proposal'); }
+        } catch(e) { console.error(e); window.__oikeToast('Error creating proposal', 'error'); }
         setSaving(false);
       };
 
@@ -12610,7 +12741,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, fields);
           setShowEdit(false);
           if (onLogActivity) onLogActivity();
-        } catch(e) { console.error(e); alert('Error saving proposal'); }
+        } catch(e) { console.error(e); window.__oikeToast('Error saving proposal', 'error'); }
         setEditSaving(false);
       };
 
@@ -12695,13 +12826,13 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
         if (!file) return;
         const isPptx = file.name.endsWith('.pptx');
         const isPdf  = file.name.endsWith('.pdf');
-        if (!isPptx && !isPdf) { alert('Please upload a .pptx or .pdf file'); return; }
+        if (!isPptx && !isPdf) { window.__oikeToast('Please upload a .pptx or .pdf file', 'error'); return; }
         setPptParsing(true);
         setPptFileName(file.name);
         try {
           let extracted = '';
           if (isPptx) {
-            if (typeof JSZip === 'undefined') { alert('JSZip not available. Reload and try again.'); setPptParsing(false); return; }
+            if (typeof JSZip === 'undefined') { window.__oikeToast('JSZip not available. Reload and try again.', 'error'); setPptParsing(false); return; }
             const arrayBuffer = await file.arrayBuffer();
             const zip = await JSZip.loadAsync(arrayBuffer);
             const slidePattern = new RegExp('^ppt/slides/slide\\d+\\.xml$');
@@ -12727,7 +12858,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
             }
           } else if (isPdf) {
             const pdfjsLib = window['pdfjs-dist/build/pdf'];
-            if (!pdfjsLib) { alert('PDF.js not available. Reload and try again.'); setPptParsing(false); return; }
+            if (!pdfjsLib) { window.__oikeToast('PDF.js not available. Reload and try again.', 'error'); setPptParsing(false); return; }
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -12743,7 +12874,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.proposals, selected.id, { 'PPT Content': extracted });
           if (onUpdateRecord) onUpdateRecord('proposals', selected.id, { 'PPT Content': extracted });
-        } catch(e) { console.error('[handlePptUpload]', e); alert('Error reading file. Make sure it is a valid .pptx or .pdf.'); }
+        } catch(e) { console.error('[handlePptUpload]', e); window.__oikeToast('Error reading file. Make sure it is a valid .pptx or .pdf.', 'error'); }
         setPptParsing(false);
       };
 
@@ -14397,7 +14528,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[saveCampaignContext] Error:', e);
-          alert('Failed to save context: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to save context: ' + (e.message || 'unknown'), 'error');
         }
         setSavingContext(false);
       };
@@ -14412,7 +14543,7 @@ Top 5 specific, actionable steps to grow this solution's pipeline in the next 2 
           setEditingTemplate(false);
           if (onLogActivity) onLogActivity();
         } catch (e) {
-          alert('Failed to save template: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to save template: ' + (e.message || 'unknown'), 'error');
         }
         setSavingTemplate(false);
       };
@@ -14446,7 +14577,7 @@ Write for a fictional prospect — use {{first_name}} and {{company}} as tokens.
           const preview = await callOpenAI({ prompt, temperature: 0.72, max_tokens: 400 });
           setStepPreviews(prev => ({ ...prev, [stepIndex]: preview }));
         } catch (e) {
-          alert('Preview generation failed: ' + (e.message || 'unknown'));
+          window.__oikeToast('Preview generation failed: ' + (e.message || 'unknown'), 'error');
         }
         setGeneratingStepPreview(null);
       };
@@ -14470,7 +14601,7 @@ Write for a fictional prospect — use {{first_name}} and {{company}} as tokens.
           if (onLogActivity) onLogActivity();
         } catch (err) {
           console.error('Campaign file upload failed:', err);
-          alert('File upload failed — try again with a smaller file or a different format.');
+          window.__oikeToast('File upload failed — try again with a smaller file or a different format.', 'error');
         }
         setCampaignUploadingFile(false);
         e.target.value = '';
@@ -14480,7 +14611,7 @@ Write for a fictional prospect — use {{first_name}} and {{company}} as tokens.
         if (!selectedCampaign) return;
         const ctx = F(selectedCampaign, 'Context') || '';
         if (!ctx.trim()) {
-          alert('Add campaign context first — the AI needs something to work with.');
+          window.__oikeToast('Add campaign context first — the AI needs something to work with.', 'warning');
           return;
         }
         setGeneratingSummary(true);
@@ -14513,7 +14644,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[generateCampaignSummary] Error:', e);
-          alert('Failed to generate summary: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to generate summary: ' + (e.message || 'unknown'), 'error');
         }
         setGeneratingSummary(false);
       };
@@ -14629,7 +14760,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
           // Update campaign's Assigned Stakeholders only — do NOT touch stakeholder's 'Campaign' field
           // because that is the reverse link of 'Stakeholders Reached' and would mark them as reached.
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Assigned Stakeholders': newAssigned });
-        } catch (e) { console.error('Bulk add contacts failed:', e); alert('Some contacts may not have been added — check your connection and try again.'); }
+        } catch (e) { console.error('Bulk add contacts failed:', e); window.__oikeToast('Some contacts may not have been added — check your connection and try again.', 'error'); }
         setSelectedToAdd(new Set());
         setShowAddContacts(false);
         setAddContactsSearch('');
@@ -14880,7 +15011,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Steps': stepsJson, 'Sequence Config': configJson });
           if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Steps': stepsJson, 'Sequence Config': configJson });
           setSeqDirty(false);
-        } catch(e) { alert('Failed to save sequence: ' + e.message); }
+        } catch(e) { window.__oikeToast('Failed to save sequence: ' + e.message, 'error'); }
         setSavingSeq(false);
       };
 
@@ -14891,7 +15022,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const today = new Date().toISOString().split('T')[0];
         const current = parseSeqEnrollments(selectedCampaign);
         const toEnroll = pendingEmailContacts.filter(s => !current[s.id] || current[s.id].status === 'completed');
-        if (toEnroll.length === 0) { setEnrolling(false); alert('No pending email contacts to enroll.'); return; }
+        if (toEnroll.length === 0) { setEnrolling(false); window.__oikeToast('No pending email contacts to enroll.', 'warning'); return; }
         const firstStep = seqSteps[0];
         const nextDate = firstStep.waitDays === 0 ? today : (() => { const d = new Date(); d.setDate(d.getDate() + firstStep.waitDays); return d.toISOString().split('T')[0]; })();
         toEnroll.forEach(s => { current[s.id] = { step: 0, nextDate, status: 'active', senderEmail, enrolledDate: today }; });
@@ -14900,8 +15031,8 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           const a = api || new AirtableAPI();
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': json });
           if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
-          alert(`✅ ${toEnroll.length} contact${toEnroll.length>1?'s':''} enrolled in sequence.`);
-        } catch(e) { alert('Enrollment failed: ' + e.message); }
+          window.__oikeToast(`✅ ${toEnroll.length} contact${toEnroll.length>1?'s':''} enrolled in sequence.`, 'success');
+        } catch(e) { window.__oikeToast('Enrollment failed: ' + e.message, 'error'); }
         setEnrolling(false);
       };
 
@@ -15119,7 +15250,7 @@ Be specific. Use the campaign context and strategic brief as the primary source 
           setEmailTplDirty(true);
           setPreviewTpl(true);
         } catch(e) {
-          alert('Failed to generate template: ' + e.message);
+          window.__oikeToast('Failed to generate template: ' + e.message, 'error');
         }
         setGeneratingTpl(false);
       };
@@ -15134,7 +15265,7 @@ Be specific. Use the campaign context and strategic brief as the primary source 
           await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Email HTML Template': htmlToSave });
           if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Email HTML Template': htmlToSave });
           setEmailTplDirty(false);
-        } catch(e) { alert('Failed to save template: ' + e.message); }
+        } catch(e) { window.__oikeToast('Failed to save template: ' + e.message, 'error'); }
         setSavingTpl(false);
       };
 
@@ -15301,7 +15432,7 @@ Return ONLY the 1-2 sentences in ${langLabel}. No greeting, no subject line.`;
       };
 
       const saveCampaign = async () => {
-        if (!form.name.trim()) { alert('Campaign name is required'); return; }
+        if (!form.name.trim()) { window.__oikeToast('Campaign name is required', 'warning'); return; }
         setSaving(true);
         try {
           const fields = {
@@ -15327,7 +15458,7 @@ Return ONLY the 1-2 sentences in ${langLabel}. No greeting, no subject line.`;
           setShowForm(false);
           if (onLogActivity) onLogActivity();
         } catch(e) {
-          alert('Error saving campaign: ' + e.message);
+          window.__oikeToast('Error saving campaign: ' + e.message, 'error');
         }
         setSaving(false);
       };
@@ -17048,7 +17179,7 @@ Return ONLY a valid JSON array:
           setCoachStage('idle'); // reset coach for next run
         } catch (e) {
           console.error('[Content Lab] Generate ideas failed:', e);
-          alert('Failed to generate ideas: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to generate ideas: ' + (e.message || 'unknown'), 'error');
         }
         setLoadingIdeas(false);
       };
@@ -17205,7 +17336,7 @@ Return ONLY valid JSON:
 
       // ── Improve draft (5 modes) ──
       const improveDraft = async (mode) => {
-        if (!draft.trim()) { alert('Nothing to improve'); return; }
+        if (!draft.trim()) { window.__oikeToast('Nothing to improve', 'warning'); return; }
         setImproving(mode);
         const instructions = {
           'shorter': 'Cut the draft by 30-50% while preserving the core point, hook and closing. Aim for punch. Keep the exact same voice — do NOT rewrite stylistically.',
@@ -17253,7 +17384,7 @@ Output ONLY the revised post. No meta-commentary. No "Here's the improved versio
           setDraft(response.trim());
         } catch (e) {
           console.error('[improveDraft] failed:', e);
-          alert('Failed to improve: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to improve: ' + (e.message || 'unknown'), 'error');
         }
         setImproving('');
       };
@@ -17261,7 +17392,7 @@ Output ONLY the revised post. No meta-commentary. No "Here's the improved versio
       // ── Analyze engagement notes for a post ──
       const analyzeEngagement = async (post) => {
         const notes = F(post, 'Engagement Notes') || '';
-        if (!notes.trim()) { alert('No engagement notes to analyze. Paste comments/likes in the Engagement Notes field first.'); return; }
+        if (!notes.trim()) { window.__oikeToast('No engagement notes to analyze. Paste comments/likes in the Engagement Notes field first.', 'error'); return; }
         setAnalyzingPostId(post.id);
         const content = F(post, 'Content') || '';
         const prompt = `Analyze the engagement data for this LinkedIn post.
@@ -17293,14 +17424,14 @@ Keep each field short. Return ONLY the JSON, no markdown.`;
           setEngagementAnalysis(prev => ({ ...prev, [post.id]: parsed }));
         } catch (e) {
           console.error('[analyzeEngagement] failed:', e);
-          alert('Failed to analyze: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to analyze: ' + (e.message || 'unknown'), 'error');
         }
         setAnalyzingPostId('');
       };
 
       // ── Generate draft ──
       const generateDraft = async () => {
-        if (!writerTopic.trim()) { alert('Add a topic first'); return; }
+        if (!writerTopic.trim()) { window.__oikeToast('Add a topic first', 'warning'); return; }
         setLoadingDraft(true);
         const maxTokens = writerType === 'Article' ? 1800 : writerType === 'Long Post' ? 800 : 450;
         const wordTarget = writerType === 'Article' ? '800-1500 words, with 3-4 sections (## Header)' : writerType === 'Long Post' ? '300-500 words' : '100-200 words';
@@ -17375,7 +17506,7 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           setDraft(response.trim());
         } catch (e) {
           console.error('[Content Lab] Generate draft failed:', e);
-          alert('Failed to generate draft: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to generate draft: ' + (e.message || 'unknown'), 'error');
         }
         setLoadingDraft(false);
       };
@@ -17390,7 +17521,7 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
 
       // ── Save draft to library ──
       const saveDraft = async () => {
-        if (!draft.trim()) { alert('Nothing to save'); return; }
+        if (!draft.trim()) { window.__oikeToast('Nothing to save', 'warning'); return; }
         setSavingDraft(true);
         try {
           const a = api || new AirtableAPI();
@@ -17406,17 +17537,17 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           };
           await a.createRecord(TABLE_IDS.contentLab, fields);
           if (onLogActivity) onLogActivity();
-          alert('✅ Saved to Library');
+          window.__oikeToast('✅ Saved to Library', 'success');
         } catch (e) {
           console.error('[Content Lab] Save failed:', e);
-          alert('Failed to save: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to save: ' + (e.message || 'unknown'), 'error');
         }
         setSavingDraft(false);
       };
 
       // ── Post to LinkedIn: copy + open LinkedIn composer + log in Library ──
       const postToLinkedIn = async () => {
-        if (!draft.trim()) { alert('Nothing to post'); return; }
+        if (!draft.trim()) { window.__oikeToast('Nothing to post', 'warning'); return; }
         // Synchronous first: clipboard + open tab (browsers require user-gesture context)
         try { await navigator.clipboard.writeText(draft); } catch {}
         window.open('https://www.linkedin.com/feed/?shareActive', '_blank');
@@ -17451,7 +17582,7 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           }, 400);
         } catch (e) {
           console.error('[postToLinkedIn] save failed:', e);
-          alert('Post copied + LinkedIn opened, but failed to log in Library: ' + (e.message || 'unknown'));
+          window.__oikeToast('Post copied + LinkedIn opened, but failed to log in Library: ' + (e.message || 'unknown'), 'error');
         }
         setSavingDraft(false);
       };
@@ -17468,14 +17599,14 @@ Output: ONLY the post content, ready to copy-paste. No title. No meta-commentary
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[Content Lab] Mark posted failed:', e);
-          alert('Failed: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed: ' + (e.message || 'unknown'), 'error');
         }
       };
 
       // ── Find recipients for a post (AI ranks stakeholders + writes personalized intros) ──
       const findRecipients = async (post) => {
         const content = F(post, 'Content') || '';
-        if (!content.trim()) { alert('Post has no content'); return; }
+        if (!content.trim()) { window.__oikeToast('Post has no content', 'warning'); return; }
         setFindingRecipientsFor(post.id);
 
         // Filter candidates: exclude protected statuses + recent outreach
@@ -17653,7 +17784,7 @@ No markdown, no commentary. JSON only.`;
           setRecipientsByPost(prev => ({ ...prev, [post.id]: list }));
         } catch (e) {
           console.error('[findRecipients] failed:', e);
-          alert('Failed to find recipients: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to find recipients: ' + (e.message || 'unknown'), 'error');
         }
         setFindingRecipientsFor('');
       };
@@ -17661,7 +17792,7 @@ No markdown, no commentary. JSON only.`;
       // ── Send post to a specific recipient ──
       const sendToRecipient = async (post, rec, channel) => {
         const stk = stakeholders.find(s => s.id === rec.stakeholder_id);
-        if (!stk) { alert('Stakeholder not found'); return; }
+        if (!stk) { window.__oikeToast('Stakeholder not found', 'warning'); return; }
         const key = `${post.id}:${rec.stakeholder_id}:${channel}`;
         setSendingKey(key);
 
@@ -17678,11 +17809,11 @@ No markdown, no commentary. JSON only.`;
 
         // Open channel synchronously (user gesture required)
         if (channel === 'LinkedIn') {
-          if (!linkedin) { alert('This contact has no LinkedIn URL'); setSendingKey(''); return; }
+          if (!linkedin) { window.__oikeToast('This contact has no LinkedIn URL', 'warning'); setSendingKey(''); return; }
           try { await navigator.clipboard.writeText(messageWithUrl); } catch {}
           window.open(linkedin, '_blank');
         } else if (channel === 'Email') {
-          if (!email) { alert('This contact has no email'); setSendingKey(''); return; }
+          if (!email) { window.__oikeToast('This contact has no email', 'warning'); setSendingKey(''); return; }
           const subject = `Thought of you: ${postTitle.slice(0, 60)}`;
           window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(messageWithUrl)}`, '_blank');
         }
@@ -17727,14 +17858,14 @@ No markdown, no commentary. JSON only.`;
           if (onLogActivity) onLogActivity();
         } catch (e) {
           console.error('[Content Lab] Delete failed:', e);
-          alert('Failed to delete: ' + (e.message || 'unknown'));
+          window.__oikeToast('Failed to delete: ' + (e.message || 'unknown'), 'error');
         }
       };
 
       // ── Post from Library: copy + open LinkedIn + mark posted ──
       const postFromLibrary = async (post) => {
         const content = F(post, 'Content') || '';
-        if (!content.trim()) { alert('Empty post, nothing to share'); return; }
+        if (!content.trim()) { window.__oikeToast('Empty post, nothing to share', 'warning'); return; }
         try { await navigator.clipboard.writeText(content); } catch {}
         window.open('https://www.linkedin.com/feed/?shareActive', '_blank');
         const nowIso = new Date().toISOString();
@@ -18642,7 +18773,7 @@ No markdown, no commentary. JSON only.`;
 
       // AI auto-fill — uses stakeholder + solution + account context
       const aiAutofill = async () => {
-        if (!form.stakeholderId && !form.accountId) { alert('Pick at least an account or stakeholder first'); return; }
+        if (!form.stakeholderId && !form.accountId) { window.__oikeToast('Pick at least an account or stakeholder first', 'warning'); return; }
         setGeneratingAI(true);
         try {
           const s = form.stakeholderId ? stakeholders.find(x => x.id === form.stakeholderId) : null;
@@ -18714,7 +18845,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           }));
         } catch (e) {
           console.error('AI autofill failed:', e);
-          alert('AI autofill failed — check the console');
+          window.__oikeToast('AI autofill failed — check the console', 'error');
         }
         setGeneratingAI(false);
       };
@@ -19043,8 +19174,8 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
 
       // Save
       const saveLanding = async (sendStatus = 'Draft') => {
-        if (!form.slug.trim()) { alert('Slug is required'); return; }
-        if (!form.stakeholderId) { alert('Pick a stakeholder'); return; }
+        if (!form.slug.trim()) { window.__oikeToast('Slug is required', 'warning'); return; }
+        if (!form.stakeholderId) { window.__oikeToast('Pick a stakeholder', 'warning'); return; }
         setSaving(true);
         try {
           const fields = {
@@ -19157,7 +19288,7 @@ BANNED in any language: "hope this finds you well", "just reaching out", "I want
           } catch {}
         } catch (e) {
           console.error('Save landing failed:', e);
-          alert('Error: ' + (e.message || 'unknown'));
+          window.__oikeToast('Error: ' + (e.message || 'unknown'), 'error');
         }
         setSaving(false);
       };
@@ -20207,14 +20338,14 @@ Return ONLY valid JSON:
       // ── Convert AI-analyzed replies into Action Plan tasks (High + Medium urgency) ──
       const generateUrgentTasks = async () => {
         if (!api || !TABLE_IDS.actionPlan) {
-          alert('Action Plan table not available.');
+          window.__oikeToast('Action Plan table not available.', 'warning');
           return;
         }
         const eligible = (lastReplyDetails || []).filter(r =>
           (r.urgency === 'high' || r.urgency === 'medium') && r.next_step && r.next_step.trim()
         );
         if (eligible.length === 0) {
-          alert('No urgent actions to create — all replies are low urgency or have no next step.');
+          window.__oikeToast('No urgent actions to create — all replies are low urgency or have no next step.', 'warning');
           return;
         }
         setCreatingTasks(true);
@@ -20263,7 +20394,7 @@ Return ONLY valid JSON:
       const generateAccountBriefingHtml = async () => {
         const targetAccountId = intelFilterAccountIds[0];
         if (!targetAccountId) {
-          alert('Pick exactly 1 account from "Specific account(s)" filter to generate an Intelligence Radar.');
+          window.__oikeToast('Pick exactly 1 account from the "Specific accounts" filter to generate an Intelligence Radar.', 'warning');
           return;
         }
         setGenerating(true);
@@ -20271,7 +20402,7 @@ Return ONLY valid JSON:
           const BG = '#0D0D1A', CARD = '#1A1A2E', G = RB_PRIMARY, S = RB_SECONDARY, GR = '#94a3b8';
 
           const acc = accounts.find(a => a.id === targetAccountId);
-          if (!acc) { alert('Account not found.'); setGenerating(false); return; }
+          if (!acc) { window.__oikeToast('Account not found.', 'warning'); setGenerating(false); return; }
 
           const accName       = F(acc, 'Account Name') || 'Account';
           const accIndustry   = F(acc, 'Industry') || '';
@@ -20627,7 +20758,7 @@ Rules: key_developments 2-4 items · people_moves only if real signals else [] �
           setIntelInsights([]);
         } catch (e) {
           console.error('Intelligence Radar failed:', e);
-          alert(`Failed to generate Intelligence Radar: ${e?.message || String(e)}`);
+          window.__oikeToast(`Failed to generate Intelligence Radar: ${e?.message || String(e, 'error')}`);
         } finally {
           setGenerating(false);
         }
@@ -22112,7 +22243,7 @@ Return ONLY valid JSON.`;
       ];
 
       const handleProfileNext = () => {
-        if (!profile.companyName.trim() || !profile.senderName.trim()) return alert('Company name and your name are required.');
+        if (!profile.companyName.trim() || !profile.senderName.trim()) return window.__oikeToast('Company name and your name are required.', 'warning');
         saveCompanyProfile({
           companyName: profile.companyName,
           senderName:  profile.senderName,
@@ -22124,7 +22255,7 @@ Return ONLY valid JSON.`;
       };
 
       const handleAccountNext = async () => {
-        if (!account.name.trim()) return alert('Account name is required.');
+        if (!account.name.trim()) return window.__oikeToast('Account name is required.', 'warning');
         setSaving(true);
         try {
           const fields = { 'Account Name': account.name.trim() };
@@ -22134,13 +22265,13 @@ Return ONLY valid JSON.`;
           setCreatedAccountId(rec.id);
           setStep(2);
         } catch (e) {
-          alert('Could not create account. Try again.');
+          window.__oikeToast('Could not create account. Try again.', 'error');
         }
         setSaving(false);
       };
 
       const handleContactNext = async () => {
-        if (!contact.firstName.trim()) return alert('First name is required.');
+        if (!contact.firstName.trim()) return window.__oikeToast('First name is required.', 'warning');
         setSaving(true);
         try {
           const fields = { 'Name': contact.firstName.trim() };
@@ -22151,7 +22282,7 @@ Return ONLY valid JSON.`;
           await api.createRecord(TABLE_IDS.stakeholders, fields);
           setStep(3);
         } catch (e) {
-          alert('Could not create contact. Try again.');
+          window.__oikeToast('Could not create contact. Try again.', 'error');
         }
         setSaving(false);
       };
@@ -22312,6 +22443,36 @@ Return ONLY valid JSON.`;
       // Campaign prefill from Report Builder → Campaigns (Create campaign from insight)
       const [campaignPrefill, setCampaignPrefill] = useState(null); // { name, type, context, stakeholderIds }
       const [sidebarOpen, setSidebarOpen] = useState(false);
+
+      // ── Toast system ──
+      const [toasts, setToasts] = React.useState([]);
+      const showToast = React.useCallback((msg, type = 'info', duration = 3500) => {
+        const id = Date.now() + Math.random();
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+      }, []);
+      // Expose globally so nested components can call it
+      React.useEffect(() => { window.__oikeToast = showToast; }, [showToast]);
+
+      // ── Global search ──
+      const [showGlobalSearch, setShowGlobalSearch] = React.useState(false);
+
+      // ── Shortcuts panel ──
+      const [showShortcuts, setShowShortcuts] = React.useState(false);
+
+      // ── Feedback modal ──
+      const [showFeedback, setShowFeedback] = React.useState(false);
+
+      // Keyboard shortcuts: Cmd+K and ?
+      React.useEffect(() => {
+        const handler = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowGlobalSearch(v => !v); }
+          if (e.key === '?' && !e.target.matches('input,textarea')) setShowShortcuts(v => !v);
+          if (e.key === 'Escape') { setShowGlobalSearch(false); setShowShortcuts(false); }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, []);
 
       const goToAccount = useCallback((accountId) => {
         setNavigateToAccountId(accountId);
@@ -22475,6 +22636,12 @@ Return ONLY valid JSON.`;
         if (silent) setRefreshing(false);
       }, []);
 
+      // Update document title with pending follow-up count
+      React.useEffect(() => {
+        const count = (data?.stakeholders || []).filter(s => s._enriched && !s._enriched.contactedToday && s._enriched.focusTag && s._enriched.daysSince >= 3).length;
+        document.title = count > 0 ? `(${count}) Oike Sales Intel` : 'Oike Sales Intel';
+      }, [data]);
+
       // Auto-connect: if already authenticated, load config + data
       useEffect(() => {
         if (!isAuthenticated) { setLoading(false); return; }
@@ -22633,6 +22800,13 @@ Return ONLY valid JSON.`;
               <button
                 className="action-btn btn-ghost"
                 style={{ width: '100%', fontSize: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                onClick={() => setShowGlobalSearch(true)}
+              >
+                🔍 Search <span style={{ opacity: 0.6, fontSize: 10 }}>⌘K</span>
+              </button>
+              <button
+                className="action-btn btn-ghost"
+                style={{ width: '100%', fontSize: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                 onClick={() => api && loadData(api)}
               >
                 🔄 Refresh Data
@@ -22681,6 +22855,46 @@ Return ONLY valid JSON.`;
 
           {/* Settings Modal */}
           {showSettings && <SettingsModal onClose={() => { setShowSettings(false); setGmailReturnStatus(''); }} gmailReturnStatus={gmailReturnStatus} />}
+
+          {/* Global Search Modal */}
+          {showGlobalSearch && (
+            <GlobalSearchModal
+              data={data}
+              onClose={() => setShowGlobalSearch(false)}
+              onNavigate={(section) => { setPageAndSave(section); }}
+            />
+          )}
+
+          {/* Keyboard Shortcuts Modal */}
+          {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
+          {/* Feedback Modal */}
+          {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
+
+          {/* Feedback button */}
+          <button onClick={() => setShowFeedback(true)}
+            style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 900, fontSize: 11, padding: '6px 12px', borderRadius: 20, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer', backdropFilter: 'blur(8px)' }}>
+            💬 Feedback
+          </button>
+
+          {/* Toast notifications */}
+          {toasts.length > 0 && (
+            <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360 }}>
+              {toasts.map(t => (
+                <div key={t.id} style={{
+                  padding: '12px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500,
+                  background: t.type === 'success' ? 'rgba(74,222,128,0.15)' : t.type === 'error' ? 'rgba(239,68,68,0.15)' : t.type === 'warning' ? 'rgba(251,191,36,0.15)' : 'rgba(96,165,250,0.15)',
+                  border: `1px solid ${t.type === 'success' ? 'rgba(74,222,128,0.4)' : t.type === 'error' ? 'rgba(239,68,68,0.4)' : t.type === 'warning' ? 'rgba(251,191,36,0.4)' : 'rgba(96,165,250,0.4)'}`,
+                  color: t.type === 'success' ? '#4ade80' : t.type === 'error' ? '#f87171' : t.type === 'warning' ? '#fbbf24' : '#60a5fa',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(8px)',
+                  animation: 'slideInRight 0.25s ease',
+                }}>
+                  {t.type === 'success' ? '✅ ' : t.type === 'error' ? '❌ ' : t.type === 'warning' ? '⚠️ ' : 'ℹ️ '}{t.msg}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
