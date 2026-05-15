@@ -15146,12 +15146,13 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           try { result = await res.json(); } catch {}
           const sentCount = result.sent ?? 0;
           const skippedCount = result.skipped ?? 0;
+          const version = result.v ? ` (v${result.v})` : ' (old)';
           if (sentCount > 0) {
-            window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped (no Gmail token)` : ''}`, 'success');
+            window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}${version}`, 'success');
           } else if (skippedCount > 0) {
-            window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped. Check Gmail is connected.`, 'warning');
+            window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped (no Gmail token)${version}`, 'warning');
           } else {
-            window.__oikeToast('No emails due right now — all contacts are up to date.', 'info');
+            window.__oikeToast(`No emails due right now${version}`, 'info');
           }
           if (onLogActivity) onLogActivity();
         } catch (e) {
