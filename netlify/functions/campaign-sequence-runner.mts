@@ -219,31 +219,39 @@ export default async (req?: Request) => {
   const today = new Date().toISOString().split('T')[0];
   console.log(`[seq-runner] Starting run for ${today}`);
 
-  // 1. Get all users to find unique tenant bases + their Gmail refresh tokens
+  // 1. Get all users to find unique tenant bases
   let users: any[] = [];
-  try { users = await getAllRecords(USERS_BASE_ID, USERS_TABLE_ID, airtableKey, ['Email', 'TABLE_IDS', 'Gmail Refresh Token']); }
-  catch(e) { console.error('[seq-runner] Failed to fetch users:', e); return; }
+  try { users = await getAllRecords(USERS_BASE_ID, USERS_TABLE_ID, airtableKey); }
+  catch(e) { console.error('[seq-runner] Failed to fetch users:', e); return new Response(JSON.stringify({ error: 'failed to fetch users' }), { status: 500, headers: { 'Content-Type': 'application/json' } }); }
 
-  // Build maps: email → refreshToken, and set of unique baseIds to process
-  const userRefreshMap: Record<string, string> = {}; // email → refreshToken
+  console.log(`[seq-runner] Found ${users.length} users`);
+
+  // Build set of unique baseIds to process
   const baseIds = new Set<string>();
   for (const u of users) {
-    const email = F(u,'Email');
     const baseId = F(u,'TABLE_IDS');
-    const refreshToken = F(u,'Gmail Refresh Token');
-    if (email && refreshToken) userRefreshMap[email] = refreshToken;
     if (baseId) baseIds.add(baseId);
   }
+  console.log(`[seq-runner] Base IDs to process: ${[...baseIds].join(', ') || '(none)'}`);
 
-  // Cache access tokens per sender email to avoid redundant refreshes
+  // ── Per-email token cache + direct Airtable lookup (same approach as gmail-send.mts) ──
   const accessTokenCache: Record<string, string> = {};
   async function getTokenFor(senderEmail: string): Promise<string | null> {
     if (accessTokenCache[senderEmail]) return accessTokenCache[senderEmail];
-    const refreshToken = userRefreshMap[senderEmail];
-    if (!refreshToken) return null;
-    const token = await getAccessToken(refreshToken);
-    if (token) accessTokenCache[senderEmail] = token;
-    return token;
+    // Direct Airtable lookup — reliable, works even if pre-load missed the user
+    try {
+      const formula = encodeURIComponent(`{Email}='${senderEmail}'`);
+      const res = await fetch(`https://api.airtable.com/v0/${USERS_BASE_ID}/${USERS_TABLE_ID}?filterByFormula=${formula}&maxRecords=1`, {
+        headers: { 'Authorization': `Bearer ${airtableKey}` },
+      });
+      if (!res.ok) { console.warn(`[seq-runner] Airtable user lookup failed for ${senderEmail}: ${res.status}`); return null; }
+      const data = await res.json();
+      const refreshToken = data.records?.[0]?.fields?.['Gmail Refresh Token'] || null;
+      if (!refreshToken) { console.warn(`[seq-runner] No Gmail Refresh Token found for ${senderEmail}`); return null; }
+      const token = await getAccessToken(refreshToken);
+      if (token) accessTokenCache[senderEmail] = token;
+      return token;
+    } catch(e) { console.error(`[seq-runner] Error fetching token for ${senderEmail}:`, e); return null; }
   }
 
   let totalSent = 0, totalSkipped = 0, totalErrors = 0;
@@ -266,6 +274,7 @@ export default async (req?: Request) => {
         return steps && enrollments && steps !== '[]' && enrollments !== '{}';
       });
 
+      console.log(`[seq-runner] ${campaigns.length} campaigns total, ${activeCampaigns.length} active with enrollments`);
       if (activeCampaigns.length === 0) continue;
 
       // Fetch supporting data once per base
@@ -304,7 +313,10 @@ export default async (req?: Request) => {
           const isDue = en.nextDateTime
             ? new Date(en.nextDateTime) <= new Date()
             : en.nextDate <= today;
-          if (!isDue) continue;
+          if (!isDue) {
+            console.log(`[seq-runner] ${stkId} not due yet — nextDate: ${en.nextDate} nextDateTime: ${en.nextDateTime || 'none'}`);
+            continue;
+          }
           if (en.step >= steps.length) { en.status = 'completed'; enrollmentsChanged = true; continue; }
 
           const step = steps[en.step];
