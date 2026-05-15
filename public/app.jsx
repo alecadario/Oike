@@ -14793,6 +14793,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
       const [seqDirty, setSeqDirty] = useState(false);
       const [savingSeq, setSavingSeq] = useState(false);
       const [enrolling, setEnrolling] = useState(false);
+      const [enrollDateTime, setEnrollDateTime] = useState('');
       const [runningSeq, setRunningSeq] = useState(false);
       const [showEmailTpl, setShowEmailTpl] = useState(false);
       const [showCampaignLandings, setShowCampaignLandings] = useState(false);
@@ -15100,8 +15101,19 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
         const toEnroll = pendingEmailContacts.filter(s => !current[s.id] || current[s.id].status === 'completed');
         if (toEnroll.length === 0) { setEnrolling(false); window.__oikeToast('No pending email contacts to enroll.', 'warning'); return; }
         const firstStep = seqSteps[0];
-        const nextDate = firstStep.waitDays === 0 ? today : (() => { const d = new Date(); d.setDate(d.getDate() + firstStep.waitDays); return d.toISOString().split('T')[0]; })();
-        toEnroll.forEach(s => { current[s.id] = { step: 0, nextDate, status: 'active', senderEmail, enrolledDate: today }; });
+        // Compute nextDateTime: if user picked a datetime use it, otherwise use now (for immediate) or add waitDays
+        let baseDateTime;
+        if (enrollDateTime) {
+          baseDateTime = new Date(enrollDateTime);
+        } else {
+          baseDateTime = new Date(); // send immediately
+        }
+        if (firstStep.waitDays > 0 && !enrollDateTime) {
+          baseDateTime.setDate(baseDateTime.getDate() + firstStep.waitDays);
+        }
+        const nextDateTime = baseDateTime.toISOString();
+        const nextDate = nextDateTime.split('T')[0]; // backwards compat
+        toEnroll.forEach(s => { current[s.id] = { step: 0, nextDate, nextDateTime, status: 'active', senderEmail, enrolledDate: today }; });
         const json = JSON.stringify(current);
         try {
           const a = api || new AirtableAPI();
@@ -15864,6 +15876,196 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               </div>
             </div>
 
+            {/* Email HTML Template */}
+            <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid #60a5fa', padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: 1 }}>📧 Email HTML Template</div>
+                <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setShowEmailTpl(!showEmailTpl)}>
+                  {showEmailTpl ? '▲ Collapse' : (emailTplHtml ? '▼ Template saved' : '▼ Build template')}
+                </button>
+              </div>
+              {showEmailTpl && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select value={tplLanguage} onChange={e => {
+                      const lang = e.target.value;
+                      setTplLanguage(lang);
+                      if (emailTplContent && selectedCampaign) {
+                        setEmailTplHtml(renderCampaignEmail(emailTplContent, selectedCampaign, lang));
+                        setEmailTplDirty(true);
+                      }
+                    }} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: '#e5e7eb', cursor: 'pointer' }}>
+                      <option value="en">🇬🇧 English</option>
+                      <option value="es">🇦🇷 Español</option>
+                      <option value="pt">🇧🇷 Português</option>
+                    </select>
+                    <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                      onClick={generateEmailTemplate} disabled={generatingTpl || bulkSending}>
+                      {generatingTpl ? '⏳ Generating...' : emailTplHtml ? '🔄 Regenerate' : '✨ Generate Template'}
+                    </button>
+                    {emailTplHtml && (
+                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
+                        onClick={() => setPreviewTpl(!previewTpl)}>
+                        {previewTpl ? '✏️ Edit' : '👁️ Preview'}
+                      </button>
+                    )}
+                    {emailTplDirty && (
+                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }}
+                        onClick={saveEmailTemplate} disabled={savingTpl}>
+                        {savingTpl ? '⏳ Saving...' : '💾 Save'}
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 4 }}>
+                      Subject line <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— supports <code style={{ fontSize: 10 }}>{'{{first_name}}'}</code> and <code style={{ fontSize: 10 }}>{'{{company}}'}</code></span>
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ width: '100%', fontSize: 12, padding: '6px 10px' }}
+                      placeholder={`${F(selectedCampaign,'Name')||'Campaign'} — for {{first_name}} at {{company}}`}
+                      value={emailTplSubject}
+                      onChange={e => setEmailTplSubject(e.target.value)}
+                    />
+                  </div>
+
+                  {emailTplHtml && (
+                    previewTpl ? (
+                      <div style={{ border: '1px solid var(--globant-border)', borderRadius: 6, overflow: 'hidden', background: '#fff' }}>
+                        <div style={{ padding: '6px 10px', background: 'var(--globant-darker)', borderBottom: '1px solid var(--globant-border)', fontSize: 10, color: 'var(--globant-muted)' }}>
+                          Preview — tokens filled per contact on send
+                        </div>
+                        <iframe
+                          srcDoc={emailTplHtml}
+                          style={{ width: '100%', height: 480, border: 'none', display: 'block' }}
+                          sandbox="allow-same-origin"
+                          title="Email preview"
+                        />
+                      </div>
+                    ) : (() => {
+                      const C = emailTplContent || {};
+                      const updateContent = (key, val) => {
+                        const updated = { ...C, [key]: val };
+                        setEmailTplContent(updated);
+                        setEmailTplHtml(renderCampaignEmail(updated, selectedCampaign, tplLanguage));
+                        setEmailTplDirty(true);
+                      };
+                      const updateBullet = (i, val) => {
+                        const bullets = [...(C.bullets || [])];
+                        bullets[i] = val;
+                        updateContent('bullets', bullets);
+                      };
+                      const addBullet = () => updateContent('bullets', [...(C.bullets || []), '']);
+                      const removeBullet = (i) => {
+                        const bullets = (C.bullets || []).filter((_,idx) => idx !== i);
+                        updateContent('bullets', bullets);
+                      };
+                      const fieldStyle = { width: '100%', marginBottom: 10, boxSizing: 'border-box' };
+                      const labelStyle = { fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3, display: 'block' };
+                      return (
+                        <div style={{ background: 'var(--globant-darker)', borderRadius: 8, padding: '14px 14px 6px', border: '1px solid var(--globant-border)' }}>
+                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+                            ✏️ Edit the content below — the email updates automatically. Tokens <code style={{ color: '#60a5fa' }}>{'{{first_name}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{company}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{ai_opener}}'}</code> are filled per contact on send.
+                          </div>
+
+                          <label style={labelStyle}>Header subtitle</label>
+                          <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
+                            value={C.subtitle ?? '{{company}}'}
+                            onChange={e => updateContent('subtitle', e.target.value)}>
+                            <option value="{{company}}">Company name — {'{{company}}'}</option>
+                            <option value="{{first_name}}">First name — {'{{first_name}}'}</option>
+                            <option value="{{first_name}} at {{company}}">Name at Company — {'{{first_name}} at {{company}}'}</option>
+                            <option value="Prepared for {{first_name}}">Prepared for {'{{first_name}}'}</option>
+                            <option value="">No subtitle</option>
+                          </select>
+
+                          <label style={labelStyle}>Opening hook (1-2 sentences)</label>
+                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 56, resize: 'vertical', fontSize: 12 }}
+                            value={C.hook || ''} onChange={e => updateContent('hook', e.target.value)} />
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                            <div>
+                              <label style={labelStyle}>Pain section heading</label>
+                              <input className="input-field" style={{ width: '100%', fontSize: 12 }}
+                                value={C.painHeading || ''} onChange={e => updateContent('painHeading', e.target.value)} />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Value section heading</label>
+                              <input className="input-field" style={{ width: '100%', fontSize: 12 }}
+                                value={C.valueHeading || ''} onChange={e => updateContent('valueHeading', e.target.value)} />
+                            </div>
+                          </div>
+
+                          <label style={labelStyle}>Pain paragraph</label>
+                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
+                            value={C.pain || ''} onChange={e => updateContent('pain', e.target.value)} />
+
+                          <label style={labelStyle}>Value paragraph</label>
+                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
+                            value={C.value || ''} onChange={e => updateContent('value', e.target.value)} />
+
+                          <label style={labelStyle}>Numbered bullets</label>
+                          {(C.bullets || []).map((b, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                              <div style={{ minWidth: 22, height: 22, background: 'rgba(91,191,181,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#5bbfb5', marginTop: 6 }}>{i+1}</div>
+                              <input className="input-field" style={{ flex: 1, fontSize: 12 }}
+                                value={b} onChange={e => updateBullet(i, e.target.value)} />
+                              <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px', color: '#ef4444' }} onClick={() => removeBullet(i)}>✕</button>
+                            </div>
+                          ))}
+                          <button className="action-btn btn-ghost" style={{ fontSize: 10, marginBottom: 10 }} onClick={addBullet}>+ Add bullet</button>
+
+                          <label style={labelStyle}>💡 Actionable tip (optional)</label>
+                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
+                            placeholder="A concrete action or recommendation the reader can apply right now..."
+                            value={C.socialProof || ''} onChange={e => updateContent('socialProof', e.target.value)} />
+
+                          <div style={{ borderTop: '1px solid var(--globant-border)', margin: '10px 0 12px', paddingTop: 12 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Closing section</div>
+                            <label style={labelStyle}>Line 1</label>
+                            <textarea className="input-field" style={{ ...fieldStyle, minHeight: 52, resize: 'vertical', fontSize: 12 }}
+                              value={C.closingLine1 || ''} onChange={e => updateContent('closingLine1', e.target.value)} />
+                            <label style={labelStyle}>Line 2</label>
+                            <input className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
+                              value={C.closingLine2 || ''} onChange={e => updateContent('closingLine2', e.target.value)} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                              <div>
+                                <label style={labelStyle}>Reply button</label>
+                                <input className="input-field" style={{ width: '100%', fontSize: 12 }}
+                                  value={C.replyBtn || ''} onChange={e => updateContent('replyBtn', e.target.value)} />
+                              </div>
+                              <div>
+                                <label style={labelStyle}>Calendar button</label>
+                                <input className="input-field" style={{ width: '100%', fontSize: 12 }}
+                                  value={C.calBtn || ''} onChange={e => updateContent('calBtn', e.target.value)} />
+                              </div>
+                            </div>
+                          </div>
+
+                          <label style={labelStyle}>Evento (opcional)</label>
+                          <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
+                            value={C.eventId || ''}
+                            onChange={e => updateContent('eventId', e.target.value || null)}>
+                            <option value="">— Sin evento —</option>
+                            {(events || []).sort((a,b) => (b.fields?.['Starting']||'').localeCompare(a.fields?.['Starting']||'')).map(ev => {
+                              const evD = ev.fields?.['Starting'] ? new Date(ev.fields['Starting']).toLocaleDateString('es-AR', { day:'numeric', month:'short' }) : '';
+                              return <option key={ev.id} value={ev.id}>{F(ev,'Event Name')}{evD ? ` (${evD})` : ''}</option>;
+                            })}
+                          </select>
+                          {C.eventId && (
+                            <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: -6, marginBottom: 10 }}>
+                              Aparece como bloque de invitación antes del CTA.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
+              )}
+            </div>
+
+
             {/* Sequence */}
             <div className="card" style={{ marginBottom: 14, borderLeft: `3px solid ${seqConfig.active !== false ? '#a78bfa' : 'var(--globant-border)'}`, padding: '12px 14px' }}>
               {/* Header row */}
@@ -15905,7 +16107,12 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
               {!showSeq && seqSteps.length > 0 && (() => {
                 const enrollments = parseSeqEnrollments(selectedCampaign);
                 const todayStr = new Date().toISOString().split('T')[0];
-                const dueToday = Object.values(enrollments).filter(e => e.status === 'active' && e.nextDate && e.nextDate <= todayStr);
+                const now = new Date();
+                const dueToday = Object.values(enrollments).filter(e => {
+                  if (e.status !== 'active') return false;
+                  const dt = e.nextDateTime ? new Date(e.nextDateTime) : new Date(e.nextDate);
+                  return dt <= now;
+                });
                 const activeCount = Object.values(enrollments).filter(e => e.status === 'active').length;
                 const repliedCount = Object.values(enrollments).filter(e => e.status === 'replied').length;
                 const completedCount = Object.values(enrollments).filter(e => e.status === 'completed').length;
@@ -15962,7 +16169,13 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 const completedCount = enrolledIds.filter(id => enrollments[id].status === 'completed').length;
                 const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
                 const todayStr = new Date().toISOString().split('T')[0];
-                const dueToday = enrolledIds.filter(id => enrollments[id].status === 'active' && enrollments[id].nextDate && enrollments[id].nextDate <= todayStr);
+                const now2 = new Date();
+                const dueToday = enrolledIds.filter(id => {
+                  const e = enrollments[id];
+                  if (e.status !== 'active') return false;
+                  const dt = e.nextDateTime ? new Date(e.nextDateTime) : new Date(e.nextDate);
+                  return dt <= now2;
+                });
                 return (
                   <div style={{ marginTop: 12 }}>
 
@@ -16201,13 +16414,21 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                       const totalEnrolled = enrollmentValues.length;
                       const countPaused = enrollmentValues.filter(e => e.status === 'paused').length;
                       const pctDone = totalEnrolled > 0 ? Math.round((completedCount + repliedCount) / totalEnrolled * 100) : 0;
-                      const getDueLabel = (nextDate) => {
-                        if (!nextDate) return null;
-                        const diff = Math.ceil((new Date(nextDate) - new Date()) / (1000 * 60 * 60 * 24));
-                        if (diff <= 0) return { label: '🔴 Today', color: '#ef4444' };
-                        if (diff === 1) return { label: '🟡 Tomorrow', color: '#fbbf24' };
-                        if (diff <= 3) return { label: `🟠 In ${diff}d`, color: '#fb923c' };
-                        return { label: `📅 In ${diff}d`, color: 'var(--globant-muted)' };
+                      const getDueLabel = (en) => {
+                        const nextDT = en.nextDateTime || en.nextDate;
+                        if (!nextDT) return null;
+                        const diffMs = new Date(nextDT) - new Date();
+                        const diffH = Math.ceil(diffMs / (1000 * 60 * 60));
+                        const diffD = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                        if (diffMs <= 0) return { label: '🔴 Due now', color: '#ef4444' };
+                        if (diffH <= 2) return { label: `🔴 In ${diffH}h`, color: '#ef4444' };
+                        if (diffD <= 1) return { label: '🟡 Tomorrow', color: '#fbbf24' };
+                        if (diffD <= 3) return { label: `🟠 In ${diffD}d`, color: '#fb923c' };
+                        // Show exact date if > 3 days
+                        const d = new Date(nextDT);
+                        const dateStr = d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+                        const timeStr = en.nextDateTime ? d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) : '';
+                        return { label: `📅 ${dateStr}${timeStr ? ` ${timeStr}` : ''}`, color: 'var(--globant-muted)' };
                       };
                       const pendingToEnroll = pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed');
                       return (
@@ -16215,10 +16436,34 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Enrolled contacts</div>
                             {pendingToEnroll.length > 0 && (
-                              <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                                onClick={enrollInSequence} disabled={enrolling}>
-                                {enrolling ? '⏳ Enrolling...' : `+ Enroll ${pendingToEnroll.length} pending`}
-                              </button>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                  <label style={{ fontSize: 11, color: 'var(--globant-muted)', flexShrink: 0 }}>Step 1 sends:</label>
+                                  <select className="input-field" style={{ fontSize: 11, padding: '4px 8px' }}
+                                    value={enrollDateTime === '' ? 'now' : 'custom'}
+                                    onChange={e => {
+                                      if (e.target.value === 'now') setEnrollDateTime('');
+                                      else {
+                                        const d = new Date();
+                                        d.setMinutes(0, 0, 0);
+                                        d.setHours(d.getHours() + 1);
+                                        setEnrollDateTime(d.toISOString().slice(0, 16));
+                                      }
+                                    }}>
+                                    <option value="now">⚡ Immediately</option>
+                                    <option value="custom">📅 Custom date &amp; time</option>
+                                  </select>
+                                  {enrollDateTime !== '' && (
+                                    <input type="datetime-local" className="input-field" style={{ fontSize: 11, padding: '4px 8px' }}
+                                      value={enrollDateTime}
+                                      onChange={e => setEnrollDateTime(e.target.value)} />
+                                  )}
+                                </div>
+                                <button className="action-btn btn-primary" style={{ fontSize: 11 }}
+                                  onClick={enrollInSequence} disabled={enrolling}>
+                                  {enrolling ? '⏳ Enrolling...' : `+ Enroll ${pendingToEnroll.length} pending`}
+                                </button>
+                              </div>
                             )}
                           </div>
                           {/* Progress */}
@@ -16259,8 +16504,8 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                                 if (!stk) return null;
                                 const stepLabel = en.step < seqSteps.length ? `Step ${en.step+1}${seqSteps[en.step]?.note ? ` — ${seqSteps[en.step].note}` : ''}` : 'All done';
                                 const STATUS_C = { active: '#60a5fa', completed: 'var(--globant-muted)', replied: '#4ade80', paused: '#a78bfa' };
-                                const isDueToday = en.status === 'active' && en.nextDate && en.nextDate <= todayStr;
-                                const dueInfo = en.status === 'active' ? getDueLabel(en.nextDate) : null;
+                                const isDueToday = en.status === 'active' && (() => { const dt = en.nextDateTime ? new Date(en.nextDateTime) : new Date(en.nextDate); return dt <= new Date(); })();
+                                const dueInfo = en.status === 'active' ? getDueLabel(en) : null;
                                 return (
                                   <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
                                     <div>
@@ -16295,196 +16540,6 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                 );
               })()}
             </div>
-
-            {/* Email HTML Template */}
-            <div className="card" style={{ marginBottom: 14, borderLeft: '3px solid #60a5fa', padding: '12px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: 1 }}>📧 Email HTML Template</div>
-                <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setShowEmailTpl(!showEmailTpl)}>
-                  {showEmailTpl ? '▲ Collapse' : (emailTplHtml ? '▼ Template saved' : '▼ Build template')}
-                </button>
-              </div>
-              {showEmailTpl && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select value={tplLanguage} onChange={e => {
-                      const lang = e.target.value;
-                      setTplLanguage(lang);
-                      if (emailTplContent && selectedCampaign) {
-                        setEmailTplHtml(renderCampaignEmail(emailTplContent, selectedCampaign, lang));
-                        setEmailTplDirty(true);
-                      }
-                    }} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: '#e5e7eb', cursor: 'pointer' }}>
-                      <option value="en">🇬🇧 English</option>
-                      <option value="es">🇦🇷 Español</option>
-                      <option value="pt">🇧🇷 Português</option>
-                    </select>
-                    <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                      onClick={generateEmailTemplate} disabled={generatingTpl || bulkSending}>
-                      {generatingTpl ? '⏳ Generating...' : emailTplHtml ? '🔄 Regenerate' : '✨ Generate Template'}
-                    </button>
-                    {emailTplHtml && (
-                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
-                        onClick={() => setPreviewTpl(!previewTpl)}>
-                        {previewTpl ? '✏️ Edit' : '👁️ Preview'}
-                      </button>
-                    )}
-                    {emailTplDirty && (
-                      <button className="action-btn" style={{ fontSize: 11, background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' }}
-                        onClick={saveEmailTemplate} disabled={savingTpl}>
-                        {savingTpl ? '⏳ Saving...' : '💾 Save'}
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 4 }}>
-                      Subject line <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— supports <code style={{ fontSize: 10 }}>{'{{first_name}}'}</code> and <code style={{ fontSize: 10 }}>{'{{company}}'}</code></span>
-                    </label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%', fontSize: 12, padding: '6px 10px' }}
-                      placeholder={`${F(selectedCampaign,'Name')||'Campaign'} — for {{first_name}} at {{company}}`}
-                      value={emailTplSubject}
-                      onChange={e => setEmailTplSubject(e.target.value)}
-                    />
-                  </div>
-
-                  {emailTplHtml && (
-                    previewTpl ? (
-                      <div style={{ border: '1px solid var(--globant-border)', borderRadius: 6, overflow: 'hidden', background: '#fff' }}>
-                        <div style={{ padding: '6px 10px', background: 'var(--globant-darker)', borderBottom: '1px solid var(--globant-border)', fontSize: 10, color: 'var(--globant-muted)' }}>
-                          Preview — tokens filled per contact on send
-                        </div>
-                        <iframe
-                          srcDoc={emailTplHtml}
-                          style={{ width: '100%', height: 480, border: 'none', display: 'block' }}
-                          sandbox="allow-same-origin"
-                          title="Email preview"
-                        />
-                      </div>
-                    ) : (() => {
-                      const C = emailTplContent || {};
-                      const updateContent = (key, val) => {
-                        const updated = { ...C, [key]: val };
-                        setEmailTplContent(updated);
-                        setEmailTplHtml(renderCampaignEmail(updated, selectedCampaign, tplLanguage));
-                        setEmailTplDirty(true);
-                      };
-                      const updateBullet = (i, val) => {
-                        const bullets = [...(C.bullets || [])];
-                        bullets[i] = val;
-                        updateContent('bullets', bullets);
-                      };
-                      const addBullet = () => updateContent('bullets', [...(C.bullets || []), '']);
-                      const removeBullet = (i) => {
-                        const bullets = (C.bullets || []).filter((_,idx) => idx !== i);
-                        updateContent('bullets', bullets);
-                      };
-                      const fieldStyle = { width: '100%', marginBottom: 10, boxSizing: 'border-box' };
-                      const labelStyle = { fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3, display: 'block' };
-                      return (
-                        <div style={{ background: 'var(--globant-darker)', borderRadius: 8, padding: '14px 14px 6px', border: '1px solid var(--globant-border)' }}>
-                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-                            ✏️ Edit the content below — the email updates automatically. Tokens <code style={{ color: '#60a5fa' }}>{'{{first_name}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{company}}'}</code> · <code style={{ color: '#60a5fa' }}>{'{{ai_opener}}'}</code> are filled per contact on send.
-                          </div>
-
-                          <label style={labelStyle}>Header subtitle</label>
-                          <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
-                            value={C.subtitle ?? '{{company}}'}
-                            onChange={e => updateContent('subtitle', e.target.value)}>
-                            <option value="{{company}}">Company name — {'{{company}}'}</option>
-                            <option value="{{first_name}}">First name — {'{{first_name}}'}</option>
-                            <option value="{{first_name}} at {{company}}">Name at Company — {'{{first_name}} at {{company}}'}</option>
-                            <option value="Prepared for {{first_name}}">Prepared for {'{{first_name}}'}</option>
-                            <option value="">No subtitle</option>
-                          </select>
-
-                          <label style={labelStyle}>Opening hook (1-2 sentences)</label>
-                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 56, resize: 'vertical', fontSize: 12 }}
-                            value={C.hook || ''} onChange={e => updateContent('hook', e.target.value)} />
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                            <div>
-                              <label style={labelStyle}>Pain section heading</label>
-                              <input className="input-field" style={{ width: '100%', fontSize: 12 }}
-                                value={C.painHeading || ''} onChange={e => updateContent('painHeading', e.target.value)} />
-                            </div>
-                            <div>
-                              <label style={labelStyle}>Value section heading</label>
-                              <input className="input-field" style={{ width: '100%', fontSize: 12 }}
-                                value={C.valueHeading || ''} onChange={e => updateContent('valueHeading', e.target.value)} />
-                            </div>
-                          </div>
-
-                          <label style={labelStyle}>Pain paragraph</label>
-                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
-                            value={C.pain || ''} onChange={e => updateContent('pain', e.target.value)} />
-
-                          <label style={labelStyle}>Value paragraph</label>
-                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
-                            value={C.value || ''} onChange={e => updateContent('value', e.target.value)} />
-
-                          <label style={labelStyle}>Numbered bullets</label>
-                          {(C.bullets || []).map((b, i) => (
-                            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                              <div style={{ minWidth: 22, height: 22, background: 'rgba(91,191,181,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#5bbfb5', marginTop: 6 }}>{i+1}</div>
-                              <input className="input-field" style={{ flex: 1, fontSize: 12 }}
-                                value={b} onChange={e => updateBullet(i, e.target.value)} />
-                              <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px', color: '#ef4444' }} onClick={() => removeBullet(i)}>✕</button>
-                            </div>
-                          ))}
-                          <button className="action-btn btn-ghost" style={{ fontSize: 10, marginBottom: 10 }} onClick={addBullet}>+ Add bullet</button>
-
-                          <label style={labelStyle}>💡 Actionable tip (optional)</label>
-                          <textarea className="input-field" style={{ ...fieldStyle, minHeight: 60, resize: 'vertical', fontSize: 12 }}
-                            placeholder="A concrete action or recommendation the reader can apply right now..."
-                            value={C.socialProof || ''} onChange={e => updateContent('socialProof', e.target.value)} />
-
-                          <div style={{ borderTop: '1px solid var(--globant-border)', margin: '10px 0 12px', paddingTop: 12 }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Closing section</div>
-                            <label style={labelStyle}>Line 1</label>
-                            <textarea className="input-field" style={{ ...fieldStyle, minHeight: 52, resize: 'vertical', fontSize: 12 }}
-                              value={C.closingLine1 || ''} onChange={e => updateContent('closingLine1', e.target.value)} />
-                            <label style={labelStyle}>Line 2</label>
-                            <input className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
-                              value={C.closingLine2 || ''} onChange={e => updateContent('closingLine2', e.target.value)} />
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                              <div>
-                                <label style={labelStyle}>Reply button</label>
-                                <input className="input-field" style={{ width: '100%', fontSize: 12 }}
-                                  value={C.replyBtn || ''} onChange={e => updateContent('replyBtn', e.target.value)} />
-                              </div>
-                              <div>
-                                <label style={labelStyle}>Calendar button</label>
-                                <input className="input-field" style={{ width: '100%', fontSize: 12 }}
-                                  value={C.calBtn || ''} onChange={e => updateContent('calBtn', e.target.value)} />
-                              </div>
-                            </div>
-                          </div>
-
-                          <label style={labelStyle}>Evento (opcional)</label>
-                          <select className="input-field" style={{ ...fieldStyle, fontSize: 12 }}
-                            value={C.eventId || ''}
-                            onChange={e => updateContent('eventId', e.target.value || null)}>
-                            <option value="">— Sin evento —</option>
-                            {(events || []).sort((a,b) => (b.fields?.['Starting']||'').localeCompare(a.fields?.['Starting']||'')).map(ev => {
-                              const evD = ev.fields?.['Starting'] ? new Date(ev.fields['Starting']).toLocaleDateString('es-AR', { day:'numeric', month:'short' }) : '';
-                              return <option key={ev.id} value={ev.id}>{F(ev,'Event Name')}{evD ? ` (${evD})` : ''}</option>;
-                            })}
-                          </select>
-                          {C.eventId && (
-                            <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: -6, marginBottom: 10 }}>
-                              Aparece como bloque de invitación antes del CTA.
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* Stats */}
             <div className="kpi-row" style={{ gridTemplateColumns:'repeat(3,1fr)', marginBottom:14 }}>
               <div className="kpi-card">
