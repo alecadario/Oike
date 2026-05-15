@@ -3346,27 +3346,79 @@ ${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}
         try {
           const sName = F(s, 'Name') || '';
           const role = F(s, 'Role') || '';
-          const accNames = (linkedIds(s, 'Account') || []).map(id => { const a = accounts.find(x => x.id === id); return a ? F(a, 'Account Name') : ''; }).filter(Boolean);
-          const history = outreach
+          const accIds = linkedIds(s, 'Account') || [];
+          const accNames = accIds.map(id => { const a = accounts.find(x => x.id === id); return a ? F(a, 'Account Name') : ''; }).filter(Boolean);
+
+          // Get offerings linked to this contact's account
+          const allSolutions = data.solutions || [];
+          const accRecord = accIds[0] ? accounts.find(a => a.id === accIds[0]) : null;
+          const linkedSolIds = accRecord ? (linkedIds(accRecord, 'Solutions') || []) : [];
+          const relevantSolutions = linkedSolIds.length > 0
+            ? allSolutions.filter(sol => linkedSolIds.includes(sol.id))
+            : allSolutions.slice(0, 6); // fallback: first 6 if none linked
+          const offeringsText = relevantSolutions.map(sol => {
+            const name = F(sol, 'Name') || '';
+            const detail = (F(sol, 'Service | Solution Detail') || '').slice(0, 200);
+            return `• ${name}${detail ? `: ${detail}` : ''}`;
+          }).join('\n');
+
+          // Sort outreach newest-first
+          const sOutreach = outreach
             .filter(o => linkedIds(o, 'Stakeholder').includes(s.id))
-            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0))
-            .slice(0, 5)
-            .map(o => `[${F(o, 'Channel') || '?'} · ${o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?'}]\n${(F(o, 'Message') || F(o, 'Notes') || '').slice(0, 300)}`)
+            .sort((a, b) => new Date(b.fields?.['Date'] || 0) - new Date(a.fields?.['Date'] || 0));
+
+          // Last SENT message (for continuity)
+          const lastSent = sOutreach.find(o => {
+            const st = (F(o, 'Status') || '').toLowerCase();
+            return st === 'sent' || st === 'draft';
+          });
+          const lastSentMsg = lastSent ? (F(lastSent, 'Message') || '').slice(0, 500) : '';
+          const lastSentNotes = lastSent ? (() => {
+            const n = F(lastSent, 'Notes') || '';
+            return n.replace(/^(\[g[^\]]+\])+\s*/, '').trim().slice(0, 200);
+          })() : '';
+          const lastSentContent = lastSentMsg || lastSentNotes;
+          const lastSentDate = lastSent?.fields?.['Date']
+            ? new Date(lastSent.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : '';
+
+          // Full history (last 5)
+          const history = sOutreach.slice(0, 5)
+            .map(o => {
+              const dir = ['received','replied'].includes((F(o,'Status')||'').toLowerCase()) ? 'THEY' : 'YOU';
+              const date = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
+              const msg = (F(o,'Message') || F(o,'Notes') || '').replace(/^(\[g[^\]]+\])+\s*/,'').slice(0, 300);
+              return `[${dir} · ${F(o,'Channel')||'?'} · ${date}]\n${msg}`;
+            })
             .join('\n\n');
 
-          const prompt = `You are a senior B2B sales rep. Write ONE short follow-up message to ${sName} (${role} at ${accNames[0] || 'their company'}).
+          const prompt = `You are a senior B2B sales rep at ${COMPANY_PROFILE.companyName || 'our company'}.
 
-PREVIOUS MESSAGES SENT (no reply received):
+ABOUT US:
+${COMPANY_PROFILE.services ? `- What we do: ${COMPANY_PROFILE.services}` : ''}
+${COMPANY_PROFILE.goals ? `- Focus: ${COMPANY_PROFILE.goals}` : ''}
+${COMPANY_PROFILE.voiceTone ? `- Voice: ${COMPANY_PROFILE.voiceTone}` : ''}
+${COMPANY_PROFILE.voiceAvoid ? `- Never say: ${COMPANY_PROFILE.voiceAvoid}` : ''}
+
+OUR OFFERINGS${accNames[0] ? ` (relevant to ${accNames[0]})` : ''}:
+${offeringsText || COMPANY_PROFILE.services || '(no offerings configured)'}
+
+CONTACT: ${sName} — ${role} at ${accNames[0] || 'their company'}
+
+${lastSentContent ? `LAST MESSAGE YOU SENT (${lastSentDate}):
+"${lastSentContent}"
+
+` : ''}FULL CONVERSATION HISTORY:
 ${history || '— No history found —'}
 
-MISSION: Write a follow-up that takes a completely different angle from the previous messages. Don't reference "following up". Don't be apologetic. Find something new — a new insight, a question, a trigger, a short observation. Max 3 sentences. Human, direct, no filler.
+MISSION: Write ONE short follow-up that continues naturally from the last message you sent — same topic/thread, new angle. Don't restart from scratch. Don't reference "following up". Max 3 sentences. Grounded in our actual offerings above. Human, direct, no filler.
 
 Channel: ${channel}
 ${channel === 'Email' ? 'First line must be "Subject: [subject]", then blank line, then body.' : ''}
 ${channel === 'WhatsApp' ? 'Ultra short. Casual tone. No subject line.' : ''}
 ${channel === 'LinkedIn' ? 'Short, professional but conversational.' : ''}
 
-BANNED: "just following up" / "checking in" / "touching base" / "I hope this finds you well" / "I wanted to reach out" / brackets or placeholders.
+BANNED: "just following up" / "checking in" / "touching base" / "I hope this finds you well" / "I wanted to reach out" / brackets or placeholders. NEVER invent capabilities we don't have.
 
 Output ONLY the message, nothing else.`;
 
