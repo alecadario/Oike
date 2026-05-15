@@ -398,15 +398,18 @@ export default async () => {
           await new Promise(r => setTimeout(r, 1500));
         }
 
-        // Save updated enrollments back to Airtable
-        if (enrollmentsChanged) {
-          try {
-            await atFetch(`/${baseId}/${campaignsTableId}/${campaign.id}`, airtableKey, {
-              method: 'PATCH',
-              body: JSON.stringify({ fields: { 'Sequence Enrollments': JSON.stringify(enrollments) }, typecast: true }),
-            });
-          } catch(e) { console.error(`[seq-runner] Failed to save enrollments for campaign ${campaign.id}:`, e); }
-        }
+        // Save updated enrollments + last run metadata back to Airtable
+        const campaignSentCount = Object.values(enrollments).filter(e => e.status !== 'active').length; // rough proxy
+        try {
+          await atFetch(`/${baseId}/${campaignsTableId}/${campaign.id}`, airtableKey, {
+            method: 'PATCH',
+            body: JSON.stringify({ fields: {
+              ...(enrollmentsChanged ? { 'Sequence Enrollments': JSON.stringify(enrollments) } : {}),
+              'Last Run': new Date().toISOString(),
+              'Last Run Result': `${totalSent} sent · ${totalSkipped} skipped · ${totalErrors} errors`,
+            }, typecast: true }),
+          });
+        } catch(e) { console.error(`[seq-runner] Failed to save campaign metadata for ${campaign.id}:`, e); }
       }
     } catch(e) {
       console.error(`[seq-runner] Error processing base ${baseId}:`, e);
