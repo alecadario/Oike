@@ -4908,7 +4908,7 @@ Output ONLY the message, nothing else.`;
               React.createElement('button', { onClick: onClose, style: { background: 'none', border: 'none', color: 'var(--globant-muted)', fontSize: 18, cursor: 'pointer' } }, '×')
             ),
             sent
-              ? React.createElement('p', { style: { color: '#4ade80', textAlign: 'center', fontSize: 14, margin: 0 } }, '✅ Thanks! Saved to Airtable.')
+              ? React.createElement('p', { style: { color: '#4ade80', textAlign: 'center', fontSize: 14, margin: 0 } }, '✅ Thanks for your feedback!')
               : React.createElement(React.Fragment, null,
                   React.createElement('textarea', { className: 'input-field', rows: 4, value: text, onChange: e => setText(e.target.value), placeholder: "What's working? What's broken? What do you wish existed?", style: { width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13, marginBottom: 12 } }),
                   error && React.createElement('div', { style: { fontSize: 12, color: '#f87171', marginBottom: 8 } }, error),
