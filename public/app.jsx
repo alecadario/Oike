@@ -4747,23 +4747,51 @@ Output ONLY the message, nothing else.`;
         if (q.trim().length < 2) return [];
         const term = q.toLowerCase();
         const hits = [];
-        stakeholders.slice(0, 200).forEach(s => {
+        stakeholders.slice(0, 400).forEach(s => {
           const name = ((s.fields?.['Name'] || '') + ' ' + (s.fields?.['Last name'] || '')).toLowerCase();
           const role = (s.fields?.['Role'] || '').toLowerCase();
-          if (name.includes(term) || role.includes(term)) hits.push({ type: 'contact', label: ((s.fields?.['Name'] || '') + ' ' + (s.fields?.['Last name'] || '')).trim(), sub: s.fields?.['Role'] || '', id: s.id, nav: 'contacts' });
+          const accName = (s.fields?.['Account']?.[0] || '').toLowerCase();
+          if (name.includes(term) || role.includes(term)) hits.push({
+            type: 'contact',
+            label: ((s.fields?.['Name'] || '') + ' ' + (s.fields?.['Last name'] || '')).trim(),
+            sub: s.fields?.['Role'] || '',
+            id: s.id,
+            record: s,
+            nav: 'contacts',
+          });
         });
-        accounts.slice(0, 200).forEach(a => {
+        accounts.slice(0, 400).forEach(a => {
           const name = (a.fields?.['Account Name'] || '').toLowerCase();
-          if (name.includes(term)) hits.push({ type: 'account', label: a.fields?.['Account Name'] || '', sub: a.fields?.['Industry'] || '', id: a.id, nav: 'accounts' });
+          if (name.includes(term)) hits.push({
+            type: 'account',
+            label: a.fields?.['Account Name'] || '',
+            sub: a.fields?.['Industry'] || '',
+            id: a.id,
+            record: a,
+            nav: 'accounts',
+          });
         });
         campaigns.slice(0, 100).forEach(c => {
           const name = (c.fields?.['Name'] || '').toLowerCase();
-          if (name.includes(term)) hits.push({ type: 'campaign', label: c.fields?.['Name'] || '', sub: c.fields?.['Status'] || '', id: c.id, nav: 'campaigns' });
+          if (name.includes(term)) hits.push({
+            type: 'campaign',
+            label: c.fields?.['Name'] || '',
+            sub: c.fields?.['Status'] || '',
+            id: c.id,
+            record: c,
+            nav: 'campaigns',
+          });
         });
         return hits.slice(0, 12);
       }, [q, stakeholders, accounts, campaigns]);
 
       const typeIcon = { contact: '👤', account: '🏢', campaign: '📣' };
+      const typeColor = { contact: '#60a5fa', account: '#4ade80', campaign: '#fb923c' };
+
+      const handleSelect = (r) => {
+        onNavigate(r.nav, r.id, r.record);
+        onClose();
+      };
 
       return (
         React.createElement('div', { className: 'modal-overlay', onClick: onClose, style: { zIndex: 2000, alignItems: 'flex-start', paddingTop: '15vh' } },
@@ -4779,24 +4807,27 @@ Output ONLY the message, nothing else.`;
               results.map((r, i) =>
                 React.createElement('div', {
                   key: r.id + i,
-                  onClick: () => { onNavigate(r.nav); onClose(); },
+                  onClick: () => handleSelect(r),
                   style: { padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid var(--globant-border)' },
                   onMouseEnter: e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; },
                   onMouseLeave: e => { e.currentTarget.style.background = 'none'; },
                 },
                   React.createElement('span', { style: { fontSize: 16 } }, typeIcon[r.type]),
-                  React.createElement('div', null,
+                  React.createElement('div', { style: { flex: 1, minWidth: 0 } },
                     React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, r.label),
                     r.sub && React.createElement('div', { style: { fontSize: 11, color: 'var(--globant-muted)' } }, r.sub)
                   ),
-                  React.createElement('span', { style: { marginLeft: 'auto', fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.05)', padding: '2px 7px', borderRadius: 8 } }, r.type)
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 } },
+                    React.createElement('span', { style: { fontSize: 10, color: typeColor[r.type], background: 'rgba(255,255,255,0.05)', padding: '2px 7px', borderRadius: 8 } }, r.type),
+                    React.createElement('span', { style: { fontSize: 11, color: 'var(--globant-muted)' } }, '→')
+                  )
                 )
               )
             ),
             React.createElement('div', { style: { padding: '8px 16px', borderTop: '1px solid var(--globant-border)', fontSize: 10, color: 'var(--globant-muted)', display: 'flex', gap: 12 } },
-              React.createElement('span', null, '↵ to navigate'),
-              React.createElement('span', null, 'ESC to close'),
-              React.createElement('span', null, '⌘K to toggle')
+              React.createElement('span', null, '↵ open record'),
+              React.createElement('span', null, 'ESC close'),
+              React.createElement('span', null, '⌘K toggle')
             )
           )
         )
@@ -4924,6 +4955,17 @@ Output ONLY the message, nothing else.`;
       const [searchAccount, setSearchAccount] = useState('');
       const [selectedInfluence, setSelectedInfluence] = useState('');
       const [historyStakeholder, setHistoryStakeholder] = useState(null);
+
+      // Listen for global search navigation to open a specific contact
+      useEffect(() => {
+        const handler = (e) => {
+          const { id, record } = e.detail || {};
+          const found = record || stakeholders.find(s => s.id === id);
+          if (found) setHistoryStakeholder(found);
+        };
+        window.addEventListener('oike:openContact', handler);
+        return () => window.removeEventListener('oike:openContact', handler);
+      }, [stakeholders]);
       const [selectedStakeholder, setSelectedStakeholder] = useState(null);
       const [showNewContact, setShowNewContact] = useState(false);
       const [ctxNewName, setCtxNewName] = useState('');
@@ -22830,6 +22872,13 @@ Return ONLY valid JSON.`;
                 </>
               )}
               <button
+                onClick={() => setShowFeedback(true)}
+                style={{ width: '100%', padding: '7px 12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 6 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}>
+                💬 Send feedback
+              </button>
+              <button
                 onClick={() => { if (confirm('Sign out of Oike?')) logoutUser(); }}
                 style={{
                   width: '100%', padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
@@ -22861,7 +22910,19 @@ Return ONLY valid JSON.`;
             <GlobalSearchModal
               data={data}
               onClose={() => setShowGlobalSearch(false)}
-              onNavigate={(section) => { setPageAndSave(section); }}
+              onNavigate={(section, id, record) => {
+                if (section === 'accounts' && id) {
+                  goToAccount(id);
+                } else if (section === 'contacts' && id) {
+                  // Navigate to contacts and fire a custom event to open the record
+                  setPageAndSave('contacts');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('oike:openContact', { detail: { id, record } }));
+                  }, 100);
+                } else {
+                  setPageAndSave(section);
+                }
+              }}
             />
           )}
 
@@ -22871,9 +22932,8 @@ Return ONLY valid JSON.`;
           {/* Feedback Modal */}
           {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
 
-          {/* Feedback button */}
-          <button onClick={() => setShowFeedback(true)}
-            style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 900, fontSize: 11, padding: '6px 12px', borderRadius: 20, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer', backdropFilter: 'blur(8px)' }}>
+          {/* Feedback button — moved to sidebar above Sign Out */}
+          <button onClick={() => setShowFeedback(true)} style={{ display: 'none' }}>
             💬 Feedback
           </button>
 
