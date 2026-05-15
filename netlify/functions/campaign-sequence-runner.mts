@@ -15,7 +15,7 @@ const T = {
 
 // ── Types ──
 interface SeqStep   { waitDays: number; channel: string; condition: 'always' | 'no_reply'; note: string; mode?: 'send' | 'draft'; }
-interface Enrollment { step: number; nextDate: string; status: 'active' | 'paused' | 'completed' | 'replied'; senderEmail: string; enrolledDate: string; gmailThreadId?: string; gmailSubject?: string; }
+interface Enrollment { step: number; nextDate: string; nextDateTime?: string; status: 'active' | 'paused' | 'completed' | 'replied'; senderEmail: string; enrolledDate: string; gmailThreadId?: string; gmailSubject?: string; }
 type Enrollments = Record<string, Enrollment>;
 
 // ── Airtable helpers ──
@@ -278,7 +278,7 @@ export default async () => {
       for (const campaign of activeCampaigns) {
         let steps: SeqStep[];
         let enrollments: Enrollments;
-        let seqCfg: { sendHour: number; timezone: string };
+        let seqCfg: { sendHour: number; timezone: string; active?: boolean };
         try {
           steps = JSON.parse(F(campaign,'Sequence Steps') || '[]');
           enrollments = JSON.parse(F(campaign,'Sequence Enrollments') || '{}');
@@ -286,24 +286,19 @@ export default async () => {
         } catch { continue; }
         if (steps.length === 0) continue;
 
-        // Check if current hour in campaign's configured timezone matches the send hour
-        try {
-          const nowInTz = new Intl.DateTimeFormat('en-US', { timeZone: seqCfg.timezone, hour: 'numeric', hour12: false }).format(new Date());
-          const currentHour = parseInt(nowInTz);
-          if (currentHour !== seqCfg.sendHour) {
-            console.log(`[seq-runner] Campaign "${F(campaign,'Name')}": current hour ${currentHour} != configured ${seqCfg.sendHour} in ${seqCfg.timezone} — skipping`);
-            continue;
-          }
-        } catch(e) {
-          console.warn(`[seq-runner] Invalid timezone "${seqCfg.timezone}" — defaulting to UTC`);
-          if (new Date().getUTCHours() !== seqCfg.sendHour) continue;
+        // Check if sequence is paused
+        if (seqCfg.active === false) {
+          console.log(`[seq-runner] Campaign "${F(campaign,'Name')}": sequence is paused — skipping`);
+          continue;
         }
 
         let enrollmentsChanged = false;
 
         for (const [stkId, en] of Object.entries(enrollments)) {
           if (en.status !== 'active') continue;
-          if (en.nextDate > today) continue;
+          // Support per-enrollment datetime scheduling (nextDateTime) with fallback to nextDate
+          const enrollDue = en.nextDateTime ? new Date(en.nextDateTime) : new Date(en.nextDate + 'T' + String(seqCfg.sendHour || 9).padStart(2,'0') + ':00:00');
+          if (enrollDue > new Date()) continue;
           if (en.step >= steps.length) { en.status = 'completed'; enrollmentsChanged = true; continue; }
 
           const step = steps[en.step];
@@ -383,10 +378,12 @@ export default async () => {
               en.status = 'completed';
             } else {
               const nextStep = steps[nextStepIdx];
-              const nextDate = new Date();
-              nextDate.setDate(nextDate.getDate() + nextStep.waitDays);
+              // Preserve the same time of day as the original scheduled send
+              const base = en.nextDateTime ? new Date(en.nextDateTime) : new Date();
+              base.setDate(base.getDate() + nextStep.waitDays);
               en.step = nextStepIdx;
-              en.nextDate = nextDate.toISOString().split('T')[0];
+              en.nextDateTime = base.toISOString();
+              en.nextDate = base.toISOString().split('T')[0]; // backwards compat
             }
             enrollmentsChanged = true;
           } catch(e) {
