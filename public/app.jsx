@@ -1452,25 +1452,104 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             </div>
 
             {/* ── AI Next-Step Recommendation ── */}
-            <div style={{ marginBottom: 16, background: 'rgba(91,191,181,0.05)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '10px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: aiRec ? 10 : 0 }}>
-                <div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>🤖 Próximo paso recomendado</span>
-                  {aiRecSaved && <span style={{ fontSize: 10, color: 'var(--globant-muted)', marginLeft: 8 }}>✅ Guardado en actividades</span>}
+            {(() => {
+              // Detect recommended channel from AI text
+              const recLower = aiRec.toLowerCase();
+              const detectedChannel = recLower.includes('linkedin') ? 'LinkedIn'
+                : recLower.includes('whatsapp') ? 'WhatsApp'
+                : recLower.includes('email') || recLower.includes('correo') ? 'Email'
+                : recLower.includes('call') || recLower.includes('llamada') ? 'Call'
+                : null;
+              // Extract suggested angle text (between quotes or after "Suggested angle:")
+              const angleMatch = aiRec.match(/[""]([^"""]{20,})[""]/) || aiRec.match(/(?:suggested angle|ángulo sugerido)[^:]*:\s*[""]?([^""\n]{20,})/i);
+              const suggestedMsg = angleMatch ? angleMatch[1].trim() : '';
+              // Render **bold** markdown inline
+              const renderMd = (text) => {
+                const parts = text.split(/(\*\*[^*]+\*\*)/g);
+                return parts.map((p, i) => p.startsWith('**') && p.endsWith('**')
+                  ? React.createElement('strong', { key: i, style: { color: 'var(--globant-text)', fontWeight: 700 } }, p.slice(2, -2))
+                  : p
+                );
+              };
+              const channelConfig = {
+                LinkedIn: { icon: '🔗', color: '#0a66c2', bg: 'rgba(10,102,194,0.12)', border: 'rgba(10,102,194,0.3)', label: 'Ir a LinkedIn' },
+                Email:    { icon: '✉️', color: 'var(--globant-green)', bg: 'rgba(91,191,181,0.12)', border: 'rgba(91,191,181,0.3)', label: 'Redactar Email' },
+                WhatsApp: { icon: '💬', color: '#25d366', bg: 'rgba(37,211,102,0.12)', border: 'rgba(37,211,102,0.3)', label: 'Abrir WhatsApp' },
+                Call:     { icon: '📞', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)', label: 'Llamar' },
+              };
+              const cfg = detectedChannel ? channelConfig[detectedChannel] : null;
+              const handleAction = async () => {
+                const msgToCopy = suggestedMsg || aiRec.slice(0, 500);
+                // Copy message to clipboard always
+                if (msgToCopy) navigator.clipboard.writeText(msgToCopy).catch(() => {});
+
+                if (detectedChannel === 'LinkedIn') {
+                  const url = F(stakeholder, 'LinkedIn') || F(stakeholder, 'linkedin_url') || '';
+                  if (url) { window.open(url, '_blank'); window.__oikeToast('📋 Mensaje copiado — pegalo en LinkedIn', 'success'); }
+                  else window.__oikeToast('No hay URL de LinkedIn para este contacto', 'warning');
+                } else if (detectedChannel === 'Email') {
+                  if (onSend) onSend(stakeholder, 'Email', msgToCopy, null, null, {});
+                  else window.__oikeToast('📋 Mensaje copiado', 'success');
+                } else if (detectedChannel === 'WhatsApp') {
+                  const phone = F(stakeholder, 'Phone') || '';
+                  if (phone) { window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msgToCopy)}`, '_blank'); }
+                  else window.__oikeToast('No hay teléfono para este contacto', 'warning');
+                } else if (detectedChannel === 'Call') {
+                  const phone = F(stakeholder, 'Phone') || '';
+                  if (phone) { window.open(`tel:${phone}`); window.__oikeToast('📋 Ángulo copiado al portapapeles', 'success'); }
+                  else window.__oikeToast('No hay teléfono para este contacto', 'warning');
+                }
+
+                // Log the action as activity
+                try {
+                  const a = new AirtableAPI();
+                  await a.createRecord(TABLE_IDS.outreach, {
+                    'Activity Name': `${detectedChannel || 'Outreach'} → ${sName} — ${new Date().toLocaleDateString('en-US')}`,
+                    'Channel': detectedChannel === 'Call' ? 'Phone' : detectedChannel || 'Email',
+                    'Status': 'Sent',
+                    'Notes': `[AI Rec] ${msgToCopy.slice(0, 500)}`,
+                    'Stakeholder': [stakeholder.id],
+                    'Date': new Date().toISOString(),
+                    ...(accountIds.length > 0 ? { 'Account': accountIds } : {}),
+                    'Logged By': CURRENT_USER?.name || '',
+                    ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+                    ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
+                  });
+                  if (onRefresh) onRefresh();
+                } catch (e) { console.warn('Failed to log action:', e); }
+              };
+              return (
+                <div style={{ marginBottom: 16, background: 'rgba(91,191,181,0.05)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: aiRec ? 10 : 0 }}>
+                    <div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>🤖 Próximo paso recomendado</span>
+                      {aiRecSaved && <span style={{ fontSize: 10, color: 'var(--globant-muted)', marginLeft: 8 }}>✅ Guardado</span>}
+                    </div>
+                    <button onClick={generateAiRec} disabled={aiRecLoading}
+                      style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 8, background: 'rgba(91,191,181,0.12)', border: '1px solid rgba(91,191,181,0.3)', color: 'var(--globant-green)', cursor: aiRecLoading ? 'default' : 'pointer', opacity: aiRecLoading ? 0.7 : 1 }}>
+                      {aiRecLoading ? '⏳ Analizando...' : aiRec ? '🔄 Regenerar' : '✨ Generar'}
+                    </button>
+                  </div>
+                  {aiRec && (
+                    <div style={{ borderTop: '1px solid rgba(91,191,181,0.15)', paddingTop: 10 }}>
+                      {/* Rendered content — one paragraph per line, bold markdown */}
+                      <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.8 }}>
+                        {aiRec.split('\n').filter(l => l.trim()).map((line, i) => (
+                          <p key={i} style={{ margin: '0 0 8px 0' }}>{renderMd(line)}</p>
+                        ))}
+                      </div>
+                      {/* Action button */}
+                      {cfg && (
+                        <button onClick={handleAction}
+                          style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, padding: '7px 16px', borderRadius: 8, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color, cursor: 'pointer', width: '100%', justifyContent: 'center' }}>
+                          {cfg.icon} {cfg.label} →
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={generateAiRec}
-                  disabled={aiRecLoading}
-                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 8, background: aiRecLoading ? 'rgba(91,191,181,0.1)' : 'rgba(91,191,181,0.15)', border: '1px solid rgba(91,191,181,0.3)', color: 'var(--globant-green)', cursor: aiRecLoading ? 'default' : 'pointer', opacity: aiRecLoading ? 0.7 : 1 }}>
-                  {aiRecLoading ? '⏳ Analizando...' : aiRec ? '🔄 Regenerar' : '✨ Generar'}
-                </button>
-              </div>
-              {aiRec && (
-                <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', borderTop: '1px solid rgba(91,191,181,0.15)', paddingTop: 10 }}>
-                  {aiRec}
-                </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* ── Gmail panel ── */}
             {stkEmail && gmailConnected && (
