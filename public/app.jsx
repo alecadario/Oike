@@ -16446,8 +16446,83 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                         return { label: `📅 ${dateStr}${timeStr ? ` ${timeStr}` : ''}`, color: 'var(--globant-muted)' };
                       };
                       const pendingToEnroll = pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed');
+
+                      // Build grouped contact lists for redesigned view
+                      const STATUS_C = { active: '#60a5fa', completed: 'var(--globant-muted)', replied: '#4ade80', paused: '#a78bfa' };
+                      const isDue = (en) => {
+                        if (en.status !== 'active') return false;
+                        const dt = en.nextDateTime ? new Date(en.nextDateTime) : (en.nextDate ? new Date(en.nextDate) : null);
+                        return dt && dt <= new Date();
+                      };
+                      const getNextDate = (en) => {
+                        const dt = en.nextDateTime || en.nextDate;
+                        return dt ? new Date(dt) : new Date(9999, 0, 1);
+                      };
+                      const groupDue = enrolledIds.filter(id => isDue(enrollments[id]));
+                      const groupScheduled = enrolledIds.filter(id => enrollments[id].status === 'active' && !isDue(enrollments[id])).sort((a, b) => getNextDate(enrollments[a]) - getNextDate(enrollments[b]));
+                      const groupFinished = enrolledIds.filter(id => enrollments[id].status === 'completed' || enrollments[id].status === 'replied');
+
+                      const renderContactRow = (stkId, showDivider) => {
+                        const en = enrollments[stkId];
+                        const stk = stakeholders.find(s => s.id === stkId);
+                        if (!stk) return null;
+                        const name = `${F(stk,'Name')}${F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}`;
+                        const step = en.step || 0;
+                        const totalSteps = seqSteps.length;
+                        const stepProgress = `Step ${step} / ${totalSteps}`;
+                        const dueInfo = en.status === 'active' ? getDueLabel(en) : null;
+                        const contactIsDue = isDue(en);
+
+                        let centerContent = null;
+                        if (en.status === 'completed') {
+                          centerContent = <span style={{ color: '#4ade80', fontSize: 11 }}>✅ All {totalSteps} steps sent</span>;
+                        } else if (en.status === 'replied') {
+                          centerContent = <span style={{ color: '#4ade80', fontSize: 11 }}>💬 Replied — sequence stopped</span>;
+                        } else if (step === 0 && contactIsDue) {
+                          centerContent = <span style={{ color: '#ef4444', fontSize: 11, fontWeight: 600 }}>🔴 Step 1 due now</span>;
+                        } else if (step === 0 && !contactIsDue) {
+                          centerContent = <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>⏳ Step 1 sends <span style={{ color: dueInfo ? dueInfo.color : 'var(--globant-muted)', fontWeight: 600 }}>{dueInfo ? dueInfo.label.replace(/^[🔴🟡🟠📅]\s*/u, '') : '—'}</span></span>;
+                        } else if (step > 0 && contactIsDue) {
+                          centerContent = <span style={{ fontSize: 11 }}><span style={{ color: '#4ade80' }}>✅ {step} sent</span><span style={{ color: 'var(--globant-muted)' }}> · </span><span style={{ color: '#ef4444', fontWeight: 600 }}>🔴 Step {step + 1} due now</span></span>;
+                        } else if (step > 0 && !contactIsDue) {
+                          centerContent = <span style={{ fontSize: 11 }}><span style={{ color: '#4ade80' }}>✅ {step} sent</span><span style={{ color: 'var(--globant-muted)' }}> · Step {step + 1} sends </span><span style={{ color: dueInfo ? dueInfo.color : 'var(--globant-muted)', fontWeight: 600 }}>{dueInfo ? dueInfo.label.replace(/^[🔴🟡🟠📅]\s*/u, '') : '—'}</span></span>;
+                        }
+
+                        const pillColor = contactIsDue ? '#ef4444' : (STATUS_C[en.status] || 'var(--globant-muted)');
+                        const pillBg = contactIsDue ? 'rgba(239,68,68,0.15)' : `${pillColor}20`;
+                        const pillBorder = contactIsDue ? 'rgba(239,68,68,0.4)' : `${pillColor}40`;
+
+                        return (
+                          <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: showDivider ? '1px solid var(--globant-border)' : 'none', gap: 8 }}>
+                            {/* Left: name + step progress */}
+                            <div style={{ minWidth: 120, flexShrink: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--globant-text)' }}>{name}</div>
+                              <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 1 }}>{stepProgress}</div>
+                            </div>
+                            {/* Center: what happened / what's next */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {centerContent}
+                            </div>
+                            {/* Right: status pill + remove */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: pillColor, padding: '2px 7px', borderRadius: 10, background: pillBg, border: `1px solid ${pillBorder}`, animation: contactIsDue ? 'pulse 2s infinite' : 'none', whiteSpace: 'nowrap' }}>{en.status}</span>
+                              <button onClick={() => unenrollFromSequence(stkId)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0 }} title="Remove from sequence">✕</button>
+                            </div>
+                          </div>
+                        );
+                      };
+
+                      const GroupHeader = ({ icon, label, count, action }) => (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--globant-border)' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, whiteSpace: 'nowrap' }}>{icon} {label} ({count})</span>
+                          <div style={{ flex: 1, height: 1, background: 'var(--globant-border)' }} />
+                          {action}
+                        </div>
+                      );
+
                       return (
                         <>
+                          {/* Header row: label + enroll controls */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Enrolled contacts</div>
                             {pendingToEnroll.length > 0 && (
@@ -16481,70 +16556,65 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
                               </div>
                             )}
                           </div>
-                          {/* Progress */}
+
+                          {/* Summary bar */}
                           {totalEnrolled > 0 && (
-                            <div style={{ marginBottom: 12 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <div style={{ display: 'flex', gap: 12, fontSize: 11, flexWrap: 'wrap' }}>
-                                  <span style={{ color: '#60a5fa' }}>🔵 {activeCount} active</span>
-                                  <span style={{ color: '#4ade80' }}>✅ {repliedCount} replied</span>
-                                  <span style={{ color: 'var(--globant-muted)' }}>⬜ {completedCount} done</span>
-                                  {countPaused > 0 && <span style={{ color: '#fbbf24' }}>⏸ {countPaused} paused</span>}
-                                </div>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>{pctDone}%</span>
-                              </div>
-                              <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: pctDone + '%', background: 'linear-gradient(90deg, #4ade80, #60a5fa)', borderRadius: 3, transition: 'width 0.4s ease' }} />
-                              </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                              {groupDue.length > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', padding: '3px 8px', borderRadius: 10, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }}>🔴 {groupDue.length} due now</span>
+                              )}
+                              {groupScheduled.length > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#60a5fa', padding: '3px 8px', borderRadius: 10, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)' }}>📅 {groupScheduled.length} scheduled</span>
+                              )}
+                              {repliedCount > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#4ade80', padding: '3px 8px', borderRadius: 10, background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)' }}>💬 {repliedCount} replied</span>
+                              )}
+                              {completedCount > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', padding: '3px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)' }}>✅ {completedCount} done</span>
+                              )}
+                              <div style={{ flex: 1 }} />
+                              <button
+                                className="action-btn btn-primary"
+                                style={{ fontSize: 11, opacity: runningSeq ? 0.6 : 1 }}
+                                onClick={runSequenceNow}
+                                disabled={runningSeq}
+                              >
+                                {runningSeq ? '⏳ Running...' : (dueToday.length > 0 ? `⚡ Send ${dueToday.length} now` : '⚡ Run sequence')}
+                              </button>
                             </div>
                           )}
-                          {/* Today's sends highlighted */}
-                          {dueToday.length > 0 && (
-                            <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 6, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>
-                                🔴 {dueToday.length} contact{dueToday.length > 1 ? 's' : ''} due today
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>
-                                {seqConfig.active !== false
-                                  ? `Will send at ${String(seqConfig.sendHour).padStart(2,'0')}:00 · or click ⚡ to send now`
-                                  : 'Sequence is paused — activate to send'}
-                              </div>
-                            </div>
-                          )}
+
+                          {/* Grouped contact list */}
                           {enrolledIds.length > 0 && (
-                            <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--globant-border)', borderRadius: 6, marginBottom: 10 }}>
-                              {enrolledIds.map(stkId => {
-                                const en = enrollments[stkId];
-                                const stk = stakeholders.find(s => s.id === stkId);
-                                if (!stk) return null;
-                                const stepLabel = en.step < seqSteps.length ? `Step ${en.step+1}${seqSteps[en.step]?.note ? ` — ${seqSteps[en.step].note}` : ''}` : 'All done';
-                                const STATUS_C = { active: '#60a5fa', completed: 'var(--globant-muted)', replied: '#4ade80', paused: '#a78bfa' };
-                                const isDueToday = en.status === 'active' && (() => { const dt = en.nextDateTime ? new Date(en.nextDateTime) : new Date(en.nextDate); return dt <= new Date(); })();
-                                const dueInfo = en.status === 'active' ? getDueLabel(en) : null;
-                                return (
-                                  <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
-                                    <div>
-                                      <span style={{ fontWeight: 600 }}>{F(stk,'Name')}{F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}</span>
-                                      <span style={{ color: 'var(--globant-muted)', marginLeft: 8, fontSize: 11 }}>{stepLabel}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      {dueInfo && (
-                                        <span style={{ fontSize: 11, fontWeight: 700, color: dueInfo.color }}>{dueInfo.label}</span>
-                                      )}
-                                      <span style={{ fontSize: 10, fontWeight: 700,
-                                        color: isDueToday ? '#ef4444' : (STATUS_C[en.status]||'var(--globant-muted)'),
-                                        padding: '2px 7px', borderRadius: 10,
-                                        background: isDueToday ? 'rgba(239,68,68,0.15)' : `${STATUS_C[en.status]||'#666'}20`,
-                                        border: `1px solid ${isDueToday ? 'rgba(239,68,68,0.4)' : (STATUS_C[en.status]||'#666') + '40'}`,
-                                        animation: isDueToday ? 'pulse 2s infinite' : 'none'
-                                      }}>{en.status}</span>
-                                      <button onClick={() => unenrollFromSequence(stkId)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 12 }} title="Remove from sequence">✕</button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                            <div style={{ border: '1px solid var(--globant-border)', borderRadius: 6, marginBottom: 10, overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }}>
+                              {/* Group: Due now */}
+                              {groupDue.length > 0 && (
+                                <>
+                                  <GroupHeader icon="🔴" label="Due now" count={groupDue.length} action={
+                                    <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '2px 8px' }} onClick={runSequenceNow} disabled={runningSeq}>
+                                      {runningSeq ? '⏳' : `⚡ Send ${groupDue.length} now`}
+                                    </button>
+                                  } />
+                                  {groupDue.map((id, i) => renderContactRow(id, i < groupDue.length - 1 || groupScheduled.length > 0 || groupFinished.length > 0))}
+                                </>
+                              )}
+                              {/* Group: Scheduled */}
+                              {groupScheduled.length > 0 && (
+                                <>
+                                  <GroupHeader icon="📅" label="Scheduled" count={groupScheduled.length} action={null} />
+                                  {groupScheduled.map((id, i) => renderContactRow(id, i < groupScheduled.length - 1 || groupFinished.length > 0))}
+                                </>
+                              )}
+                              {/* Group: Finished */}
+                              {groupFinished.length > 0 && (
+                                <>
+                                  <GroupHeader icon="✅" label="Finished" count={groupFinished.length} action={null} />
+                                  {groupFinished.map((id, i) => renderContactRow(id, i < groupFinished.length - 1))}
+                                </>
+                              )}
                             </div>
                           )}
+
                           {enrolledIds.length === 0 && pendingToEnroll.length === 0 && (
                             <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 10 }}>No contacts enrolled yet.</div>
                           )}
