@@ -15150,13 +15150,16 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           const version = result.v ? ` (v${result.v})` : ' (old)';
           const diag = result.diag;
           const logErrCount = diag?.logErrors ?? 0;
-          const diagStr = diag ? ` [${diag.users}u·${diag.bases}b·${diag.campaigns}c·${diag.due}due${logErrCount > 0 ? `·${logErrCount}logErr` : ''}]` : '';
-          if (sentCount > 0 && logErrCount === 0) {
+          const enrollErrCount = diag?.enrollErrors ?? 0;
+          const diagStr = diag ? ` [${diag.users}u·${diag.bases}b·${diag.campaigns}c·${diag.due}due${logErrCount > 0 ? `·${logErrCount}logErr` : ''}${enrollErrCount > 0 ? `·${enrollErrCount}enrollErr` : ''}]` : '';
+          const errDetail = result.firstError ? `: ${result.firstError.slice(0, 80)}` : ' — check Netlify logs';
+          if (sentCount > 0 && logErrCount === 0 && enrollErrCount === 0) {
             window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}${version}${diagStr}`, 'success');
+          } else if (sentCount > 0 && enrollErrCount > 0) {
+            window.__oikeToast(`⚠️ ${sentCount} sent pero no se guardó el estado${errDetail}${diagStr}${version}`, 'warning');
           } else if (sentCount > 0 && logErrCount > 0) {
-            window.__oikeToast(`⚠️ ${sentCount} sent but ${logErrCount} activity log failed — check Netlify logs${diagStr}${version}`, 'warning');
+            window.__oikeToast(`⚠️ ${sentCount} sent pero falló el log de actividad${errDetail}${diagStr}${version}`, 'warning');
           } else if (errCount > 0) {
-            const errDetail = result.firstError ? `: ${result.firstError.slice(0, 80)}` : ' — check Netlify logs';
             window.__oikeToast(`❌ ${errCount} error${errCount > 1 ? 's' : ''}${errDetail}${diagStr}${version}`, 'error');
           } else if (skippedCount > 0) {
             window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped (no Gmail token)${diagStr}${version}`, 'warning');
