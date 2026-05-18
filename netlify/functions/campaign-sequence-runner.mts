@@ -189,10 +189,11 @@ async function logActivity(baseId: string, outreachTableId: string, stk: any, ca
     'Stakeholder': [stk.id],
     'Date': today,
     'Logged By': senderEmail,
+    'Campaign': [campaign.id],
   };
   const accountIds = linkedIds(stk,'Account');
   if (accountIds.length > 0) fields['Account'] = accountIds;
-  const res = await atFetch(`/${baseId}/${outreachTableId}`, key, {
+  await atFetch(`/${baseId}/${outreachTableId}`, key, {
     method: 'POST',
     body: JSON.stringify({ records: [{ fields }], typecast: true }),
   });
@@ -261,7 +262,7 @@ export default async (req?: Request) => {
   }
 
   let totalSent = 0, totalSkipped = 0, totalErrors = 0;
-  let diagUsers = users.length, diagBases = baseIds.size, diagCampaigns = 0, diagDue = 0, diagLogErrors = 0;
+  let diagUsers = users.length, diagBases = baseIds.size, diagCampaigns = 0, diagDue = 0, diagLogErrors = 0, diagEnrollErrors = 0;
   let firstError = '';
 
   // 2. Process each tenant base
@@ -443,6 +444,7 @@ export default async (req?: Request) => {
             console.log(`[seq-runner] ✅ Enrollments saved for "${F(campaign,'Name')}"`);
           } catch(e) {
             console.error(`[seq-runner] ❌ CRITICAL: Failed to save enrollments for ${campaign.id}:`, e);
+            diagEnrollErrors++;
             if (!firstError) firstError = `enroll-save: ${String((e as any)?.message || e).slice(0,120)}`;
           }
         }
@@ -460,9 +462,9 @@ export default async (req?: Request) => {
     }
   }
 
-  console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}, logErrors: ${diagLogErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
+  console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}, logErrors: ${diagLogErrors}, enrollErrors: ${diagEnrollErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
   return new Response(
-    JSON.stringify({ v: 6, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue, logErrors: diagLogErrors } }),
+    JSON.stringify({ v: 7, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue, logErrors: diagLogErrors, enrollErrors: diagEnrollErrors } }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
 };
