@@ -42,7 +42,7 @@ async function getAllRecords(baseId: string, tableId: string, key: string, field
   return records;
 }
 
-function F(rec: any, field: string): string { return rec?.fields?.[field] || ''; }
+function F(rec: any, field: string): string { const v = rec?.fields?.[field]; return (v != null && v !== false) ? String(v) : ''; }
 function linkedIds(rec: any, field: string): string[] { return Array.isArray(rec?.fields?.[field]) ? rec.fields[field] : []; }
 
 // ── Gmail helpers ──
