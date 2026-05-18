@@ -266,8 +266,8 @@ export default async (req?: Request) => {
       const stakeholdersTableId = T.stakeholders;
       const accountsTableId     = T.accounts;
 
-      // Fetch campaigns with sequence steps
-      const campaigns = await getAllRecords(baseId, campaignsTableId, airtableKey, ['Name','Type','Status','Sequence Steps','Sequence Enrollments','Sequence Config','Message Template','Asset URL','Context','AI Summary']);
+      // Fetch campaigns — no fields filter so Airtable returns everything (avoids URL encoding issues with spaces in field names)
+      const campaigns = await getAllRecords(baseId, campaignsTableId, airtableKey);
       const activeCampaigns = campaigns.filter(c => {
         if (F(c,'Status') === 'Paused' || F(c,'Status') === 'Completed') return false;
         const steps = F(c,'Sequence Steps');
@@ -279,11 +279,11 @@ export default async (req?: Request) => {
       console.log(`[seq-runner] ${campaigns.length} campaigns total, ${activeCampaigns.length} active with enrollments`);
       if (activeCampaigns.length === 0) continue;
 
-      // Fetch supporting data once per base
+      // Fetch supporting data once per base — no fields filter to avoid URL encoding issues
       const [stakeholders, outreach, accounts] = await Promise.all([
-        getAllRecords(baseId, stakeholdersTableId, airtableKey, ['Name','Last name','Email','Role','Level of Influence','Pain Points (Generated)','Pain points','LinkedIn News (Generated)','Linkedin lates news','Account','Status']),
-        getAllRecords(baseId, outreachTableId, airtableKey, ['Stakeholder','Channel','Status','Message','Date']),
-        getAllRecords(baseId, accountsTableId, airtableKey, ['Account Name','Industry','Recent News']),
+        getAllRecords(baseId, stakeholdersTableId, airtableKey),
+        getAllRecords(baseId, outreachTableId, airtableKey),
+        getAllRecords(baseId, accountsTableId, airtableKey),
       ]);
 
       const stkMap = Object.fromEntries(stakeholders.map(s => [s.id, s]));
