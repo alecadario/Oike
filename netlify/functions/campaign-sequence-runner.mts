@@ -290,15 +290,20 @@ export default async (req?: Request) => {
       const accMap = Object.fromEntries(accounts.map(a => [a.id, a]));
 
       for (const campaign of activeCampaigns) {
+        const campName = F(campaign,'Name');
         let steps: SeqStep[];
         let enrollments: Enrollments;
         let seqCfg: { sendHour: number; timezone: string; active?: boolean };
+        const rawEnrollments = F(campaign,'Sequence Enrollments');
+        const rawSteps = F(campaign,'Sequence Steps');
+        console.log(`[seq-runner] Parsing "${campName}": enrollments length=${rawEnrollments.length}, steps length=${rawSteps.length}`);
         try {
-          steps = JSON.parse(F(campaign,'Sequence Steps') || '[]');
-          enrollments = JSON.parse(F(campaign,'Sequence Enrollments') || '{}');
+          steps = JSON.parse(rawSteps || '[]');
+          enrollments = JSON.parse(rawEnrollments || '{}');
           seqCfg = { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', ...JSON.parse(F(campaign,'Sequence Config') || '{}') };
-        } catch { continue; }
-        if (steps.length === 0) continue;
+          console.log(`[seq-runner] "${campName}": ${steps.length} steps, ${Object.keys(enrollments).length} enrollments`);
+        } catch(e) { console.error(`[seq-runner] Parse error in "${campName}":`, e); continue; }
+        if (steps.length === 0) { console.log(`[seq-runner] "${campName}": no steps, skipping`); continue; }
 
         // Check if sequence is paused
         if (seqCfg.active === false) {
@@ -309,11 +314,16 @@ export default async (req?: Request) => {
         let enrollmentsChanged = false;
 
         // ── Filter to due enrollments ──
-        const dueEntries = Object.entries(enrollments).filter(([stkId, en]) => {
+        const allEntries = Object.entries(enrollments);
+        if (allEntries.length > 0) {
+          const sample = allEntries[0][1] as any;
+          console.log(`[seq-runner] "${campName}" sample enrollment: status=${sample.status}, step=${sample.step}, nextDate=${sample.nextDate}, nextDateTime=${sample.nextDateTime}, today=${today}`);
+        }
+        const dueEntries = allEntries.filter(([stkId, en]) => {
           if (en.status !== 'active') return false;
           if (en.step >= steps.length) { en.status = 'completed'; enrollmentsChanged = true; return false; }
           const isDue = en.nextDateTime ? new Date(en.nextDateTime) <= new Date() : en.nextDate <= today;
-          if (!isDue) { console.log(`[seq-runner] ${stkId} not due — nextDate: ${en.nextDate}`); return false; }
+          if (!isDue) { console.log(`[seq-runner] ${stkId} not due — nextDate: ${en.nextDate}, nextDateTime: ${en.nextDateTime}`); return false; }
           return true;
         });
 
