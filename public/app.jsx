@@ -753,6 +753,81 @@
         } catch (e) { window.__oikeToast('Error cargando email', 'error'); }
         setGmailMsgLoading(false);
       };
+
+      // ── AI Next-Step Recommendation ──
+      const [aiRec, setAiRec] = useState('');
+      const [aiRecLoading, setAiRecLoading] = useState(false);
+      const [aiRecSaved, setAiRecSaved] = useState(false);
+
+      const generateAiRec = async () => {
+        setAiRecLoading(true);
+        setAiRec('');
+        setAiRecSaved(false);
+        try {
+          const pain = localPain || F(stakeholder, 'Pain Points (Generated)') || F(stakeholder, 'Pain points') || '';
+          const linkedin = localLinkedin || F(stakeholder, 'LinkedIn News (Generated)') || F(stakeholder, 'Linkedin lates news') || '';
+          const intelNotes = F(stakeholder, 'Intel Notes') || stkNotes || '';
+          const accDesc = account ? (F(account, 'Company Description') || '') : '';
+          const accNews = account ? (F(account, 'Recent News') || '') : '';
+          const accIntel = account ? (F(account, 'Intel Notes') || '') : '';
+          const history = sOutreach.slice(0, 6).map(o => {
+            const ch = F(o, 'Channel') || '?';
+            const st = F(o, 'Status') || '?';
+            const dt = o.fields?.['Date'] ? new Date(o.fields['Date']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
+            const msg = (F(o, 'Message') || F(o, 'Notes') || '').replace(/^(\[g[^\]]+\])+\s*/, '').slice(0, 150);
+            return `• ${dt} — ${ch} (${st})${msg ? `: "${msg}"` : ''}`;
+          }).join('\n') || 'No interactions yet.';
+
+          const prompt = `You are a senior B2B sales strategist working for ${COMPANY_PROFILE.companyName || 'our company'}.
+${COMPANY_PROFILE.services ? `What we offer: ${COMPANY_PROFILE.services}` : ''}
+${COMPANY_PROFILE.goals ? `Focus: ${COMPANY_PROFILE.goals}` : ''}
+
+CONTACT: ${sName} — ${role || 'Unknown role'}
+COMPANY: ${accountName || 'Unknown'}${industry ? ` (${industry})` : ''}
+${accDesc ? `Company description: ${accDesc.slice(0, 200)}` : ''}
+${accNews ? `Recent company news: ${accNews.slice(0, 200)}` : ''}
+${accIntel ? `Account intel: ${accIntel.slice(0, 200)}` : ''}
+${pain ? `Pain points: ${pain.slice(0, 300)}` : ''}
+${linkedin ? `LinkedIn intel: ${linkedin.slice(0, 200)}` : ''}
+${intelNotes ? `Additional intel: ${intelNotes.slice(0, 200)}` : ''}
+
+INTERACTION HISTORY (newest first):
+${history}
+
+Based on ALL this context, give a sharp, specific recommendation for the NEXT BEST ACTION with this contact.
+Include:
+1. **Recommended action** (1 sentence — what exactly to do: call, email, LinkedIn DM, send asset, invite to event, etc.)
+2. **Why now** (1-2 sentences — what signal or context makes this the right move)
+3. **Suggested angle** (2-3 sentences — what to say, referencing their specific situation)
+4. **Timing** (when to do it)
+
+Be direct and actionable. No generic advice. Reference their actual situation.`;
+
+          const rec = await callOpenAI({ prompt, temperature: 0.65, max_tokens: 500 });
+          setAiRec(rec);
+
+          // Auto-save as activity in Airtable
+          const a = new AirtableAPI();
+          const today = new Date().toISOString().split('T')[0];
+          await a.createRecord(TABLE_IDS.outreach, {
+            'Activity Name': `🤖 AI Rec — ${sName} — ${new Date().toLocaleDateString('en-US')}`,
+            'Channel': 'Note',
+            'Status': 'Pending',
+            'Notes': rec,
+            'Stakeholder': [stakeholder.id],
+            'Date': new Date().toISOString(),
+            ...(accountIds.length > 0 ? { 'Account': accountIds } : {}),
+            'Logged By': CURRENT_USER?.name || 'AI',
+            ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
+            ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
+          });
+          setAiRecSaved(true);
+          if (onRefresh) onRefresh();
+        } catch (e) {
+          window.__oikeToast('Error generando recomendación: ' + (e.message || 'unknown'), 'error');
+        }
+        setAiRecLoading(false);
+      };
       const [localEmail, setLocalEmail] = useState(F(stakeholder, 'Email') || '');
       // Intel Notes for this stakeholder
       const [stkNotes, setStkNotes] = useState(F(stakeholder, 'Intel Notes') || '');
@@ -1374,6 +1449,27 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   </div>
                 );
               })()}
+            </div>
+
+            {/* ── AI Next-Step Recommendation ── */}
+            <div style={{ marginBottom: 16, background: 'rgba(91,191,181,0.05)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '10px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: aiRec ? 10 : 0 }}>
+                <div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)' }}>🤖 Próximo paso recomendado</span>
+                  {aiRecSaved && <span style={{ fontSize: 10, color: 'var(--globant-muted)', marginLeft: 8 }}>✅ Guardado en actividades</span>}
+                </div>
+                <button
+                  onClick={generateAiRec}
+                  disabled={aiRecLoading}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 8, background: aiRecLoading ? 'rgba(91,191,181,0.1)' : 'rgba(91,191,181,0.15)', border: '1px solid rgba(91,191,181,0.3)', color: 'var(--globant-green)', cursor: aiRecLoading ? 'default' : 'pointer', opacity: aiRecLoading ? 0.7 : 1 }}>
+                  {aiRecLoading ? '⏳ Analizando...' : aiRec ? '🔄 Regenerar' : '✨ Generar'}
+                </button>
+              </div>
+              {aiRec && (
+                <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', borderTop: '1px solid rgba(91,191,181,0.15)', paddingTop: 10 }}>
+                  {aiRec}
+                </div>
+              )}
             </div>
 
             {/* ── Gmail panel ── */}
