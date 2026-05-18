@@ -15146,13 +15146,18 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           try { result = await res.json(); } catch {}
           const sentCount = result.sent ?? 0;
           const skippedCount = result.skipped ?? 0;
+          const errCount = result.errors ?? 0;
           const version = result.v ? ` (v${result.v})` : ' (old)';
+          const diag = result.diag;
+          const diagStr = diag ? ` [${diag.users}u·${diag.bases}b·${diag.campaigns}c·${diag.due}due]` : '';
           if (sentCount > 0) {
-            window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}${version}`, 'success');
+            window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}${version}${diagStr}`, 'success');
+          } else if (errCount > 0) {
+            window.__oikeToast(`❌ ${errCount} error${errCount > 1 ? 's' : ''} — check Netlify logs${diagStr}${version}`, 'error');
           } else if (skippedCount > 0) {
-            window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped (no Gmail token)${version}`, 'warning');
+            window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped (no Gmail token)${diagStr}${version}`, 'warning');
           } else {
-            window.__oikeToast(`No emails due right now${version}`, 'info');
+            window.__oikeToast(`No emails due right now${diagStr}${version}`, 'info');
           }
           if (onLogActivity) onLogActivity();
         } catch (e) {
