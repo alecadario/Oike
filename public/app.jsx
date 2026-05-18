@@ -15153,7 +15153,8 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
           if (sentCount > 0) {
             window.__oikeToast(`✅ ${sentCount} email${sentCount > 1 ? 's' : ''} sent!${skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}${version}${diagStr}`, 'success');
           } else if (errCount > 0) {
-            window.__oikeToast(`❌ ${errCount} error${errCount > 1 ? 's' : ''} — check Netlify logs${diagStr}${version}`, 'error');
+            const errDetail = result.firstError ? `: ${result.firstError.slice(0, 80)}` : ' — check Netlify logs';
+            window.__oikeToast(`❌ ${errCount} error${errCount > 1 ? 's' : ''}${errDetail}${diagStr}${version}`, 'error');
           } else if (skippedCount > 0) {
             window.__oikeToast(`⚠️ 0 sent — ${skippedCount} skipped (no Gmail token)${diagStr}${version}`, 'warning');
           } else {
