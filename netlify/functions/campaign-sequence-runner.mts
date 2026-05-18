@@ -256,6 +256,7 @@ export default async (req?: Request) => {
 
   let totalSent = 0, totalSkipped = 0, totalErrors = 0;
   let diagUsers = users.length, diagBases = baseIds.size, diagCampaigns = 0, diagDue = 0;
+  let firstError = '';
 
   // 2. Process each tenant base
   for (const baseId of baseIds) {
@@ -408,16 +409,20 @@ export default async (req?: Request) => {
         }));
 
         // Tally results
+        let firstErrorMsg = '';
         for (const r of results) {
           if (r.status === 'fulfilled') {
             if (r.value === 'sent') { totalSent++; enrollmentsChanged = true; }
             else if (r.value === 'replied') { enrollmentsChanged = true; }
             else if (r.value === 'skipped-no-token') totalSkipped++;
           } else {
-            console.error(`[seq-runner] Error:`, r.reason);
+            const msg = String(r.reason?.message || r.reason || 'unknown');
+            if (!firstErrorMsg) firstErrorMsg = msg;
+            console.error(`[seq-runner] Error:`, msg);
             totalErrors++;
           }
         }
+        if (firstErrorMsg) { console.error(`[seq-runner] First error in "${F(campaign,'Name')}": ${firstErrorMsg}`); if (!firstError) firstError = firstErrorMsg; }
 
         // Save updated enrollments + last run metadata back to Airtable
         const campaignSentCount = Object.values(enrollments).filter(e => e.status !== 'active').length; // rough proxy
@@ -440,7 +445,7 @@ export default async (req?: Request) => {
 
   console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
   return new Response(
-    JSON.stringify({ v: 5, sent: totalSent, skipped: totalSkipped, errors: totalErrors, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue } }),
+    JSON.stringify({ v: 5, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue } }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
 };
