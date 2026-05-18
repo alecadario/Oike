@@ -255,6 +255,7 @@ export default async (req?: Request) => {
   }
 
   let totalSent = 0, totalSkipped = 0, totalErrors = 0;
+  let diagUsers = users.length, diagBases = baseIds.size, diagCampaigns = 0, diagDue = 0;
 
   // 2. Process each tenant base
   for (const baseId of baseIds) {
@@ -274,6 +275,7 @@ export default async (req?: Request) => {
         return steps && enrollments && steps !== '[]' && enrollments !== '{}';
       });
 
+      diagCampaigns += activeCampaigns.length;
       console.log(`[seq-runner] ${campaigns.length} campaigns total, ${activeCampaigns.length} active with enrollments`);
       if (activeCampaigns.length === 0) continue;
 
@@ -315,6 +317,7 @@ export default async (req?: Request) => {
           return true;
         });
 
+        diagDue += dueEntries.length;
         console.log(`[seq-runner] Campaign "${F(campaign,'Name')}": ${dueEntries.length} enrollments due`);
         if (dueEntries.length === 0) continue;
 
@@ -425,9 +428,9 @@ export default async (req?: Request) => {
     }
   }
 
-  console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}`);
+  console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
   return new Response(
-    JSON.stringify({ v: 4, sent: totalSent, skipped: totalSkipped, errors: totalErrors }),
+    JSON.stringify({ v: 5, sent: totalSent, skipped: totalSkipped, errors: totalErrors, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue } }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
 };
