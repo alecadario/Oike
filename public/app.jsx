@@ -721,6 +721,38 @@
       const [sendingQuickMsg, setSendingQuickMsg] = useState(false);
       const [showAIGenerator, setShowAIGenerator] = useState(false);
       const [enrichLoading, setEnrichLoading] = useState(false);
+      // Gmail panel state
+      const [showGmailPanel, setShowGmailPanel] = useState(false);
+      const [gmailMsgs, setGmailMsgs] = useState([]);
+      const [gmailLoading, setGmailLoading] = useState(false);
+      const [selectedGmailMsg, setSelectedGmailMsg] = useState(null);
+      const [gmailMsgLoading, setGmailMsgLoading] = useState(false);
+      const gmailConnected = localStorage.getItem('oike_gmail_connected') === 'true';
+      const stkEmail = F(stakeholder, 'Email') || '';
+
+      const loadGmailMsgs = async () => {
+        if (!stkEmail) return;
+        setGmailLoading(true);
+        setGmailMsgs([]);
+        setSelectedGmailMsg(null);
+        try {
+          const res = await fetch('/api/gmail/messages?contactEmail=' + encodeURIComponent(stkEmail), { headers: getAuthHeaders() });
+          const data = await res.json();
+          if (data.gmailNotConnected) { window.__oikeToast('Gmail no conectado — conectalo en Settings', 'warning'); setShowGmailPanel(false); return; }
+          setGmailMsgs(data.messages || []);
+        } catch (e) { window.__oikeToast('Error cargando emails', 'error'); }
+        setGmailLoading(false);
+      };
+
+      const loadGmailMsg = async (id) => {
+        setGmailMsgLoading(true);
+        try {
+          const res = await fetch('/api/gmail/messages?messageId=' + encodeURIComponent(id), { headers: getAuthHeaders() });
+          const data = await res.json();
+          setSelectedGmailMsg(data);
+        } catch (e) { window.__oikeToast('Error cargando email', 'error'); }
+        setGmailMsgLoading(false);
+      };
       const [localEmail, setLocalEmail] = useState(F(stakeholder, 'Email') || '');
       // Intel Notes for this stakeholder
       const [stkNotes, setStkNotes] = useState(F(stakeholder, 'Intel Notes') || '');
@@ -1344,6 +1376,61 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
               })()}
             </div>
 
+            {/* ── Gmail panel ── */}
+            {stkEmail && gmailConnected && (
+              <div style={{ marginBottom: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--globant-border)', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>✉️ Emails con {F(stakeholder,'Name')}</span>
+                  <button
+                    onClick={() => { if (!showGmailPanel) loadGmailMsgs(); setShowGmailPanel(p => !p); }}
+                    style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-green)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                    {showGmailPanel ? 'Ocultar' : 'Ver emails'}
+                  </button>
+                </div>
+                {showGmailPanel && (
+                  <div style={{ marginTop: 10 }}>
+                    {gmailLoading && <p style={{ fontSize: 12, color: 'var(--globant-muted)', textAlign: 'center', padding: '8px 0' }}>Cargando...</p>}
+                    {!gmailLoading && gmailMsgs.length === 0 && !selectedGmailMsg && (
+                      <p style={{ fontSize: 12, color: 'var(--globant-muted)', textAlign: 'center', padding: '8px 0' }}>No hay emails con este contacto.</p>
+                    )}
+                    {!selectedGmailMsg && gmailMsgs.map(msg => (
+                      <div key={msg.id} onClick={() => loadGmailMsg(msg.id)}
+                        style={{ padding: '8px 10px', marginBottom: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--globant-border)', borderRadius: 8, cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                          <span style={{ fontSize: 12, fontWeight: msg.unread ? 700 : 500, color: 'var(--globant-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                            {msg.unread && <span style={{ display: 'inline-block', width: 6, height: 6, background: '#60a5fa', borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} />}
+                            {msg.subject || '(Sin asunto)'}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--globant-muted)', flexShrink: 0, marginLeft: 8 }}>
+                            {msg.date ? new Date(msg.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 11, color: 'var(--globant-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.snippet}</p>
+                      </div>
+                    ))}
+                    {selectedGmailMsg && (
+                      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--globant-border)', borderRadius: 8, padding: '10px 12px' }}>
+                        <button onClick={() => setSelectedGmailMsg(null)} style={{ fontSize: 11, color: 'var(--globant-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>← Volver</button>
+                        {gmailMsgLoading ? <p style={{ fontSize: 12, color: 'var(--globant-muted)' }}>Cargando...</p> : (
+                          <>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 4 }}>{selectedGmailMsg.subject || '(Sin asunto)'}</p>
+                            <p style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 2 }}>De: {selectedGmailMsg.from}</p>
+                            <p style={{ fontSize: 11, color: 'var(--globant-muted)', marginBottom: 10 }}>{selectedGmailMsg.date}</p>
+                            <p style={{ fontSize: 12, color: 'var(--globant-text)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{selectedGmailMsg.body?.slice(0, 2000)}</p>
+                            <button
+                              onClick={() => { if (onSend) onSend(stakeholder, 'Email', '', null, null, { threadId: selectedGmailMsg.threadId, replyToMessageId: selectedGmailMsg.id, subject: selectedGmailMsg.subject ? `Re: ${selectedGmailMsg.subject}` : '' }); }}
+                              style={{ marginTop: 10, fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 8, background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', color: 'var(--globant-green)', cursor: 'pointer' }}>
+                              ↩ Responder
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Interaction timeline */}
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--globant-text)' }}>Interaction History</div>
             {sOutreach.length === 0 ? (
@@ -1356,7 +1443,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
                   const channel = F(o, 'Channel');
                   const status = F(o, 'Status');
                   const message = F(o, 'Message');
-                  const notes = F(o, 'Notes');
+                  const notes = (F(o, 'Notes') || '').replace(/^(\[g[^\]]+\])+\s*/, '').trim();
                   const dotColor = statusColor[status] || 'var(--globant-muted)';
                   return (
                     <div key={o.id || i} style={{ position: 'relative', marginBottom: 12, paddingBottom: 12, borderBottom: i < sOutreach.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
