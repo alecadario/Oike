@@ -34,7 +34,7 @@ async function getAllRecords(baseId: string, tableId: string, key: string, field
   do {
     const params = new URLSearchParams({ pageSize: '100' });
     if (offset) params.set('offset', offset);
-    if (fields) params.set('fields[]', fields.join('&fields[]='));
+    if (fields) fields.forEach(f => params.append('fields[]', f));
     const data = await atFetch(`/${baseId}/${tableId}?${params}`, key);
     records.push(...(data.records || []));
     offset = data.offset;
