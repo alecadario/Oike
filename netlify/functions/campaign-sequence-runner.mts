@@ -261,7 +261,7 @@ export default async (req?: Request) => {
   }
 
   let totalSent = 0, totalSkipped = 0, totalErrors = 0;
-  let diagUsers = users.length, diagBases = baseIds.size, diagCampaigns = 0, diagDue = 0;
+  let diagUsers = users.length, diagBases = baseIds.size, diagCampaigns = 0, diagDue = 0, diagLogErrors = 0;
   let firstError = '';
 
   // 2. Process each tenant base
@@ -399,7 +399,7 @@ export default async (req?: Request) => {
           // Log activity — non-fatal, email is already sent
           try {
             await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
-          } catch(e) { console.error(`[seq-runner] logActivity failed (non-fatal):`, e); }
+          } catch(e) { console.error(`[seq-runner] logActivity failed (non-fatal):`, e); diagLogErrors++; if (!firstError) firstError = `logActivity: ${String((e as any)?.message || e).slice(0,120)}`; }
           if (!isDraft) await advanceStatus(baseId, stkId, airtableKey);
           console.log(`[seq-runner] ✅ ${isDraft ? 'Draft' : 'Sent'} step ${en.step+1} → ${email}`);
 
@@ -433,18 +433,26 @@ export default async (req?: Request) => {
         }
         if (firstErrorMsg) { console.error(`[seq-runner] First error in "${F(campaign,'Name')}": ${firstErrorMsg}`); if (!firstError) firstError = firstErrorMsg; }
 
-        // Save updated enrollments + last run metadata back to Airtable
-        const campaignSentCount = Object.values(enrollments).filter(e => e.status !== 'active').length; // rough proxy
+        // ── CRITICAL: Save updated enrollments (separate from optional metadata) ──
+        if (enrollmentsChanged) {
+          try {
+            await atFetch(`/${baseId}/${campaignsTableId}/${campaign.id}`, airtableKey, {
+              method: 'PATCH',
+              body: JSON.stringify({ fields: { 'Sequence Enrollments': JSON.stringify(enrollments) }, typecast: true }),
+            });
+            console.log(`[seq-runner] ✅ Enrollments saved for "${F(campaign,'Name')}"`);
+          } catch(e) {
+            console.error(`[seq-runner] ❌ CRITICAL: Failed to save enrollments for ${campaign.id}:`, e);
+            if (!firstError) firstError = `enroll-save: ${String((e as any)?.message || e).slice(0,120)}`;
+          }
+        }
+        // Optional metadata — non-fatal, these fields may not exist in all bases
         try {
           await atFetch(`/${baseId}/${campaignsTableId}/${campaign.id}`, airtableKey, {
             method: 'PATCH',
-            body: JSON.stringify({ fields: {
-              ...(enrollmentsChanged ? { 'Sequence Enrollments': JSON.stringify(enrollments) } : {}),
-              'Last Run': new Date().toISOString(),
-              'Last Run Result': `${totalSent} sent · ${totalSkipped} skipped · ${totalErrors} errors`,
-            }, typecast: true }),
+            body: JSON.stringify({ fields: { 'Last Run': new Date().toISOString() }, typecast: true }),
           });
-        } catch(e) { console.error(`[seq-runner] Failed to save campaign metadata for ${campaign.id}:`, e); }
+        } catch(e) { console.warn(`[seq-runner] metadata save skipped (non-fatal) for ${campaign.id}:`, (e as any)?.message || e); }
       }
     } catch(e) {
       console.error(`[seq-runner] Error processing base ${baseId}:`, e);
@@ -452,9 +460,9 @@ export default async (req?: Request) => {
     }
   }
 
-  console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
+  console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}, logErrors: ${diagLogErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
   return new Response(
-    JSON.stringify({ v: 5, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue } }),
+    JSON.stringify({ v: 6, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue, logErrors: diagLogErrors } }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
 };
