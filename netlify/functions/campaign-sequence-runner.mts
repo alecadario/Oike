@@ -180,17 +180,23 @@ async function logActivity(baseId: string, outreachTableId: string, stk: any, ca
   const sName = `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim();
   const today = new Date().toISOString().split('T')[0];
   const prefix = isDraft ? '[DRAFT] ' : '';
-  await atFetch(`/${baseId}/${outreachTableId}`, key, {
+  const fields: Record<string, any> = {
+    'Channel': 'Email',
+    'Status': isDraft ? 'Draft' : 'Sent',
+    'Activity Name': `${prefix}[Sequence] ${F(campaign,'Name')} — ${sName} — ${today}`,
+    'Notes': `[gmsg:${gmailId}] ${subject}`,
+    'Message': body.slice(0, 1000),
+    'Stakeholder': [stk.id],
+    'Date': today,
+    'Logged By': senderEmail,
+  };
+  const accountIds = linkedIds(stk,'Account');
+  if (accountIds.length > 0) fields['Account'] = accountIds;
+  const res = await atFetch(`/${baseId}/${outreachTableId}`, key, {
     method: 'POST',
-    body: JSON.stringify({ records: [{ fields: {
-      'Channel': 'Email', 'Status': isDraft ? 'Draft' : 'Sent',
-      'Activity Name': `${prefix}[Sequence] ${F(campaign,'Name')} — ${sName} — ${today}`,
-      'Notes': `[gmsg:${gmailId}]\n${subject}\n\n${body.slice(0,300)}`,
-      'Message': body, 'Stakeholder': [stk.id],
-      'Account': linkedIds(stk,'Account'),
-      'Date': today, 'Logged By': senderEmail,
-    }}], typecast: true }),
+    body: JSON.stringify({ records: [{ fields }], typecast: true }),
   });
+  console.log(`[seq-runner] logActivity ✓ ${isDraft ? 'draft' : 'sent'} → ${sName}`);
 }
 
 // ── Advance stakeholder status if not protected ──
@@ -390,7 +396,10 @@ export default async (req?: Request) => {
 
           if (!gmailId) throw new Error(`Gmail ${isDraft ? 'draft' : 'send'} failed for ${email}`);
 
-          await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
+          // Log activity — non-fatal, email is already sent
+          try {
+            await logActivity(baseId, outreachTableId, stk, campaign, subject, body, gmailId, senderEmail, airtableKey, isDraft);
+          } catch(e) { console.error(`[seq-runner] logActivity failed (non-fatal):`, e); }
           if (!isDraft) await advanceStatus(baseId, stkId, airtableKey);
           console.log(`[seq-runner] ✅ ${isDraft ? 'Draft' : 'Sent'} step ${en.step+1} → ${email}`);
 
