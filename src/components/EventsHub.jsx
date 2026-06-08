@@ -294,7 +294,9 @@ TASK: Select the TOP 10 most relevant stakeholders to invite to this event. Cons
 5. Company strategic value
 
 Return a JSON array of objects with EXACTLY this format (no markdown, no code fences):
-[{"id":"recXXX","reason":"One sentence explaining why this person is relevant for this event"},...]\n\nReturn ONLY the JSON array, nothing else.`;
+[{"id":"recXXX","reason":"One sentence explaining why this person is relevant for this event"},...]
+
+Return ONLY the JSON array, nothing else.`;
 
       const text = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 1000 });
       const cleaned = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
@@ -639,7 +641,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
         {notInvited.length > 0 && !isPast && (
           <div className="card" style={{ borderLeft: '3px solid var(--globant-warning)' }}>
             <div className="card-header">
-              <h3>🎟️ Suggest More Invitations</h3>
+              <h3>🎫 Suggest More Invitations</h3>
               <button className="action-btn btn-primary" style={{ fontSize: 11 }}
                 onClick={() => generateSmartSuggestions(selectedEvent, notInvited)}
                 disabled={loadingSuggestions}>
@@ -958,7 +960,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
       {/* Add Event Form */}
       {showAddEvent && (
         <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', marginBottom: 16 }}>
-          <div className="card-header"><h3>🎨 New Event</h3></div>
+          <div className="card-header"><h3>🎪 New Event</h3></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             <div>
               <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EVENT NAME *</label>
