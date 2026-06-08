@@ -1,50 +1,6 @@
 import type { Config } from "@netlify/functions";
-
-// ── Inline JWT verify ──
-async function verifyToken(token: string, secret: string): Promise<Record<string, any> | null> {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [headerB64, payloadB64, sigB64] = parts;
-    const data = `${headerB64}.${payloadB64}`;
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
-    const sigStr = atob(sigB64.replace(/-/g, '+').replace(/_/g, '/'));
-    const sigBytes = new Uint8Array([...sigStr].map((c) => c.charCodeAt(0)));
-    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(data));
-    if (!valid) return null;
-    const payloadStr = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
-    const payload = JSON.parse(payloadStr);
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch { return null; }
-}
-
-const USERS_TABLE_ID = 'tblBMyzKhFKmPFX25';
-const USERS_BASE_ID  = 'app3plkFpOx28hhmH';
-const AIRTABLE_BASE  = 'https://api.airtable.com/v0';
-
-async function getAccessToken(refreshToken: string): Promise<string | null> {
-  const clientId     = Netlify.env.get('GOOGLE_CLIENT_ID');
-  const clientSecret = Netlify.env.get('GOOGLE_CLIENT_SECRET');
-  if (!clientId || !clientSecret) return null;
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.access_token || null;
-}
-
-async function getUserRefreshToken(email: string, airtableKey: string): Promise<string | null> {
-  const formula = encodeURIComponent(`{Email}='${email}'`);
-  const url = `${AIRTABLE_BASE}/${USERS_BASE_ID}/${USERS_TABLE_ID}?filterByFormula=${formula}&maxRecords=1`;
-  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${airtableKey}` } });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.records?.[0]?.fields?.['Gmail Refresh Token'] || null;
-}
+import { verifyToken, getBearerToken } from './shared/auth.ts';
+import { getAccessToken, getUserRefreshToken } from './shared/gmail.ts';
 
 // ── Decode base64url ──
 function decodeBase64(str: string): string {
@@ -87,11 +43,9 @@ function getHeader(headers: any[], name: string): string {
 export default async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 204 });
 
-  const authHeader = req.headers.get('authorization') || '';
-  const token = authHeader.replace('Bearer ', '');
   const jwtSecret = Netlify.env.get('JWT_SECRET');
   if (!jwtSecret) return new Response(JSON.stringify({ error: 'Server error' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-  const payload = await verifyToken(token, jwtSecret);
+  const payload = await verifyToken(getBearerToken(req), jwtSecret);
   if (!payload) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 
   const airtableKey = Netlify.env.get('AIRTABLE_API_KEY');
