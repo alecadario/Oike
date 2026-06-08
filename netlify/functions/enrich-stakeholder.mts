@@ -1,34 +1,9 @@
 import type { Context, Config } from "@netlify/functions";
-
-// ── Inline JWT verify (no cross-file imports) ──
-async function verifyToken(token: string, secret: string): Promise<Record<string, any> | null> {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [headerB64, payloadB64, sigB64] = parts;
-    const data = `${headerB64}.${payloadB64}`;
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
-    const sigStr = atob(sigB64.replace(/-/g, '+').replace(/_/g, '/'));
-    const sigBytes = new Uint8Array([...sigStr].map((c) => c.charCodeAt(0)));
-    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(data));
-    if (!valid) return null;
-    const payloadStr = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
-    const payload = JSON.parse(payloadStr);
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch { return null; }
-}
+import { verifyToken, getBearerToken } from './shared/auth.ts';
 
 const AIRTABLE_BASE = 'https://api.airtable.com/v0';
 const STAKEHOLDERS_TABLE = 'tblwwNrPg6q2jYxfv';
 const ACCOUNTS_TABLE = 'tblkeZ9zXiH2YQJu0';
-
-// ── Utilities ──
-function getJwtSecret(): string {
-  const secret = Netlify.env.get('JWT_SECRET');
-  if (!secret) throw new Error('JWT_SECRET not configured');
-  return secret;
-}
 
 function extractDomain(url: string): string | null {
   if (!url) return null;
@@ -52,16 +27,11 @@ function mapDropcontactQualification(q: string): string {
 function mapSnovStatus(emailStatus: string, smtpStatus: string): string {
   const s = String(emailStatus || '').toLowerCase();
   const sm = String(smtpStatus || '').toLowerCase();
-  // Verified + smtp yes → highest confidence
   if (s === 'verified' && sm === 'yes') return 'valid';
   if (s === 'verified') return 'valid';
-  // smtp yes alone → still valid
   if (sm === 'yes') return 'valid';
-  // smtp no → invalid
   if (sm === 'no') return 'invalid';
-  // Catch-all detection
   if (s.includes('catch') || sm.includes('catch')) return 'catch_all';
-  // Otherwise risky/unverified
   return 'risky';
 }
 
@@ -75,7 +45,6 @@ function confidenceFromQualification(q: string): number {
   }
 }
 
-// ── Airtable helpers ──
 async function airtableGet(baseId: string, tableId: string, recordId: string, key: string) {
   const res = await fetch(`${AIRTABLE_BASE}/${baseId}/${tableId}/${recordId}`, {
     headers: { Authorization: `Bearer ${key}` },
@@ -97,7 +66,6 @@ async function airtablePatch(baseId: string, tableId: string, recordId: string, 
   return res.json();
 }
 
-// ── Dropcontact ──
 async function enrichWithDropcontact(firstName: string, lastName: string, domain: string | null, apiKey: string) {
   const payload: any = {
     data: [{
@@ -119,7 +87,6 @@ async function enrichWithDropcontact(firstName: string, lastName: string, domain
   }
   const requestId = submitData.request_id;
 
-  // Poll up to 6 seconds (3 polls × 2s)
   for (let i = 0; i < 3; i++) {
     await new Promise(r => setTimeout(r, 2000));
     const pollRes = await fetch(`https://api.dropcontact.io/batch/${requestId}?token=${encodeURIComponent(apiKey)}`, {
@@ -145,13 +112,8 @@ async function enrichWithDropcontact(firstName: string, lastName: string, domain
   return { ok: false, reason: 'timeout' };
 }
 
-// ── Snov.io (fallback) ──
 async function getSnovToken(userId: string, secret: string): Promise<string | null> {
-  const params = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: userId,
-    client_secret: secret,
-  });
+  const params = new URLSearchParams({ grant_type: 'client_credentials', client_id: userId, client_secret: secret });
   const res = await fetch('https://api.snov.io/v1/oauth/access_token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -171,18 +133,10 @@ async function enrichWithSnov(firstName: string, lastName: string, domain: strin
   const token = await getSnovToken(userId, secret);
   if (!token) return { ok: false, reason: 'snov-auth-failed' };
 
-  // Find email by name + domain
-  const params = new URLSearchParams({
-    firstName,
-    lastName,
-    domain,
-  });
+  const params = new URLSearchParams({ firstName, lastName, domain });
   const res = await fetch('https://api.snov.io/v1/get-emails-from-names', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
   const data: any = await res.json().catch(() => ({}));
@@ -193,16 +147,11 @@ async function enrichWithSnov(firstName: string, lastName: string, domain: strin
     return { ok: false, reason: `snov-${res.status}: ${apiMsg}` };
   }
 
-  if (!data?.success) {
-    return { ok: false, reason: `snov-error: ${data?.message || 'unknown'}` };
-  }
+  if (!data?.success) return { ok: false, reason: `snov-error: ${data?.message || 'unknown'}` };
 
   const emails = data?.data?.emails || [];
-  if (!Array.isArray(emails) || emails.length === 0) {
-    return { ok: false, reason: 'snov-no-match' };
-  }
+  if (!Array.isArray(emails) || emails.length === 0) return { ok: false, reason: 'snov-no-match' };
 
-  // Pick best email — prefer verified + smtp_status yes
   const sorted = [...emails].sort((a: any, b: any) => {
     const score = (e: any) => {
       const verified = String(e.status || '').toLowerCase() === 'verified' ? 2 : 0;
@@ -224,7 +173,6 @@ async function enrichWithSnov(firstName: string, lastName: string, domain: strin
   };
 }
 
-// ── Handler ──
 export default async (req: Request, context: Context) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 204 });
   if (req.method !== 'POST') {
@@ -233,10 +181,9 @@ export default async (req: Request, context: Context) => {
     });
   }
 
-  // Auth
-  const authHeader = req.headers.get('authorization') || '';
-  const token = authHeader.replace('Bearer ', '');
-  const payload = await verifyToken(token, getJwtSecret());
+  const jwtSecret = Netlify.env.get('JWT_SECRET');
+  if (!jwtSecret) return new Response(JSON.stringify({ error: 'Server error' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  const payload = await verifyToken(getBearerToken(req), jwtSecret);
   if (!payload) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
@@ -274,7 +221,6 @@ export default async (req: Request, context: Context) => {
   }
 
   try {
-    // 1. Get stakeholder
     const stakeholder = await airtableGet(base_id, STAKEHOLDERS_TABLE, stakeholder_id, AIRTABLE_KEY);
     const fields = stakeholder.fields || {};
     const firstName = String(fields['Name'] || '').trim();
@@ -289,7 +235,6 @@ export default async (req: Request, context: Context) => {
       });
     }
 
-    // 2. Cache guard (skip if enriched <90 days ago, unless force=true)
     if (!force && currentStatus === 'enriched' && lastAttempt) {
       const ageMs = Date.now() - new Date(lastAttempt).getTime();
       if (ageMs < 90 * 24 * 60 * 60 * 1000) {
@@ -300,7 +245,6 @@ export default async (req: Request, context: Context) => {
       }
     }
 
-    // 3. Get company domain from linked Account
     let domain: string | null = null;
     const accountLinks = fields['Account'];
     if (Array.isArray(accountLinks) && accountLinks.length > 0) {
@@ -313,7 +257,6 @@ export default async (req: Request, context: Context) => {
       }
     }
 
-    // 4. Waterfall: Dropcontact → Snov.io fallback
     let result: any = { ok: false, reason: 'no-provider-configured' };
     const providersTried: string[] = [];
     let dropcontactReason = '';
@@ -334,11 +277,8 @@ export default async (req: Request, context: Context) => {
       }
     }
 
-    // 5. Save to Airtable
     const today = new Date().toISOString().slice(0, 10);
-    const updateFields: Record<string, any> = {
-      enrichment_last_attempt: today,
-    };
+    const updateFields: Record<string, any> = { enrichment_last_attempt: today };
 
     if (result.ok) {
       updateFields['Email'] = result.email;
@@ -368,7 +308,6 @@ export default async (req: Request, context: Context) => {
 
   } catch (error: any) {
     console.error('[enrich-stakeholder] Error:', error);
-    // Best-effort: mark as failed in Airtable
     try {
       await airtablePatch(base_id, STAKEHOLDERS_TABLE, stakeholder_id, {
         enrichment_status: 'failed',
