@@ -69,7 +69,7 @@ function GlobalSearchModal({ data, onClose, onNavigate }) {
     return hits.slice(0, 12);
   }, [q, stakeholders, accounts, campaigns]);
 
-  const typeIcon = { contact: '👤', account: '🏢', campaign: '📣' };
+  const typeIcon = { contact: '👤', account: '🏢', campaign: '📪' };
   const typeColor = { contact: '#60a5fa', account: '#4ade80', campaign: '#fb923c' };
 
   const handleSelect = (r) => {

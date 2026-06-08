@@ -135,7 +135,7 @@ function ActivityTracker({ data, api, onLogActivity, onUpdateRecord, onDeleteRec
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '16px 12px', cursor: 'pointer', borderBottom: bouncedActivities > 0 ? '3px solid #ea580c' : undefined, border: selectedStatus === 'Bounced' ? '1px solid #ea580c' : undefined }} onClick={() => setSelectedStatus(selectedStatus === 'Bounced' ? '' : 'Bounced')}>
           <div style={{ fontSize: 30, fontWeight: 800, color: bouncedActivities > 0 ? '#ea580c' : 'var(--globant-muted)', lineHeight: 1 }}>{bouncedActivities}</div>
-          <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>📭 Bounced</div>
+          <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>💭 Bounced</div>
         </div>
       </div>
 
