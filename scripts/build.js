@@ -11,7 +11,7 @@ esbuild.build({
   jsxFactory: 'React.createElement',
   jsxFragment: 'React.Fragment',
   loader: { '.js': 'jsx' },
-  minify: false,
+  minify: true,
   logLevel: 'info',
 }).then(() => {
   console.log('✅ Built src/app.jsx → public/app.js');
