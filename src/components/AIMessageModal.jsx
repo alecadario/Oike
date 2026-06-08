@@ -159,19 +159,43 @@ function AIMessageModal({ stakeholder, onClose, onSend, onSuccess, data }) {
   const channelPrompts = {
     WhatsApp: {
       tone: 'casual, warm, direct — like texting a business contact you already respect. Confident but not salesy.',
-      format: `Short (30-50 words max). Rules:\n- Start with "Hi [First Name]," — NEVER "Dear", NEVER full name, NEVER formal Arabic greetings\n- Get to the ONE value point in the first sentence\n- Use 1 strategic emoji max (not decorative)\n- End with a single soft question or micro-CTA (e.g. "Worth a quick chat?" or "Would that be relevant for your team?")\n- NO signature, NO links, NO bullet points\n- Write like a real human texts — short sentences, natural rhythm`,
+      format: `Short (30-50 words max). Rules:
+- Start with "Hi [First Name]," — NEVER "Dear", NEVER full name, NEVER formal Arabic greetings
+- Get to the ONE value point in the first sentence
+- Use 1 strategic emoji max (not decorative)
+- End with a single soft question or micro-CTA (e.g. "Worth a quick chat?" or "Would that be relevant for your team?")
+- NO signature, NO links, NO bullet points
+- Write like a real human texts — short sentences, natural rhythm`,
     },
     Email: {
       tone: 'professional but human — sounds like a smart peer, not a sales robot. Confident, concise, zero fluff.',
-      format: `Rules:\n- First line: "Subject: [specific, curiosity-driven subject — reference their company name or a concrete trigger, max 8 words]"\n- Then blank line, then body (60-90 words MAX — shorter is better for cold outreach)\n- Opening: 1 sentence that shows you know something specific about THEM (news, role, challenge). Never generic.\n- Body: 1 short paragraph connecting ${COMPANY_PROFILE.companyName}'s capability to THEIR specific situation. No laundry list of services.\n- CTA: 1 clear, low-commitment ask (e.g. "Would a 15-min call next week make sense?" or "Happy to share how we approached this for [similar company]")\n- Sign-off: "Best,\\n${COMPANY_PROFILE.senderName}\\n${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}"\n- NEVER use "I hope this finds you well", "I wanted to reach out", "I came across your profile", "I'd love to", or any filler phrases`,
+      format: `Rules:
+- First line: "Subject: [specific, curiosity-driven subject — reference their company name or a concrete trigger, max 8 words]"
+- Then blank line, then body (60-90 words MAX — shorter is better for cold outreach)
+- Opening: 1 sentence that shows you know something specific about THEM (news, role, challenge). Never generic.
+- Body: 1 short paragraph connecting ${COMPANY_PROFILE.companyName}'s capability to THEIR specific situation. No laundry list of services.
+- CTA: 1 clear, low-commitment ask (e.g. "Would a 15-min call next week make sense?" or "Happy to share how we approached this for [similar company]")
+- Sign-off: "Best,\\n${COMPANY_PROFILE.senderName}\\n${COMPANY_PROFILE.senderTitle} — ${COMPANY_PROFILE.companyName}"
+- NEVER use "I hope this finds you well", "I wanted to reach out", "I came across your profile", "I'd love to", or any filler phrases`,
     },
     LinkedIn: {
       tone: 'peer-to-peer, genuinely curious — like reaching out to someone whose work you find interesting. Not transactional.',
-      format: `Short (40-70 words). Rules:\n- NO greeting like "Dear" or "Hello [Full Name]" — start conversationally ("Noticed your...", "Your team's work on...", "Saw that [company]...")\n- Reference something SPECIFIC: a recent post, a company move, their role, an industry trend — show you're not copy-pasting\n- 1 sentence of value or relevant connection point\n- End with a genuine question or soft bridge (e.g. "Would love to hear your take" or "Is this something on your radar?")\n- NO signature, NO job title, NO links\n- Must work within 300 characters if this is a connection request (state both: a short version for connection request AND a longer InMail version)`,
+      format: `Short (40-70 words). Rules:
+- NO greeting like "Dear" or "Hello [Full Name]" — start conversationally ("Noticed your...", "Your team's work on...", "Saw that [company]...")
+- Reference something SPECIFIC: a recent post, a company move, their role, an industry trend — show you're not copy-pasting
+- 1 sentence of value or relevant connection point
+- End with a genuine question or soft bridge (e.g. "Would love to hear your take" or "Is this something on your radar?")
+- NO signature, NO job title, NO links
+- Must work within 300 characters if this is a connection request (state both: a short version for connection request AND a longer InMail version)`,
     },
     Call: {
       tone: 'confident, conversational, structured — a talk track that sounds natural when spoken aloud, not read from a script',
-      format: `Write a call script (80-100 words) with these labeled sections:\n[OPENER] — Pattern interrupt opening (NOT "Hi, my name is..." — instead lead with a trigger: "I saw that [company] just..." or "I was looking into [industry challenge]...")\n[HOOK] — 1 sentence connecting their situation to a specific result ${COMPANY_PROFILE.companyName} has delivered\n[QUESTION] — An open-ended question that gets them talking about their challenge (NOT "Do you have 5 minutes?")\n[OBJECTION READY] — 1 short response for "We're not interested right now" (pivot to value or future timing)\nKeep it natural — write for the ear, not the eye.`,
+      format: `Write a call script (80-100 words) with these labeled sections:
+[OPENER] — Pattern interrupt opening (NOT "Hi, my name is..." — instead lead with a trigger: "I saw that [company] just..." or "I was looking into [industry challenge]...")
+[HOOK] — 1 sentence connecting their situation to a specific result ${COMPANY_PROFILE.companyName} has delivered
+[QUESTION] — An open-ended question that gets them talking about their challenge (NOT "Do you have 5 minutes?")
+[OBJECTION READY] — 1 short response for "We're not interested right now" (pivot to value or future timing)
+Keep it natural — write for the ear, not the eye.`,
     },
   };
 
@@ -223,14 +247,21 @@ function AIMessageModal({ stakeholder, onClose, onSend, onSuccess, data }) {
         : null;
 
       const historyBlock = sOutreach.length > 0
-        ? `━━━ FULL CONVERSATION HISTORY (chronological, oldest → newest) ━━━\n${chronological.map(o => {
+        ? `━━━ FULL CONVERSATION HISTORY (chronological, oldest → newest) ━━━
+${chronological.map(o => {
   const d = F(o,'Date') ? new Date(F(o,'Date')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '?';
   const ch = F(o,'Channel') || '?';
   const dir = directionOf(o);
   const st = F(o,'Status') || '';
   const content = extractContent(o).slice(0, 400);
   return `[${d} · ${ch} · ${dir} · ${st}]\n"${content}"`;
-}).join('\n\n')}\n\n━━━ CONVERSATION STATS ━━━\n- Total touches: ${touchCount}\n- Replies from them: ${replyCount}\n- Days since ANY activity: ${daysSinceLast !== null ? daysSinceLast : 'n/a'}\n- Days since THEY last engaged: ${daysSinceTheirLast !== null ? daysSinceTheirLast : 'never engaged'}`
+}).join('\n\n')}
+
+━━━ CONVERSATION STATS ━━━
+- Total touches: ${touchCount}
+- Replies from them: ${replyCount}
+- Days since ANY activity: ${daysSinceLast !== null ? daysSinceLast : 'n/a'}
+- Days since THEY last engaged: ${daysSinceTheirLast !== null ? daysSinceTheirLast : 'never engaged'}`
         : '';
 
       const firstContactBlock = [
@@ -274,7 +305,33 @@ function AIMessageModal({ stakeholder, onClose, onSend, onSuccess, data }) {
         contextBlock = [historyBlock, firstContactBlock && `━━━ CONTACT CONTEXT (pain points, LinkedIn, news — reference only if it adds a genuine closing note) ━━━\n${firstContactBlock}`].filter(Boolean).join('\n\n') || '→ No previous messages found.';
       }
 
-      const prompt = `You are a senior B2B sales copywriter. Write ONE message that sounds like a real human — not a template.\n\n${mission}\n\n━━━ SENDER ━━━\n${COMPANY_PROFILE.senderName}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} at ${COMPANY_PROFILE.companyName}${COMPANY_PROFILE.services ? ` — ${COMPANY_PROFILE.services}` : ''}\n${COMPANY_PROFILE.goals ? `Company focus: ${COMPANY_PROFILE.goals}` : ''}\n\n━━━ RECIPIENT ━━━\n${sName} | ${role || 'Unknown role'} at ${accountName} | ${industry || 'Unknown industry'}${influence ? ` | ${influence}` : ''}\n\n${contextBlock}\n${extraContext ? `\n━━━ EXTRA CONTEXT — HIGHEST PRIORITY ━━━\n"${extraContext}"\nThis MUST be reflected naturally in the message.\n` : ''}━━━ CHANNEL & FORMAT ━━━\nChannel: ${selectedChannel}\nTone: ${chGuide.tone}\n${chGuide.format}\nLanguage: ${selectedLanguage || suggestedLanguage || 'English'} — write the ENTIRE message in this language.\n${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}${COMPANY_PROFILE.voiceAvoid ? `\n- Never: ${COMPANY_PROFILE.voiceAvoid}` : ''}${COMPANY_PROFILE.voiceExample ? `\n- Example: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}\n\n━━━ RULES ━━━\n1. First name only — never full name in the body.\n2. ONE micro-CTA — specific, low friction.\n3. BANNED PHRASES: "I hope this finds you well" / "I wanted to reach out" / "just checking in" / "following up" / "touching base" / "I'd love to connect" / "as a leader in" / "I noticed that"\n4. NEVER use [brackets] or placeholder text like [Company Name] or [insert X]. If you don't have the data, write around it naturally.\n5. If it sounds like AI wrote it, rewrite it.\n6. Output ONLY the message — no intro, no explanation. Email: first line must be "Subject: [your subject here]", then blank line, then body.`;
+      const prompt = `You are a senior B2B sales copywriter. Write ONE message that sounds like a real human — not a template.
+
+${mission}
+
+━━━ SENDER ━━━
+${COMPANY_PROFILE.senderName}${COMPANY_PROFILE.senderTitle ? `, ${COMPANY_PROFILE.senderTitle}` : ''} at ${COMPANY_PROFILE.companyName}${COMPANY_PROFILE.services ? ` — ${COMPANY_PROFILE.services}` : ''}
+${COMPANY_PROFILE.goals ? `Company focus: ${COMPANY_PROFILE.goals}` : ''}
+
+━━━ RECIPIENT ━━━
+${sName} | ${role || 'Unknown role'} at ${accountName} | ${industry || 'Unknown industry'}${influence ? ` | ${influence}` : ''}
+
+${contextBlock}
+${extraContext ? `\n━━━ EXTRA CONTEXT — HIGHEST PRIORITY ━━━\n"${extraContext}"\nThis MUST be reflected naturally in the message.\n` : ''}
+━━━ CHANNEL & FORMAT ━━━
+Channel: ${selectedChannel}
+Tone: ${chGuide.tone}
+${chGuide.format}
+Language: ${selectedLanguage || suggestedLanguage || 'English'} — write the ENTIRE message in this language.
+${COMPANY_PROFILE.voiceTone ? `\nSender's voice:\n- ${COMPANY_PROFILE.voiceTone}${COMPANY_PROFILE.voiceAvoid ? `\n- Never: ${COMPANY_PROFILE.voiceAvoid}` : ''}${COMPANY_PROFILE.voiceExample ? `\n- Example: "${COMPANY_PROFILE.voiceExample}"` : ''}` : ''}
+
+━━━ RULES ━━━
+1. First name only — never full name in the body.
+2. ONE micro-CTA — specific, low friction.
+3. BANNED PHRASES: "I hope this finds you well" / "I wanted to reach out" / "just checking in" / "following up" / "touching base" / "I'd love to connect" / "as a leader in" / "I noticed that"
+4. NEVER use [brackets] or placeholder text like [Company Name] or [insert X]. If you don't have the data, write around it naturally.
+5. If it sounds like AI wrote it, rewrite it.
+6. Output ONLY the message — no intro, no explanation. Email: first line must be "Subject: [your subject here]", then blank line, then body.`;
 
       const generated = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 500 });
       setGeneratedMessages(prev => ({ ...prev, [tab]: generated }));
@@ -526,7 +583,7 @@ function AIMessageModal({ stakeholder, onClose, onSend, onSuccess, data }) {
                 </button>
               </div>
               <div style={{ padding: '6px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 6, fontSize: 11, color: 'var(--globant-muted)', borderLeft: `3px solid ${eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)'}` }}>
-                {eventMode === 'invite' ? '🎪' : '🤝'} <strong>{F(selectedEvent, 'Event Name')}</strong>
+                {eventMode === 'invite' ? '🎤' : '🤝'} <strong>{F(selectedEvent, 'Event Name')}</strong>
                 {selectedEvent.fields?.['Starting'] && <span> · {new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>}
                 <span style={{ marginLeft: 8, color: eventMode === 'followup' ? '#a78bfa' : 'var(--globant-green)' }}>{eventMode === 'invite' ? 'Invite mode' : 'Follow-up mode'}</span>
               </div>
