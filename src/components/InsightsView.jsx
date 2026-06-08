@@ -130,7 +130,39 @@ function InsightsView({ data }) {
       last30.forEach(o => { const ch = F(o,'Channel')||'?'; recentByChannel[ch] = (recentByChannel[ch]||0)+1; });
       const channelBreakdown = Object.entries(recentByChannel).map(([ch,n]) => `${ch}: ${n}`).join(', ');
 
-      const prompt = `You are a senior B2B sales coach reviewing ${viewName}'s outreach activity. Write a sharp, honest analysis in 5-7 sentences. Be specific, use the data, and name real patterns. No generic advice.\n\n═══ GOALS & PIPELINE ═══\n- Company goal: ${goalName || 'not set'}${goalTarget > 0 ? ` (€${goalTarget.toLocaleString()})` : ''}${deadlineDays !== null ? ` · ${deadlineDays} days left` : ''}\n- Meetings target: ${viewMeetingsTarget} | Achieved: ${viewMeetings.length} | Gap: ${meetingsGap}\n- Deals target: ${viewDealsTarget} | Won: ${viewDealsWon} | Gap: ${dealsGap}\n\n═══ ACTIVITY VELOCITY ═══\n- Last 4 weeks: ${activitiesPerWeek.toFixed(1)} activities/week\n- Last 30 days channels: ${channelBreakdown || 'no data'}\n- Channel reply rates vs benchmarks: ${chBenchContext || 'insufficient data'}\n- Activities needed to close meetings gap: ${activitiesNeeded ?? 'insufficient data'}\n- Weeks to hit target at current pace: ${weeksToTarget !== null ? weeksToTarget.toFixed(1) : 'insufficient data'}\n\n═══ TIMING & REPLY CONTEXT ═══\n- Messages sent last 7 days (still within normal reply window): ${last7.length}\n  → ${pending7.length} pending (IMPORTANT: these are recent — it's normal not to have replies yet, do NOT count these as no-replies)\n  → ${replied7.length} already replied/meeting booked\n- Messages 8-30 days old with NO reply yet (legitimately stale): ${stale.length}\n- Avg days to reply (from historical data): ${avgDaysToReply ? avgDaysToReply + ' days' : 'not enough data'}\n${avgDaysToReply ? `- IMPORTANT: factor in this avg reply lag when assessing current pipeline health` : ''}\n\n═══ RECENT MESSAGE CONTENT (last 5 sent) ═══\n${recentMsgSamples || 'No message content available.'}\n\nYour analysis must cover:\n1. Pipeline health RIGHT NOW — accounting for the reply lag (recent messages are not yet stale)\n2. Quality of the messages above — are the angles sharp? Too generic? Right length? Specific enough?\n3. Whether the ${stale.length} stale no-replies suggest a messaging problem, wrong targets, or just volume\n4. The ONE channel or ONE behavior to change this week for the biggest impact\n5. Whether the current pace will hit the target — and by when if not\n\nWrite in English. Be direct. Quote specific numbers from the data above.`;
+      const prompt = `You are a senior B2B sales coach reviewing ${viewName}'s outreach activity. Write a sharp, honest analysis in 5-7 sentences. Be specific, use the data, and name real patterns. No generic advice.
+
+═══ GOALS & PIPELINE ═══
+- Company goal: ${goalName || 'not set'}${goalTarget > 0 ? ` (€${goalTarget.toLocaleString()})` : ''}${deadlineDays !== null ? ` · ${deadlineDays} days left` : ''}
+- Meetings target: ${viewMeetingsTarget} | Achieved: ${viewMeetings.length} | Gap: ${meetingsGap}
+- Deals target: ${viewDealsTarget} | Won: ${viewDealsWon} | Gap: ${dealsGap}
+
+═══ ACTIVITY VELOCITY ═══
+- Last 4 weeks: ${activitiesPerWeek.toFixed(1)} activities/week
+- Last 30 days channels: ${channelBreakdown || 'no data'}
+- Channel reply rates vs benchmarks: ${chBenchContext || 'insufficient data'}
+- Activities needed to close meetings gap: ${activitiesNeeded ?? 'insufficient data'}
+- Weeks to hit target at current pace: ${weeksToTarget !== null ? weeksToTarget.toFixed(1) : 'insufficient data'}
+
+═══ TIMING & REPLY CONTEXT ═══
+- Messages sent last 7 days (still within normal reply window): ${last7.length}
+  → ${pending7.length} pending (IMPORTANT: these are recent — it's normal not to have replies yet, do NOT count these as no-replies)
+  → ${replied7.length} already replied/meeting booked
+- Messages 8-30 days old with NO reply yet (legitimately stale): ${stale.length}
+- Avg days to reply (from historical data): ${avgDaysToReply ? avgDaysToReply + ' days' : 'not enough data'}
+${avgDaysToReply ? `- IMPORTANT: factor in this avg reply lag when assessing current pipeline health` : ''}
+
+═══ RECENT MESSAGE CONTENT (last 5 sent) ═══
+${recentMsgSamples || 'No message content available.'}
+
+Your analysis must cover:
+1. Pipeline health RIGHT NOW — accounting for the reply lag (recent messages are not yet stale)
+2. Quality of the messages above — are the angles sharp? Too generic? Right length? Specific enough?
+3. Whether the ${stale.length} stale no-replies suggest a messaging problem, wrong targets, or just volume
+4. The ONE channel or ONE behavior to change this week for the biggest impact
+5. Whether the current pace will hit the target — and by when if not
+
+Write in English. Be direct. Quote specific numbers from the data above.`;
 
       const result = await callOpenAI({ prompt, max_tokens: 450, temperature: 0.65 });
       setAiProjection(result);
@@ -364,7 +396,7 @@ function InsightsView({ data }) {
   // Events utilization
   if (upcomingEvents.length > 0) {
     const totalInvited = upcomingEvents.reduce((sum, ev) => sum + linkedIds(ev, 'Stakeholders invited').length, 0);
-    improvements.push({ icon: '🎫', priority: 'medium', title: 'Leverage Events', text: `${upcomingEvents.length} upcoming event${upcomingEvents.length > 1 ? 's' : ''} with ${totalInvited} stakeholder${totalInvited !== 1 ? 's' : ''} invited. Use events as warm openers for new stakeholders.` });
+    improvements.push({ icon: '\ud83c�', priority: 'medium', title: 'Leverage Events', text: `${upcomingEvents.length} upcoming event${upcomingEvents.length > 1 ? 's' : ''} with ${totalInvited} stakeholder${totalInvited !== 1 ? 's' : ''} invited. Use events as warm openers for new stakeholders.` });
   }
 
   // Solutions coverage
