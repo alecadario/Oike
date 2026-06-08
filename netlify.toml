@@ -1,5 +1,5 @@
 [build]
-  command = "npm install && npm run build"
+  command = "npm install"
   publish = "public"
   functions = "netlify/functions"
 
@@ -24,9 +24,7 @@
   to = "/urban.html"
   status = 200
 
-# Propuestas dinámicas — oike.app/p/{slug}
-# Para cualquier propuesta nueva: guardar archivo en public/p/{slug}.html
-# No hace falta tocar este archivo nunca más.
+# Propuestas dinamicas
 [[redirects]]
   from = "/p/*"
   to = "/p/:splat.html"
