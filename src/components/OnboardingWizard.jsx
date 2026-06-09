@@ -147,7 +147,7 @@ function OnboardingWizard({ api, onComplete }) {
             <label style={lStyle}>Website</label>
             <input style={iStyle} placeholder="https://acme.com" value={account.website} onChange={e => setAccount(a => ({...a, website: e.target.value}))} />
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-              <button className="action-btn" style={{ flex: 1, padding: '11px' }} onClick={() => setStep(0)}>{String.fromCharCode(8592)} Back</button>
+              <button className="action-btn" style={{ flex: 1, padding: '11px' }} onClick={() => setStep(0)}>← Back</button>
               <button className="action-btn btn-primary" style={{ flex: 2, padding: '11px' }} onClick={handleAccountNext} disabled={saving}>{saving ? 'Saving...' : 'Continue →'}</button>
             </div>
           </div>
@@ -159,11 +159,11 @@ function OnboardingWizard({ api, onComplete }) {
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <label style={lStyle}>First name *</label>
-                <input style={iStyle} placeholder="Mar\uEDa" value={contact.firstName} onChange={e => setContact(c => ({...c, firstName: e.target.value}))} />
+                <input style={iStyle} placeholder="María" value={contact.firstName} onChange={e => setContact(c => ({...c, firstName: e.target.value}))} />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={lStyle}>Last name</label>
-                <input style={iStyle} placeholder="Garc\uEDa" value={contact.lastName} onChange={e => setContact(c => ({...c, lastName: e.target.value}))} />
+                <input style={iStyle} placeholder="García" value={contact.lastName} onChange={e => setContact(c => ({...c, lastName: e.target.value}))} />
               </div>
             </div>
             <label style={lStyle}>Role / Title</label>
@@ -171,7 +171,7 @@ function OnboardingWizard({ api, onComplete }) {
             <label style={lStyle}>LinkedIn URL</label>
             <input style={iStyle} placeholder="https://linkedin.com/in/..." value={contact.linkedin} onChange={e => setContact(c => ({...c, linkedin: e.target.value}))} />
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-              <button className="action-btn" style={{ flex: 1, padding: '11px' }} onClick={() => setStep(1)}>{String.fromCharCode(8592)} Back</button>
+              <button className="action-btn" style={{ flex: 1, padding: '11px' }} onClick={() => setStep(1)}>← Back</button>
               <button className="action-btn btn-primary" style={{ flex: 2, padding: '11px' }} onClick={handleContactNext} disabled={saving}>{saving ? 'Saving...' : 'Continue →'}</button>
             </div>
           </div>

@@ -48,10 +48,10 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
       senderPhotoUrl: b.senderPhotoUrl || '',
       senderTitle:    b.senderTitle    || '',
       calendarLink:   b.calendarLink   || '',
-      accentColor:    b.accentColor    || '#5BBFB5', // Primary
-      secondaryColor: b.secondaryColor || '#A78BFA', // Secondary
-      tertiaryColor:  b.tertiaryColor  || '#FBBF24', // Tertiary / highlight
-      darkColor:      b.darkColor      || '#0D0D1A', // Dark background
+      accentColor:    b.accentColor    || '#5BBFB5',
+      secondaryColor: b.secondaryColor || '#A78BFA',
+      tertiaryColor:  b.tertiaryColor  || '#FBBF24',
+      darkColor:      b.darkColor      || '#0D0D1A',
     };
   });
   const [brandingSaved, setBrandingSaved] = useState(false);
@@ -160,7 +160,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
             </div>
 
             {[
-              { key: 'first', label: '🟢 First Contact', hint: 'The very first message to a prospect who doesn\'t know you yet.' },
+              { key: 'first', label: '🟢 First Contact', hint: "The very first message to a prospect who doesn't know you yet." },
               { key: 'followup', label: '🔵 Follow-up', hint: 'Subsequent touches. Has access to full conversation history + contact pain points.' },
               { key: 'breakup', label: '💀 Breakup', hint: 'Final message after multiple attempts with no response.' },
             ].map(({ key, label, hint }) => (
@@ -210,7 +210,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
             <div>
               <label style={labelStyle}>Logo</label>
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                {/* Logo preview */}
                 <div style={{ width:80, height:56, borderRadius:8, border:'1px solid var(--globant-border)', background:'var(--globant-darker)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, overflow:'hidden' }}>
                   {branding.senderLogo
                     ? <img src={branding.senderLogo} alt="logo" style={{ maxWidth:72, maxHeight:48, objectFit:'contain' }} onError={e=>{e.target.style.display='none';}} />
@@ -218,7 +217,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                   }
                 </div>
                 <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
-                  {/* File upload */}
                   <label style={{ display:'block', cursor:'pointer' }}>
                     <div style={{ padding:'9px 14px', borderRadius:7, border:'1px dashed var(--globant-border)', background:'var(--globant-darker)', fontSize:12, color:'var(--globant-muted)', textAlign:'center', cursor:'pointer' }}>
                       📁 Upload image (PNG, JPG, SVG)
@@ -240,8 +238,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                   />
                   <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic' }}>Upload = app/proposals. URL = emails.</div>
                   {branding.senderLogo && (
-                    <button onClick={() => setBranding(p=>({...p,senderLogo:'',senderLogoUrl:''}))}
-                      style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer' }}>
+                    <button onClick={() => setBranding(p=>({...p,senderLogo:'',senderLogoUrl:''}))} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer' }}>
                       🗑 Remove logo
                     </button>
                   )}
@@ -249,7 +246,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
               </div>
             </div>
 
-            {/* Sender photo (face) — used in Landings, Proposals & Reports near sender signature */}
             <div>
               <label style={labelStyle}>Your photo (face)</label>
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -284,8 +280,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                     Get your URL from LinkedIn, Google Drive (share → copy link), or any image host.
                   </div>
                   {branding.senderPhoto && (
-                    <button onClick={() => setBranding(p=>({...p,senderPhoto:'',senderPhotoUrl:''}))}
-                      style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer', alignSelf:'flex-start' }}>
+                    <button onClick={() => setBranding(p=>({...p,senderPhoto:'',senderPhotoUrl:''}))} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--globant-border)', background:'none', color:'var(--globant-muted)', cursor:'pointer', alignSelf:'flex-start' }}>
                       🗑 Remove photo
                     </button>
                   )}
@@ -293,21 +288,18 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
               </div>
             </div>
 
-            {/* Sender title / tagline */}
             <div>
               <label style={labelStyle}>Your title / tagline</label>
               <input style={inputStyle} value={branding.senderTitle || ''} onChange={e=>setBranding(p=>({...p,senderTitle:e.target.value}))} placeholder="e.g. Founder · Oike · Sales Intelligence" />
               <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>Shown below your name, next to your photo.</div>
             </div>
 
-            {/* Color palette — 4 colors */}
             <div>
               <label style={labelStyle}>Color palette (4 colores)</label>
               <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:10, fontStyle:'italic' }}>
                 Primary = CTA + headers. Secondary = soporte / accents. Tertiary = highlights / badges. Dark = fondos oscuros.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {/* Presets — 4 colors each */}
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                   {[
                     { label:'Oike',     primary:'#5BBFB5', secondary:'#A78BFA', tertiary:'#FBBF24', dark:'#0D0D1A' },
@@ -344,7 +336,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                     );
                   })}
                 </div>
-                {/* 4 Custom pickers in 2x2 grid */}
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                   {[
                     { key:'accentColor',    label:'PRIMARY',   default:'#5BBFB5', sub:'CTAs · Headers · Borders' },
@@ -367,7 +358,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                     </div>
                   ))}
                 </div>
-                {/* Live preview strip with all 4 colors */}
                 <div style={{ borderRadius:8, overflow:'hidden', border:'1px solid var(--globant-border)', display:'flex', height:48 }}>
                   <div style={{ flex:2, background: branding.darkColor || '#0D0D1A', display:'flex', alignItems:'center', paddingLeft:14 }}>
                     <span style={{ fontSize:12, fontWeight:800, color: branding.accentColor || '#5BBFB5' }}>Hero</span>
@@ -395,7 +385,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
         {tab === 'integrations' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* Gmail card */}
             <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                 <span style={{ fontSize: 26 }}>📧</span>
@@ -444,7 +433,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
               </div>
             </div>
 
-            {/* Reset onboarding */}
             <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '16px 20px', border: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>🚀 Onboarding</div>
               <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 10 }}>Restart the setup wizard — useful before a demo.</div>
@@ -518,10 +506,9 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
               <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 3 }}>Added to AI prompts as extra strategic context</div>
             </div>
 
-            {/* Voice & Tone section */}
             <div style={{ borderTop: '1px solid var(--globant-border)', paddingTop: 14, marginTop: 2 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                ✍️ Voice & Tone
+                ✍️ Voice &amp; Tone
                 <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--globant-muted)' }}>— how the AI should sound when writing your messages</span>
               </div>
 
@@ -548,7 +535,6 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
             </div>
 
             </div>
-            {/* Save button — fixed at bottom */}
             <div style={{ flexShrink: 0, paddingTop: 12, borderTop: '1px solid var(--globant-border)', marginTop: 4 }}>
               <button
                 className="action-btn btn-primary"
