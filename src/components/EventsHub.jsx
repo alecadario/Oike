@@ -21,7 +21,6 @@ import {
 function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navigateToEventId, clearNavigateEvent }) {
   const { accounts, stakeholders, events, outreach } = data;
   const [selectedEventId, setSelectedEventId] = useState(null);
-  // Wrapper that keeps URL in sync with the selected event
   const selectEvent = useCallback((id) => {
     setSelectedEventId(id || null);
     navSetUrl('events', id || null);
@@ -30,7 +29,6 @@ function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navi
     setShowInvited(false);
     setInvitePreview(null);
   }, []);
-  // Restore from URL / external navigation
   useEffect(() => {
     if (navigateToEventId) {
       selectEvent(navigateToEventId);
@@ -53,7 +51,7 @@ function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navi
   const [inviteByAccId, setInviteByAccId] = useState('');
   const [inviteBySearch, setInviteBySearch] = useState('');
   const [invitePreview, setInvitePreview] = useState(null);
-  const [showInvited, setShowInvited] = useState(false); // {id, mode, msg, generating}
+  const [showInvited, setShowInvited] = useState(false);
   const [inviteTemplateValue, setInviteTemplateValue] = useState('');
   const [savingInviteTemplate, setSavingInviteTemplate] = useState(false);
   const [evCreating, setEvCreating] = useState(false);
@@ -61,7 +59,6 @@ function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navi
   const [evUploadingFile, setEvUploadingFile] = useState(false);
   const [evGeneratingSummary, setEvGeneratingSummary] = useState(false);
 
-  // Generate Executive Summary for the event — uses files + context + linked solutions
   const generateEventExecSummary = async (eventRec) => {
     if (!eventRec) return;
     setEvGeneratingSummary(true);
@@ -75,37 +72,7 @@ function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navi
       const linkedSols = (data.solutions || []).filter(s => linkedSolIds.includes(s.id));
       const solInfo = linkedSols.map(s => `- ${F(s,'Name')}: ${F(s,'Stakeholder Key Message') || (F(s,'Service | Solution Detail')||'').slice(0,150)}`).join('\n');
 
-      const prompt = `You are a senior B2B sales strategist. Generate an executive summary of this event that will be used as context for AI-personalized invitations to prospects.
-
-EVENT: ${evName}
-${evStart ? `DATE: ${evStart}` : ''}
-${evUrl ? `URL: ${evUrl}` : ''}
-
-CONTEXT (uploaded files + manual notes):
-${evContext.slice(0, 3000) || 'None'}
-
-${evAirtableSummary ? `AIRTABLE ATTACHMENT SUMMARY:\n${typeof evAirtableSummary === 'string' ? evAirtableSummary.slice(0, 800) : ''}` : ''}
-
-${solInfo ? `OFFERING WE PROMOTE AT THIS EVENT:\n${solInfo}` : ''}
-
-Generate a structured executive summary with these 5 sections:
-
-### 🎯 What this event is
-2-3 sentences: type of event, format (in-person/online/hybrid), scale, the core promise.
-
-### 👥 Target audience
-Who should attend: roles, seniority, industries, company size. Specific.
-
-### 💡 Why it matters now
-The trigger / timing / context that makes this event relevant TODAY (industry shifts, regulation, technology change).
-
-### 🎁 What attendees take away
-3-4 concrete outcomes (knowledge, network, tools, deals).
-
-### 🪝 Hooks for invitations
-3 angles a BDR could use to invite different prospect personas. Each one specific (not generic).
-
-Return as plain markdown text, NO surrounding JSON. Use the headers exactly as shown above. Keep total under 400 words.`;
+      const prompt = `You are a senior B2B sales strategist. Generate an executive summary of this event that will be used as context for AI-personalized invitations to prospects.\n\nEVENT: ${evName}\n${evStart ? `DATE: ${evStart}` : ''}\n${evUrl ? `URL: ${evUrl}` : ''}\n\nCONTEXT (uploaded files + manual notes):\n${evContext.slice(0, 3000) || 'None'}\n\n${evAirtableSummary ? `AIRTABLE ATTACHMENT SUMMARY:\n${typeof evAirtableSummary === 'string' ? evAirtableSummary.slice(0, 800) : ''}` : ''}\n\n${solInfo ? `OFFERING WE PROMOTE AT THIS EVENT:\n${solInfo}` : ''}\n\nGenerate a structured executive summary with these 5 sections:\n\n### 🎯 What this event is\n2-3 sentences: type of event, format (in-person/online/hybrid), scale, the core promise.\n\n### 👥 Target audience\nWho should attend: roles, seniority, industries, company size. Specific.\n\n### 💡 Why it matters now\nThe trigger / timing / context that makes this event relevant TODAY (industry shifts, regulation, technology change).\n\n### 🎁 What attendees take away\n3-4 concrete outcomes (knowledge, network, tools, deals).\n\n### 🪝 Hooks for invitations\n3 angles a BDR could use to invite different prospect personas. Each one specific (not generic).\n\nReturn as plain markdown text, NO surrounding JSON. Use the headers exactly as shown above. Keep total under 400 words.`;
 
       const summary = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 900 });
       const a = api || new AirtableAPI();
@@ -121,7 +88,6 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
   };
   const now = new Date();
 
-  // Handle file upload → AI summary → append to "Aditional context" as FILE: block
   const handleEventFileUpload = async (e, eventRec) => {
     const file = e.target.files?.[0];
     if (!file || !eventRec) return;
@@ -173,12 +139,10 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
     if (evNewContext.trim()) fields['Aditional context'] = evNewContext.trim();
     if (evNewWebsite.trim()) fields['URL'] = evNewWebsite.trim();
     if (evNewAttachUrl.trim()) fields['Attachments'] = [{ url: evNewAttachUrl.trim() }];
-    // Optimistic: show instantly
     if (onAddRecord) onAddRecord('events', fields);
     setEvNewName(''); setEvNewStart(''); setEvNewEnd('');
     setEvNewContext(''); setEvNewWebsite(''); setEvNewAttachUrl('');
     setShowAddEvent(false);
-    // API in background
     const a = api || new AirtableAPI();
     a.createRecord(TABLE_IDS.events, fields)
       .then(() => { if (onLogActivity) onLogActivity(); })
@@ -199,8 +163,6 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
 
   const selectedEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
 
-  // Invite function — window.open MUST be called synchronously (before any await)
-  // so we open the channel first, then fire async API work in background
   const inviteStakeholder = (stakeholder, event, channel) => {
     const sName = F(stakeholder, 'Name') || '';
     const email = F(stakeholder, 'Email') || '';
@@ -213,7 +175,6 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
     const message = aiInvite || fallbackInvite;
     const subject = `Invitation: ${evName} — ${evDate}`;
 
-    // Open channel synchronously — must happen before any async call
     if (channel === 'WhatsApp' && phone) {
       window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
     } else if (channel === 'Email' && email) {
@@ -225,11 +186,9 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
       window.open(`tel:${phone}`, '_self');
     }
 
-    // Fire API calls in background (no await at top level)
     const doAsync = async () => {
       const companyIds = linkedIds(stakeholder, 'Account');
       const a = api || new AirtableAPI();
-      // 1. Log outreach activity
       await a.createRecord(TABLE_IDS.outreach, {
         'Activity Name': `Event Invite: ${sName} → ${evName} — ${new Date().toLocaleDateString('en-US')}`,
         'Account': companyIds,
@@ -243,7 +202,6 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
         ...(CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name ? { 'BDR Owner': CURRENT_USER.name } : {}),
         ...(CURRENT_USER?.role === 'cp' && CURRENT_USER?.name ? { 'CP Assigned': CURRENT_USER.name } : {}),
       });
-      // 2. Add stakeholder to event's "Stakeholders invited" field
       const currentInvited = linkedIds(event, 'Stakeholders invited');
       if (!currentInvited.includes(stakeholder.id)) {
         await a.updateRecord(TABLE_IDS.events, event.id, {
@@ -257,7 +215,6 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
     doAsync().catch(e => console.error('Event invite log failed:', e));
   };
 
-  // AI-powered suggestion for event invitations
   const generateSmartSuggestions = async (event, notInvitedList) => {
     setLoadingSuggestions(true);
     try {
@@ -266,7 +223,6 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
       const evSummary = F(event, 'Attachment Summary') || '';
       const evStart = formatDate(event.fields?.['Starting']);
 
-      // Build stakeholder profiles
       const profiles = notInvitedList.slice(0, 60).map(s => {
         const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
         const accIndustries = linkedIds(s, 'Account').map(id => accounts.find(a => a.id === id)).filter(Boolean).map(a => F(a, 'Industry') || '').filter(Boolean);
@@ -275,26 +231,7 @@ Return as plain markdown text, NO surrounding JSON. Use the headers exactly as s
         return `ID:${s.id} | ${F(s, 'Name')} ${F(s, 'Last name') || ''} | ${F(s, 'Role') || '?'} at ${accNames.join(', ')} | Industry: ${accIndustries.join(', ')} | Influence: ${F(s, 'Level of Influence') || '?'} | Pain: ${painStr}`;
       }).join('\n');
 
-      const prompt = `You are a B2B sales strategist for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).
-
-EVENT:
-- Name: ${evName}
-- Date: ${evStart}
-- Context: ${evContext || 'None'}
-- Summary: ${typeof evSummary === 'string' ? evSummary.slice(0, 500) : 'None'}
-
-STAKEHOLDERS NOT YET INVITED:
-${profiles}
-
-TASK: Select the TOP 10 most relevant stakeholders to invite to this event. Consider:
-1. Industry alignment with the event theme
-2. Role relevance (would they benefit from / be interested in this event?)
-3. Pain points that the event topics might address
-4. Level of influence (Decision Makers and Champions are priority)
-5. Company strategic value
-
-Return a JSON array of objects with EXACTLY this format (no markdown, no code fences):
-[{"id":"recXXX","reason":"One sentence explaining why this person is relevant for this event"},...]\n\nReturn ONLY the JSON array, nothing else.`;
+      const prompt = `You are a B2B sales strategist for ${COMPANY_PROFILE.companyName} (${COMPANY_PROFILE.services}).\n\nEVENT:\n- Name: ${evName}\n- Date: ${evStart}\n- Context: ${evContext || 'None'}\n- Summary: ${typeof evSummary === 'string' ? evSummary.slice(0, 500) : 'None'}\n\nSTAKEHOLDERS NOT YET INVITED:\n${profiles}\n\nTASK: Select the TOP 10 most relevant stakeholders to invite to this event. Consider:\n1. Industry alignment with the event theme\n2. Role relevance (would they benefit from / be interested in this event?)\n3. Pain points that the event topics might address\n4. Level of influence (Decision Makers and Champions are priority)\n5. Company strategic value\n\nReturn a JSON array of objects with EXACTLY this format (no markdown, no code fences):\n[{"id":"recXXX","reason":"One sentence explaining why this person is relevant for this event"},...]\n\nReturn ONLY the JSON array, nothing else.`;
 
       const text = await callOpenAI({ prompt, temperature: 0.4, max_tokens: 1000 });
       const cleaned = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
@@ -311,10 +248,8 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
     setLoadingSuggestions(false);
   };
 
-  // Events: use message (send + log)
   const [removingInvite, setRemovingInvite] = useState(null);
 
-  // Remove stakeholder from event invitation
   const uninviteStakeholder = async (stakeholder, event) => {
     setRemovingInvite(stakeholder.id);
     try {
@@ -351,7 +286,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
     else if (channel === 'Email' && email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${ccParam}`, '_blank');
     else if (channel === 'LinkedIn' && linkedin) { navigator.clipboard.writeText(message).catch(() => {}); window.open(linkedin, '_blank'); }
     else if (channel === 'Call' && phone) window.open(`tel:${phone}`, '_self');
-    // Log outreach
     const companyIds = linkedIds(stakeholder, 'Account');
     try {
       const a = api || new AirtableAPI();
@@ -367,7 +301,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
       });
       await activateAccountIfNeeded(a, companyIds, data.accounts);
       await updateStakeholderStatus(a, stakeholder.id, 'Contacted', data.stakeholders);
-      // If this was an event invite from AI Generator, link the stakeholder to the event
       if (eventId) {
         try {
           const ev = data.events?.find(e => e.id === eventId);
@@ -382,7 +315,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
     } catch (e) { console.error('Event message log failed:', e); }
   };
 
-  // Event detail view
   if (selectedEvent) {
     const evName = F(selectedEvent, 'Event Name');
     const startDate = selectedEvent.fields?.['Starting'];
@@ -392,11 +324,8 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
     const aiInviteMsg = F(selectedEvent, 'Stakeholder Invitation');
     const invitedIds = linkedIds(selectedEvent, 'Stakeholders invited');
     const invitedStakeholders = invitedIds.map(id => stakeholders.find(s => s.id === id)).filter(Boolean);
-
-    // All stakeholders NOT invited (potential invites)
     const notInvited = stakeholders.filter(s => !invitedIds.includes(s.id));
 
-    // Group invited by account
     const invitedByAccount = {};
     invitedStakeholders.forEach(s => {
       const accNames = resolveLinked(s, 'Account', accounts, 'Account Name');
@@ -405,7 +334,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
       invitedByAccount[accKey].push(s);
     });
 
-    // Event outreach activities
     const eventOutreach = outreach.filter(o => {
       const notes = F(o, 'Notes') || '';
       return notes.includes(evName);
@@ -421,7 +349,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           <p>Event detail and stakeholder management</p>
         </div>
 
-        {/* Event Header */}
         <div className="card" style={{ borderLeft: `3px solid ${isPast ? 'var(--globant-muted)' : 'var(--globant-green)'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => selectEvent(null)}>← Back to all events</button>
@@ -439,7 +366,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           </div>
         </div>
 
-        {/* KPIs */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
           <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{invitedStakeholders.length}</div>
@@ -455,10 +381,9 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           </div>
         </div>
 
-        {/* Context & Summary */}
         <div className="card">
           <div className="card-header">
-            <h3>📝 Event Details & Files</h3>
+            <h3>📝 Event Details &amp; Files</h3>
             <label style={{ cursor: 'pointer' }}>
               <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml,.pdf" style={{ display: 'none' }} onChange={e => handleEventFileUpload(e, selectedEvent)} disabled={evUploadingFile} />
               <span className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 10px', display: 'inline-block' }}>
@@ -488,7 +413,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           )}
         </div>
 
-        {/* AI Executive Summary — used by AI when inviting prospects via Landings */}
         <div className="card" style={{ borderLeft: '3px solid #a78bfa' }}>
           <div className="card-header">
             <h3>🧠 AI Executive Summary</h3>
@@ -517,7 +441,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
                 };
                 return lines.map((line, i) => {
                   if (line.startsWith('### ')) return <h4 key={i} style={{ margin: '12px 0 6px', fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>{parseInline(line.replace('### ', '').replace(/\*\*/g, ''))}</h4>;
-                  if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 14, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0 }}>•</span>{parseInline(line.slice(2))}</div>;
+                  if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 14, marginBottom: 3, position: 'relative' }}><span style={{ position: 'absolute', left: 0 }}>&bull;</span>{parseInline(line.slice(2))}</div>;
                   return <p key={i} style={{ margin: '3px 0' }}>{parseInline(line)}</p>;
                 });
               })()}
@@ -525,13 +449,12 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           ) : (
             <p style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>
               {context || F(selectedEvent, 'Attachment Summary')
-                ? 'Click "✨ Generate" to have AI create an executive summary of this event. This summary will be used automatically when creating Prospect Landings that invite to this event — so the AI writes better personalized invitations.'
+                ? 'Click "✨ Generate" to have AI create an executive summary of this event.'
                 : 'Upload files or add context to the event first. Then you can generate the summary.'}
             </p>
           )}
         </div>
 
-        {/* Invitation Template — editable */}
         <div className="card">
           <div className="card-header">
             <h3>✉️ Invitation Message Template</h3>
@@ -566,7 +489,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
             <div>
               <textarea className="input-field"
                 style={{ width:'100%', minHeight:120, resize:'vertical', fontSize:12, fontFamily:'inherit', lineHeight:1.6 }}
-                placeholder={`Write the base message for inviting stakeholders to this event.\n\nThe AI will use this as a guide to personalize each invitation.\n\nExample:\n"Hi [Name], I wanted to personally invite you to [Event]. Given your role in [Company], I think it's a great opportunity to connect and explore [topic]. Are you planning to attend?"`}
+                placeholder={`Write the base message for inviting stakeholders to this event.\n\nThe AI will use this as a guide to personalize each invitation.`}
                 value={inviteTemplateValue}
                 onChange={e => setInviteTemplateValue(e.target.value)}
               />
@@ -581,7 +504,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           )}
         </div>
 
-        {/* Invited Stakeholders grouped by account — collapsible */}
         <div className="card">
           <div className="card-header" style={{ cursor:'pointer' }} onClick={() => setShowInvited(v => !v)}>
             <h3>✅ Invited Stakeholders ({invitedStakeholders.length})</h3>
@@ -599,7 +521,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
                 const hasPhone = !!F(s, 'Phone number');
                 const hasEmail = !!F(s, 'Email');
                 const hasLinkedin = !!F(s, 'LinkedIn');
-                // Check if invitation was already sent
                 const invSent = eventOutreach.some(o => linkedIds(o, 'Stakeholder').includes(s.id));
                 return (
                   <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, background: 'rgba(91,191,181,0.04)', borderRadius: 6 }}>
@@ -635,11 +556,10 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           </React.Fragment>)}
         </div>
 
-        {/* Suggest more stakeholders to invite */}
         {notInvited.length > 0 && !isPast && (
           <div className="card" style={{ borderLeft: '3px solid var(--globant-warning)' }}>
             <div className="card-header">
-              <h3>🎟️ Suggest More Invitations</h3>
+              <h3>🎫 Suggest More Invitations</h3>
               <button className="action-btn btn-primary" style={{ fontSize: 11 }}
                 onClick={() => generateSmartSuggestions(selectedEvent, notInvited)}
                 disabled={loadingSuggestions}>
@@ -647,7 +567,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
               </button>
             </div>
 
-            {/* AI suggestions */}
             {aiSuggestions.length > 0 && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-green)', marginBottom: 8 }}>
@@ -668,7 +587,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
                           <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
                             {F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}
                           </span>
-                          <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} · {accNames.join(', ')}</span>
+                          <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} &middot; {accNames.join(', ')}</span>
                           <span className="badge badge-accent" style={{ marginLeft: 8, fontSize: 9 }}>{F(s, 'Level of Influence')}</span>
                         </div>
                         <div style={{ display: 'flex', gap: 4 }}>
@@ -685,7 +604,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
               </div>
             )}
 
-            {/* Fallback: influence-based list */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 6 }}>
                 {aiSuggestions.length > 0 ? 'OTHER HIGH-INFLUENCE CONTACTS' : `${notInvited.length} stakeholders not invited — showing top by influence:`}
@@ -708,7 +626,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
                         <span style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
                           {F(s, 'Name')}{F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} · {accNames.join(', ')}</span>
+                        <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>{F(s, 'Role')} &middot; {accNames.join(', ')}</span>
                         <span className="badge badge-accent" style={{ marginLeft: 8, fontSize: 9 }}>{F(s, 'Level of Influence')}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -724,175 +642,164 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           </div>
         )}
 
-        {/* ── Invite by Company ── */}
-        {!isPast && (
-          <div className="card">
-            <div className="card-header">
-              <h3>🏢 Invite by Company</h3>
-            </div>
-            {/* Account filter */}
-            <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
-              <select className="input-field" style={{ fontSize:12, maxWidth:260 }}
-                value={inviteByAccId}
-                onChange={e => { setInviteByAccId(e.target.value); setInviteBySearch(''); }}>
-                <option value="">— All accounts —</option>
-                {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
-                  <option key={a.id} value={a.id}>{F(a,'Account Name')}</option>
-                ))}
-              </select>
-              <input className="input-field" style={{ fontSize:12, maxWidth:220 }}
-                placeholder="Search by name or role..."
-                value={inviteBySearch}
-                onChange={e => setInviteBySearch(e.target.value)} />
-            </div>
-            {(() => {
-              const filtered = stakeholders
-                .filter(s => {
-                  if (!invitedIds.includes(s.id) === false) return false; // skip already invited
-                  if (inviteByAccId && !linkedIds(s,'Account').includes(inviteByAccId)) return false;
-                  if (inviteBySearch) {
-                    const q = inviteBySearch.toLowerCase();
-                    if (!(`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(q)) return false;
-                  }
-                  return !invitedIds.includes(s.id);
-                })
-                .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||''))
-                .slice(0, 30);
-              if (filtered.length === 0) return <p style={{ color:'var(--globant-muted)', fontSize:12 }}>{inviteByAccId || inviteBySearch ? 'No contacts match.' : 'Select a company to see contacts.'}</p>;
-
-              const generateInviteMsg = async (s, mode) => {
-                setInvitePreview({ id: s.id, mode, msg: '', generating: true });
-                const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
-                const role = F(s,'Role') || '';
-                const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,400);
-                const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,200);
-                const accId = linkedIds(s,'Account')[0];
-                const acc = accounts.find(a => a.id === accId);
-                const accName = acc ? F(acc,'Account Name') : '';
-                const industry = acc ? (F(acc,'Industry') || '') : '';
-                const accNews = acc ? (F(acc,'Recent News') || '').slice(0,200) : '';
-                const influence = F(s,'Level of Influence') || '';
-                const sOut = outreach.filter(o => linkedIds(o,'Stakeholder').includes(s.id))
-                  .sort((a,b) => new Date(b.fields?.['Date']||0)-new Date(a.fields?.['Date']||0))
-                  .slice(0,4)
-                  .map(o => `[${F(o,'Channel')||'?'} · ${o.fields?.['Date']?new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'?'}] ${(F(o,'Message')||'').slice(0,150)}`).join('\n');
-                const evName = F(selectedEvent,'Event Name') || '';
-                const evDate = selectedEvent.fields?.['Starting'] ? new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
-                const evContext = F(selectedEvent,'Aditional context') || '';
-                const template = F(selectedEvent,'Stakeholder Invitation') || '';
-                const isInvite = mode === 'invite';
-                const prompt = `B2B sales rep. Write ONE short personalized message. Max 3 sentences + subject if email.\n\nCONTACT: ${sName} | ${role}${influence ? ` (${influence})` : ''} | ${accName}${industry ? ` — ${industry}` : ''}\n${pain ? `Pain: ${pain.slice(0,200)}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews.slice(0,150)}` : ''}${accNews ? `\nCompany news: ${accNews.slice(0,150)}` : ''}\nHistory: ${sOut || 'First contact'}\n\nEVENT: ${evName}${evDate ? ` (${evDate})` : ''}${evContext ? ` — ${evContext.slice(0,100)}` : ''}\n${template ? `Template tone/angle to adapt (DO NOT copy verbatim — rewrite for this specific contact):\n"${template.slice(0,300)}"` : ''}\n\n${isInvite\n  ? `MISSION: Invite ${sName} to ${evName}. Personalize to their role/pain. Casual, direct. Ask if they're attending.`\n  : `MISSION: Follow up after meeting ${sName} at ${evName}. Reference meeting naturally. One clear next step.`\n}\nBANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.\nSender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}\nIf email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the message.`;
-                try {
-                  const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
-                  setInvitePreview({ id: s.id, mode, msg: msg.trim(), generating: false });
-                } catch(e) {
-                  console.error('generateInviteMsg failed:', e);
-                  const fallback = isInvite
-                    ? `Hi ${sName}, I wanted to personally invite you to ${evName}${evDate ? ` on ${evDate}` : ''}. Given your role at ${accName}, I think it could be a great opportunity to connect. Are you planning to attend?`
-                    : `Hi ${sName}, it was great meeting you at ${evName}. I'd love to continue our conversation — do you have time for a quick call this week?`;
-                  setInvitePreview({ id: s.id, mode, msg: fallback, generating: false });
+        <div className="card">
+          <div className="card-header">
+            <h3>🏢 Invite by Company</h3>
+          </div>
+          <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+            <select className="input-field" style={{ fontSize:12, maxWidth:260 }}
+              value={inviteByAccId}
+              onChange={e => { setInviteByAccId(e.target.value); setInviteBySearch(''); }}>
+              <option value="">— All accounts —</option>
+              {[...accounts].sort((a,b) => (F(a,'Account Name')||'').localeCompare(F(b,'Account Name')||'')).map(a => (
+                <option key={a.id} value={a.id}>{F(a,'Account Name')}</option>
+              ))}
+            </select>
+            <input className="input-field" style={{ fontSize:12, maxWidth:220 }}
+              placeholder="Search by name or role..."
+              value={inviteBySearch}
+              onChange={e => setInviteBySearch(e.target.value)} />
+          </div>
+          {(() => {
+            const filtered = stakeholders
+              .filter(s => {
+                if (!invitedIds.includes(s.id) === false) return false;
+                if (inviteByAccId && !linkedIds(s,'Account').includes(inviteByAccId)) return false;
+                if (inviteBySearch) {
+                  const q = inviteBySearch.toLowerCase();
+                  if (!(`${F(s,'Name')||''} ${F(s,'Last name')||''} ${F(s,'Role')||''}`).toLowerCase().includes(q)) return false;
                 }
-              };
+                return !invitedIds.includes(s.id);
+              })
+              .sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||''))
+              .slice(0, 30);
+            if (filtered.length === 0) return <p style={{ color:'var(--globant-muted)', fontSize:12 }}>{inviteByAccId || inviteBySearch ? 'No contacts match.' : 'Select a company to see contacts.'}</p>;
 
-              const sendInviteMsg = (_s, channel) => {
-                if (!invitePreview?.msg) return;
-                // Always look up by invitePreview.id — avoids closure/re-render mismatch
-                const s = stakeholders.find(x => x.id === invitePreview.id) || _s;
-                const msg = invitePreview.msg;
-                const email = F(s,'Email')||'';
-                const phone = F(s,'Phone number')||'';
-                const linkedin = F(s,'LinkedIn')||'';
-                let subject = '', body = msg;
-                if (channel === 'Email') {
-                  const lines = body.split('\n');
-                  const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
-                  if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
-                  else { subject = `${F(selectedEvent,'Event Name')||'Event'} — ${F(s,'Name')||''}`; }
-                }
-                // Open channel with the GENERATED message (only once)
-                if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
-                else if (channel==='Email'&&email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
-                else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(msg).catch(()=>{}); window.open(linkedin,'_blank'); }
-                // Log activity + register as invited (without reopening channel)
-                const companyIds = linkedIds(s,'Account');
-                const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
-                const evName = F(selectedEvent,'Event Name')||'';
-                const a = api || new AirtableAPI();
-                a.createRecord(TABLE_IDS.outreach, {
-                  'Activity Name': `Event ${invitePreview.mode==='invite'?'Invite':'Follow-up'}: ${sName} → ${evName} — ${new Date().toLocaleDateString('en-US')}`,
-                  'Account': companyIds, 'Stakeholder': [s.id],
-                  'Channel': channel, 'Date': new Date().toISOString(),
-                  'Status': 'Sent', 'Message': msg,
-                  'Notes': `${invitePreview.mode==='invite'?'Event invitation':'Post-event follow-up'} for "${evName}"`,
-                  'Logged By': CURRENT_USER?.name || '',
-                }).then(async () => {
-                  // Register as invited/met
-                  const evCached = (data.events||[]).find(e => e.id === selectedEventId);
-                  const currentInvited = evCached ? linkedIds(evCached,'Stakeholders invited') : [];
-                  await a.updateRecord(TABLE_IDS.events, selectedEventId, {
-                    'Stakeholders invited': [...new Set([...currentInvited, s.id])],
-                  }).catch(e => console.error('Event invite register failed:', e));
-                  await activateAccountIfNeeded(a, companyIds, data.accounts);
-                  await updateStakeholderStatus(a, s.id, 'Contacted', data.stakeholders);
-                  if (onLogActivity) onLogActivity();
-                }).catch(e => console.error('sendInviteMsg log failed:', e));
-                setInvitePreview(null);
-              };
+            const generateInviteMsg = async (s, mode) => {
+              setInvitePreview({ id: s.id, mode, msg: '', generating: true });
+              const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+              const role = F(s,'Role') || '';
+              const pain = (F(s,'Pain Points (Generated)') || F(s,'Pain points') || '').slice(0,400);
+              const linkedinNews = (F(s,'LinkedIn News (Generated)') || F(s,'Linkedin lates news') || '').slice(0,200);
+              const accId = linkedIds(s,'Account')[0];
+              const acc = accounts.find(a => a.id === accId);
+              const accName = acc ? F(acc,'Account Name') : '';
+              const industry = acc ? (F(acc,'Industry') || '') : '';
+              const accNews = acc ? (F(acc,'Recent News') || '').slice(0,200) : '';
+              const influence = F(s,'Level of Influence') || '';
+              const sOut = outreach.filter(o => linkedIds(o,'Stakeholder').includes(s.id))
+                .sort((a,b) => new Date(b.fields?.['Date']||0)-new Date(a.fields?.['Date']||0))
+                .slice(0,4)
+                .map(o => `[${F(o,'Channel')||'?'} · ${o.fields?.['Date']?new Date(o.fields['Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'?'}] ${(F(o,'Message')||'').slice(0,150)}`).join('\n');
+              const evName = F(selectedEvent,'Event Name') || '';
+              const evDate = selectedEvent.fields?.['Starting'] ? new Date(selectedEvent.fields['Starting']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
+              const evContext = F(selectedEvent,'Aditional context') || '';
+              const template = F(selectedEvent,'Stakeholder Invitation') || '';
+              const isInvite = mode === 'invite';
+              const prompt = `B2B sales rep. Write ONE short personalized message. Max 3 sentences + subject if email.\n\nCONTACT: ${sName} | ${role}${influence ? ` (${influence})` : ''} | ${accName}${industry ? ` — ${industry}` : ''}\n${pain ? `Pain: ${pain.slice(0,200)}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews.slice(0,150)}` : ''}${accNews ? `\nCompany news: ${accNews.slice(0,150)}` : ''}\nHistory: ${sOut || 'First contact'}\n\nEVENT: ${evName}${evDate ? ` (${evDate})` : ''}${evContext ? ` — ${evContext.slice(0,100)}` : ''}\n${template ? `Template tone/angle to adapt (DO NOT copy verbatim — rewrite for this specific contact):\n"${template.slice(0,300)}"` : ''}\n\n${isInvite\n  ? `MISSION: Invite ${sName} to ${evName}. Personalize to their role/pain. Casual, direct. Ask if they're attending.`\n  : `MISSION: Follow up after meeting ${sName} at ${evName}. Reference meeting naturally. One clear next step.`\n}\nBANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.\nSender: ${COMPANY_PROFILE.senderName||'Ale'}, ${COMPANY_PROFILE.companyName||'Oike'}\nIf email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the message.`;
+              try {
+                const msg = await callOpenAI({ prompt, temperature: 0.75, max_tokens: 250 });
+                setInvitePreview({ id: s.id, mode, msg: msg.trim(), generating: false });
+              } catch(e) {
+                console.error('generateInviteMsg failed:', e);
+                const fallback = isInvite
+                  ? `Hi ${sName}, I wanted to personally invite you to ${evName}${evDate ? ` on ${evDate}` : ''}. Given your role at ${accName}, I think it could be a great opportunity to connect. Are you planning to attend?`
+                  : `Hi ${sName}, it was great meeting you at ${evName}. I'd love to continue our conversation — do you have time for a quick call this week?`;
+                setInvitePreview({ id: s.id, mode, msg: fallback, generating: false });
+              }
+            };
 
-              return (
-                <div style={{ maxHeight:400, overflowY:'auto' }}>
-                  {filtered.map(s => {
-                    const accNames = resolveLinked(s,'Account',accounts,'Account Name');
-                    const hasPhone = !!F(s,'Phone number');
-                    const hasEmail = !!F(s,'Email');
-                    const hasLinkedin = !!F(s,'LinkedIn');
-                    const isActive = invitePreview?.id === s.id;
-                    return (
-                      <div key={s.id} style={{ marginBottom:6, borderRadius:8, border:`1px solid ${isActive?'var(--globant-green)':'var(--globant-border)'}`, overflow:'hidden' }}>
-                        {/* Contact row */}
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'rgba(255,255,255,0.03)' }}>
-                          <div>
-                            <span style={{ fontWeight:600, fontSize:13, cursor:'pointer', color:'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
-                              {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
-                            </span>
-                            <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}{accNames.length>0 ? ` · ${accNames[0]}` : ''}</span>
-                            {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ marginLeft:6, fontSize:9 }}>{F(s,'Level of Influence')}</span>}
-                          </div>
-                          <div style={{ display:'flex', gap:4 }}>
-                            <button className="action-btn btn-primary" style={{ fontSize:10, padding:'4px 10px', fontWeight:700 }}
-                              disabled={isActive && invitePreview.generating}
-                              onClick={() => invitePreview?.id===s.id && invitePreview.mode==='invite' ? setInvitePreview(null) : generateInviteMsg(s,'invite')}>
-                              {isActive && invitePreview.mode==='invite' && invitePreview.generating ? '⏳' : '📨 Invite'}
-                            </button>
-                            <button className="action-btn btn-ghost" style={{ fontSize:10, padding:'4px 10px' }}
-                              disabled={isActive && invitePreview.generating}
-                              onClick={() => invitePreview?.id===s.id && invitePreview.mode==='followup' ? setInvitePreview(null) : generateInviteMsg(s,'followup')}>
-                              {isActive && invitePreview.mode==='followup' && invitePreview.generating ? '⏳' : '🤝 Met them'}
-                            </button>
+            const sendInviteMsg = (_s, channel) => {
+              if (!invitePreview?.msg) return;
+              const s = stakeholders.find(x => x.id === invitePreview.id) || _s;
+              const msg = invitePreview.msg;
+              const email = F(s,'Email')||'';
+              const phone = F(s,'Phone number')||'';
+              const linkedin = F(s,'LinkedIn')||'';
+              let subject = '', body = msg;
+              if (channel === 'Email') {
+                const lines = body.split('\n');
+                const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+                if (si !== -1) { subject = lines[si].replace(/^subject:\s*/i,'').trim(); body = lines.slice(si+1).join('\n').trim(); }
+                else { subject = `${F(selectedEvent,'Event Name')||'Event'} — ${F(s,'Name')||''}`; }
+              }
+              if (channel==='WhatsApp'&&phone) window.open(`https://wa.me/${String(phone).replace(/[^0-9+]/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+              else if (channel==='Email'&&email) window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+              else if (channel==='LinkedIn'&&linkedin) { navigator.clipboard.writeText(msg).catch(()=>{}); window.open(linkedin,'_blank'); }
+              const companyIds = linkedIds(s,'Account');
+              const sName = `${F(s,'Name')||''} ${F(s,'Last name')||''}`.trim();
+              const evName = F(selectedEvent,'Event Name')||'';
+              const a = api || new AirtableAPI();
+              a.createRecord(TABLE_IDS.outreach, {
+                'Activity Name': `Event ${invitePreview.mode==='invite'?'Invite':'Follow-up'}: ${sName} → ${evName} — ${new Date().toLocaleDateString('en-US')}`,
+                'Account': companyIds, 'Stakeholder': [s.id],
+                'Channel': channel, 'Date': new Date().toISOString(),
+                'Status': 'Sent', 'Message': msg,
+                'Notes': `${invitePreview.mode==='invite'?'Event invitation':'Post-event follow-up'} for "${evName}"`,
+                'Logged By': CURRENT_USER?.name || '',
+              }).then(async () => {
+                const evCached = (data.events||[]).find(e => e.id === selectedEventId);
+                const currentInvited = evCached ? linkedIds(evCached,'Stakeholders invited') : [];
+                await a.updateRecord(TABLE_IDS.events, selectedEventId, {
+                  'Stakeholders invited': [...new Set([...currentInvited, s.id])],
+                }).catch(e => console.error('Event invite register failed:', e));
+                await activateAccountIfNeeded(a, companyIds, data.accounts);
+                await updateStakeholderStatus(a, s.id, 'Contacted', data.stakeholders);
+                if (onLogActivity) onLogActivity();
+              }).catch(e => console.error('sendInviteMsg log failed:', e));
+              setInvitePreview(null);
+            };
+
+            return (
+              <div style={{ maxHeight:400, overflowY:'auto' }}>
+                {filtered.map(s => {
+                  const accNames = resolveLinked(s,'Account',accounts,'Account Name');
+                  const hasPhone = !!F(s,'Phone number');
+                  const hasEmail = !!F(s,'Email');
+                  const hasLinkedin = !!F(s,'LinkedIn');
+                  const isActive = invitePreview?.id === s.id;
+                  return (
+                    <div key={s.id} style={{ marginBottom:6, borderRadius:8, border:`1px solid ${isActive?'var(--globant-green)':'var(--globant-border)'}`, overflow:'hidden' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'rgba(255,255,255,0.03)' }}>
+                        <div>
+                          <span style={{ fontWeight:600, fontSize:13, cursor:'pointer', color:'var(--globant-green)' }} onClick={() => setEvHistoryStakeholder(s)}>
+                            {F(s,'Name')}{F(s,'Last name') ? ` ${F(s,'Last name')}` : ''}
+                          </span>
+                          <span style={{ fontSize:11, color:'var(--globant-muted)', marginLeft:8 }}>{F(s,'Role')}{accNames.length>0 ? ` · ${accNames[0]}` : ''}</span>
+                          {F(s,'Level of Influence') && <span className="badge badge-accent" style={{ marginLeft:6, fontSize:9 }}>{F(s,'Level of Influence')}</span>}
+                        </div>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <button className="action-btn btn-primary" style={{ fontSize:10, padding:'4px 10px', fontWeight:700 }}
+                            disabled={isActive && invitePreview.generating}
+                            onClick={() => invitePreview?.id===s.id && invitePreview.mode==='invite' ? setInvitePreview(null) : generateInviteMsg(s,'invite')}>
+                            {isActive && invitePreview.mode==='invite' && invitePreview.generating ? '⏳' : '📨 Invite'}
+                          </button>
+                          <button className="action-btn btn-ghost" style={{ fontSize:10, padding:'4px 10px' }}
+                            disabled={isActive && invitePreview.generating}
+                            onClick={() => invitePreview?.id===s.id && invitePreview.mode==='followup' ? setInvitePreview(null) : generateInviteMsg(s,'followup')}>
+                            {isActive && invitePreview.mode==='followup' && invitePreview.generating ? '⏳' : '🤝 Met them'}
+                          </button>
+                        </div>
+                      </div>
+                      {isActive && !invitePreview.generating && invitePreview.msg && (
+                        <div style={{ padding:'10px 12px', background:'rgba(91,191,181,0.06)', borderTop:'1px solid var(--globant-border)' }}>
+                          <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, marginBottom:10, whiteSpace:'pre-wrap' }}>{invitePreview.msg}</div>
+                          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                            {hasEmail && <button className="action-btn btn-email" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'Email')}>✉️ Send via Email</button>}
+                            {hasPhone && <button className="action-btn btn-whatsapp" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'WhatsApp')}>💬 Send via WhatsApp</button>}
+                            {hasLinkedin && <button className="action-btn btn-linkedin" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'LinkedIn')}>🔗 Send via LinkedIn</button>}
+                            <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={() => generateInviteMsg(s, invitePreview.mode)}>🔄 Regenerate</button>
                           </div>
                         </div>
-                        {/* Preview panel */}
-                        {isActive && !invitePreview.generating && invitePreview.msg && (
-                          <div style={{ padding:'10px 12px', background:'rgba(91,191,181,0.06)', borderTop:'1px solid var(--globant-border)' }}>
-                            <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.6, marginBottom:10, whiteSpace:'pre-wrap' }}>{invitePreview.msg}</div>
-                            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                              {hasEmail && <button className="action-btn btn-email" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'Email')}>✉️ Send via Email</button>}
-                              {hasPhone && <button className="action-btn btn-whatsapp" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'WhatsApp')}>💬 Send via WhatsApp</button>}
-                              {hasLinkedin && <button className="action-btn btn-linkedin" style={{ fontSize:11 }} onClick={() => sendInviteMsg(s,'LinkedIn')}>🔗 Send via LinkedIn</button>}
-                              <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={() => generateInviteMsg(s, invitePreview.mode)}>🔄 Regenerate</button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-          </div>
-        )}
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
 
-        {/* Stakeholder History Modal */}
         {evHistoryStakeholder && (
           <StakeholderHistoryModal
             stakeholder={evHistoryStakeholder}
@@ -906,7 +813,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           />
         )}
 
-        {/* AI Message Modal */}
         {evSelectedStakeholder && (
           <AIMessageModal
             stakeholder={evSelectedStakeholder}
@@ -917,7 +823,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
           />
         )}
 
-        {/* Edit Event Modal — must be inside detail view (not list view) */}
         {editingEvent && (
           <EditModal
             title={`Edit: ${F(editingEvent, 'Event Name') || 'Event'}`}
@@ -942,7 +847,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
     );
   }
 
-  // Events list view
   return (
     <div>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -955,10 +859,9 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
         </button>
       </div>
 
-      {/* Add Event Form */}
       {showAddEvent && (
         <div className="card" style={{ borderLeft: '3px solid var(--globant-green)', marginBottom: 16 }}>
-          <div className="card-header"><h3>🎨 New Event</h3></div>
+          <div className="card-header"><h3>🎪 New Event</h3></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             <div>
               <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EVENT NAME *</label>
@@ -982,7 +885,7 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
             <textarea className="input-field" style={{ width: '100%', minHeight: 60, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }} placeholder="Event description, theme, target audience..." value={evNewContext} onChange={e => setEvNewContext(e.target.value)} />
           </div>
           <div style={{ marginTop: 10 }}>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ATTACHMENT URL <span style={{ fontWeight: 400, textTransform: 'none' }}>(Google Drive / Dropbox / any public link)</span></label>
+            <label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ATTACHMENT URL</label>
             <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://drive.google.com/..." value={evNewAttachUrl} onChange={e => setEvNewAttachUrl(e.target.value)} />
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -990,12 +893,10 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
               {evCreating ? '⏳ Creating...' : '🚀 Create Event'}
             </button>
             <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowAddEvent(false)}>Cancel</button>
-            <span style={{ fontSize: 11, color: 'var(--globant-muted)', marginLeft: 8 }}>💡 Make sure "Website" and "Attachments" fields exist in your Events table in Airtable</span>
           </div>
         </div>
       )}
 
-      {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
         <div className="card" style={{ textAlign: 'center', padding: '18px 12px', background: 'linear-gradient(135deg, rgba(91,191,181,0.12) 0%, rgba(91,191,181,0.03) 100%)' }}>
           <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--globant-green)', lineHeight: 1 }}>{events.length}</div>
@@ -1015,7 +916,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
         </div>
       </div>
 
-      {/* Upcoming Events */}
       {upcoming.length > 0 && (
         <div className="card" style={{ borderLeft: '3px solid var(--globant-green)' }}>
           <div className="card-header"><h3>🟢 Upcoming Events</h3></div>
@@ -1047,7 +947,6 @@ Return a JSON array of objects with EXACTLY this format (no markdown, no code fe
         </div>
       )}
 
-      {/* Past Events */}
       {past.length > 0 && (
         <div className="card">
           <div className="card-header"><h3>📁 Past Events</h3></div>
