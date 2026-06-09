@@ -70,7 +70,7 @@ export async function loadClientConfig() {
   }
 }
 
-export const channelIcon = { WhatsApp: '\u{1F4AC}', Email: '✉️', LinkedIn: '\u{1F517}', Call: '\u{1F4DE}', Meeting: '\u{1F4C5}' };
+export const channelIcon = { WhatsApp: '💬', Email: '✉️', LinkedIn: '🔗', Call: '📞', Meeting: '📅' };
 
 // ============ URL NAV STATE ============
 export function navSetUrl(page, id) {
@@ -104,27 +104,27 @@ export const BENCH_MEETING_LOW  = 2;
 
 export const CHANNEL_BENCHMARKS = {
   'Email': {
-    label: 'Cold Email', icon: '\u{1F4E7}',
+    label: 'Cold Email', icon: '📧',
     acceptable: 3, good: 6, excellent: 10,
     note: 'Belkins 2025: 5.8% avg (down from 6.8% in 2023). Hyper-segmented (1–2 per account) reaches 7.8%.',
   },
   'LinkedIn': {
-    label: 'LinkedIn', icon: '\u{1F4BC}',
+    label: 'LinkedIn', icon: '💼',
     acceptable: 5, good: 8, excellent: 15,
     note: 'Cold/connection: 5–9%. With personalized msg: 9.36% vs 5.44% without. Warm/1st-degree/events: 10–12%+.',
   },
   'WhatsApp': {
-    label: 'WhatsApp', icon: '\u{1F4AC}',
+    label: 'WhatsApp', icon: '💬',
     acceptable: 25, good: 40, excellent: 50,
     note: 'Only valid for warm/opt-in contacts. Essential in LATAM. Not comparable to cold email.',
   },
   'Phone': {
-    label: 'Phone / Cold Call', icon: '\u{1F4DE}',
+    label: 'Phone / Cold Call', icon: '📞',
     acceptable: 2, good: 4, excellent: 6,
     note: 'Measured as dial-to-meeting %, not reply rate. SalesHive avg: ~2.3–2.5%. Top teams: 5–8%. Europe (Cognism): 6% success rate.',
   },
   'SMS': {
-    label: 'SMS', icon: '\u{1F4F1}',
+    label: 'SMS', icon: '📱',
     acceptable: 25, good: 35, excellent: 45,
     note: 'Warm/opt-in only. 45% response rate (general). For cold B2B: use only for confirmations or reactivation.',
   },
@@ -291,6 +291,9 @@ window.fetch = function(url, options) {
 if (!localStorage.getItem('openai_key')) {
   localStorage.setItem('openai_key', 'managed-by-backend');
 }
+
+// ============ ONBOARDING ============
+export const ONBOARDING_KEY = 'oike_onboarding_complete';
 
 // ============ BRANDING ============
 export const BRANDING_LS_KEY = 'oike_proposal_branding';

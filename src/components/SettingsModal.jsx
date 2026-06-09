@@ -7,7 +7,7 @@ import {
   BENCH_REPLY_HIGH, BENCH_REPLY_LOW, BENCH_MEETING_HIGH, BENCH_MEETING_LOW,
   CHANNEL_BENCHMARKS, MESSAGE_PROMPTS, MESSAGE_PROMPT_DEFAULTS, saveMessagePrompts,
   resolvePromptTemplate, saveCompanyProfile, channelIcon, logoutUser,
-  CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY,
+  CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY, ONBOARDING_KEY,
 } from '../globals.js';
 import {
   F, linkedIds, resolveLinked, InfoTip, REPLY_STATUSES, computeEnrichment,
@@ -160,7 +160,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
             </div>
 
             {[
-              { key: 'first', label: '🟢 First Contact', hint: "The very first message to a prospect who doesn't know you yet." },
+              { key: 'first', label: '🟢 First Contact', hint: 'The very first message to a prospect who doesn\'t know you yet.' },
               { key: 'followup', label: '🔵 Follow-up', hint: 'Subsequent touches. Has access to full conversation history + contact pain points.' },
               { key: 'breakup', label: '💀 Breakup', hint: 'Final message after multiple attempts with no response.' },
             ].map(({ key, label, hint }) => (
@@ -249,7 +249,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
               </div>
             </div>
 
-            {/* Sender photo (face) */}
+            {/* Sender photo (face) — used in Landings, Proposals & Reports near sender signature */}
             <div>
               <label style={labelStyle}>Your photo (face)</label>
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -280,7 +280,8 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                     onChange={e => setBranding(p=>({...p, senderPhotoUrl: e.target.value.trim()}))}
                   />
                   <div style={{ fontSize:10, color:'var(--globant-muted)', fontStyle:'italic', lineHeight:1.4 }}>
-                    Upload = shown in the app. Public URL = shown in emails (Gmail blocks embedded images).
+                    Upload = shown in the app. Public URL = shown in emails (Gmail blocks embedded images).<br/>
+                    Get your URL from LinkedIn, Google Drive (share → copy link), or any image host.
                   </div>
                   {branding.senderPhoto && (
                     <button onClick={() => setBranding(p=>({...p,senderPhoto:'',senderPhotoUrl:''}))}
@@ -292,19 +293,21 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
               </div>
             </div>
 
-            {/* Sender title */}
+            {/* Sender title / tagline */}
             <div>
               <label style={labelStyle}>Your title / tagline</label>
               <input style={inputStyle} value={branding.senderTitle || ''} onChange={e=>setBranding(p=>({...p,senderTitle:e.target.value}))} placeholder="e.g. Founder · Oike · Sales Intelligence" />
+              <div style={{ fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' }}>Shown below your name, next to your photo.</div>
             </div>
 
-            {/* Color palette */}
+            {/* Color palette — 4 colors */}
             <div>
               <label style={labelStyle}>Color palette (4 colores)</label>
               <div style={{ fontSize:10, color:'var(--globant-muted)', marginBottom:10, fontStyle:'italic' }}>
                 Primary = CTA + headers. Secondary = soporte / accents. Tertiary = highlights / badges. Dark = fondos oscuros.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {/* Presets — 4 colors each */}
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                   {[
                     { label:'Oike',     primary:'#5BBFB5', secondary:'#A78BFA', tertiary:'#FBBF24', dark:'#0D0D1A' },
@@ -341,6 +344,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                     );
                   })}
                 </div>
+                {/* 4 Custom pickers in 2x2 grid */}
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                   {[
                     { key:'accentColor',    label:'PRIMARY',   default:'#5BBFB5', sub:'CTAs · Headers · Borders' },
@@ -363,6 +367,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
                     </div>
                   ))}
                 </div>
+                {/* Live preview strip with all 4 colors */}
                 <div style={{ borderRadius:8, overflow:'hidden', border:'1px solid var(--globant-border)', display:'flex', height:48 }}>
                   <div style={{ flex:2, background: branding.darkColor || '#0D0D1A', display:'flex', alignItems:'center', paddingLeft:14 }}>
                     <span style={{ fontSize:12, fontWeight:800, color: branding.accentColor || '#5BBFB5' }}>Hero</span>
@@ -516,7 +521,7 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
             {/* Voice & Tone section */}
             <div style={{ borderTop: '1px solid var(--globant-border)', paddingTop: 14, marginTop: 2 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                ✍️ Voice &amp; Tone
+                ✍️ Voice & Tone
                 <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--globant-muted)' }}>— how the AI should sound when writing your messages</span>
               </div>
 
@@ -559,9 +564,5 @@ function SettingsModal({ onClose, gmailReturnStatus = '' }) {
     </div>
   );
 }
-
-// ============ ONBOARDING WIZARD ============
-const ONBOARDING_KEY = 'oike_onboarding_complete';
-
 
 export default SettingsModal;

@@ -7,7 +7,7 @@ import {
   BENCH_REPLY_HIGH, BENCH_REPLY_LOW, BENCH_MEETING_HIGH, BENCH_MEETING_LOW,
   CHANNEL_BENCHMARKS, MESSAGE_PROMPTS, MESSAGE_PROMPT_DEFAULTS, saveMessagePrompts,
   resolvePromptTemplate, saveCompanyProfile, channelIcon, logoutUser,
-  CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY,
+  CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY, ONBOARDING_KEY,
   AUTH_TOKEN as _AT, CURRENT_USER as _CU, loadClientConfig,
 } from './globals.js';
 import {
@@ -44,8 +44,6 @@ import ActivateScreen from './components/ActivateScreen.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import OnboardingWizard from './components/OnboardingWizard.jsx';
-
-const ONBOARDING_KEY = 'oike_onboarding_done';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!AUTH_TOKEN && !!CURRENT_USER);
@@ -390,7 +388,7 @@ function App() {
     { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true, group: 1 },
     { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true, group: 1 },
     // Group 2 — Outreach & Pipeline
-    { icon: '🎤', label: 'Events', key: 'events', group: 2 },
+    { icon: '🎪', label: 'Events', key: 'events', group: 2 },
     { icon: '📈', label: 'Activity Tracker', key: 'activity', group: 2 },
     // Group 3 — Intelligence & Reporting
     { icon: '🧠', label: 'Insights', key: 'insights', group: 3 },
