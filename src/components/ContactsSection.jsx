@@ -16,6 +16,7 @@ import {
   STAKEHOLDER_STATUS_PROTECTED, activateAccountIfNeeded,
   formatCurrency, formatDate, strSimilarity, FileNotesRenderer,
 } from '../utils.js';
+import StakeholderHistoryModal from './StakeholderHistoryModal.jsx';
 
 
 function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, goToAccount }) {
@@ -490,7 +491,13 @@ function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord
       const industry = acc ? F(acc,'Industry') : '';
       const news = acc ? (F(acc,'Recent News')||'').slice(0,300) : '';
       try {
-        const prompt = `B2B sales analyst. Generate 3-5 specific pain points for this stakeholder.\nPERSON: ${sName} | ${role}\nCOMPANY: ${accName}${industry ? ` | ${industry}` : ''}\n${news ? `COMPANY NEWS: ${news}` : ''}\nSELLER: ${COMPANY_PROFILE.companyName} — ${COMPANY_PROFILE.services}\n\nPain points must be specific to their role, reference industry challenges, and connect to where ${COMPANY_PROFILE.companyName} can help. Bullet points, 1-2 sentences each. Write ONLY the pain points.`;
+        const prompt = `B2B sales analyst. Generate 3-5 specific pain points for this stakeholder.
+PERSON: ${sName} | ${role}
+COMPANY: ${accName}${industry ? ` | ${industry}` : ''}
+${news ? `COMPANY NEWS: ${news}` : ''}
+SELLER: ${COMPANY_PROFILE.companyName} — ${COMPANY_PROFILE.services}
+
+Pain points must be specific to their role, reference industry challenges, and connect to where ${COMPANY_PROFILE.companyName} can help. Bullet points, 1-2 sentences each. Write ONLY the pain points.`;
         const result = await callOpenAI({ prompt, temperature: 0.7, max_tokens: 350 });
         await a.updateRecord(TABLE_IDS.stakeholders, s.id, { 'Pain Points (Generated)': result });
         if (onUpdateRecord) onUpdateRecord('stakeholders', s.id, { 'Pain Points (Generated)': result });
