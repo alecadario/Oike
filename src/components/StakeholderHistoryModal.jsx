@@ -783,7 +783,7 @@ Format as bullet points. Be concise (1-2 sentences each). Write ONLY the pain po
             : recLower.includes('call') || recLower.includes('llamada') ? 'Call'
             : null;
           // Extract suggested angle text (between quotes or after "Suggested angle:")
-          const angleMatch = aiRec.match(/["“]([^"“”]{20,})["”]/) || aiRec.match(/(?:suggested angle|ángulo sugerido)[^:]*:\s*["“]?([^"”\n]{20,})/i);
+          const angleMatch = aiRec.match(/[""]([^"""]{20,})[""]/) || aiRec.match(/(?:suggested angle|ángulo sugerido)[^:]*:\s*[""]?([^""\n]{20,})/i);
           const suggestedMsg = angleMatch ? angleMatch[1].trim() : '';
           // Render **bold** markdown inline
           const renderMd = (text) => {
