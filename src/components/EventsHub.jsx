@@ -16,6 +16,7 @@ import {
   STAKEHOLDER_STATUS_PROTECTED, activateAccountIfNeeded,
   formatCurrency, formatDate, strSimilarity, FileNotesRenderer,
 } from '../utils.js';
+import StakeholderHistoryModal from './StakeholderHistoryModal.jsx';
 
 
 function EventsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, navigateToEventId, clearNavigateEvent }) {

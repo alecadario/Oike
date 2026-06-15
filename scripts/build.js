@@ -14,6 +14,7 @@ async function build() {
     jsxFragment: 'React.Fragment',
     loader: { '.js': 'jsx' },
     minify: true,
+    treeShaking: false,
     logLevel: 'info',
   });
 
