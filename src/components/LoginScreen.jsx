@@ -7,7 +7,7 @@ import {
   BENCH_REPLY_HIGH, BENCH_REPLY_LOW, BENCH_MEETING_HIGH, BENCH_MEETING_LOW,
   CHANNEL_BENCHMARKS, MESSAGE_PROMPTS, MESSAGE_PROMPT_DEFAULTS, saveMessagePrompts,
   resolvePromptTemplate, saveCompanyProfile, channelIcon, logoutUser,
-  CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY,
+  CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY, loginUser,
 } from '../globals.js';
 import {
   F, linkedIds, resolveLinked, InfoTip, REPLY_STATUSES, computeEnrichment,
