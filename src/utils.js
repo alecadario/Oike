@@ -38,7 +38,7 @@ export const InfoTip = ({ text }) => (
   <span className="info-tip">ⓘ<span className="info-tip-text">{text}</span></span>
 );
 
-// ── Data Enrichment ────────────────────────────────────────────
+// ── Data Enrichment ─────────────────────────────────────────────────────────
 export const REPLY_STATUSES = new Set(['Replied','Received','Meeting Booked','Meeting Confirmed','Interested','Positive Reply']);
 
 export const computeEnrichment = (results) => {
