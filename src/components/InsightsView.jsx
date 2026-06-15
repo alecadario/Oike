@@ -396,7 +396,7 @@ Write in English. Be direct. Quote specific numbers from the data above.`;
   // Events utilization
   if (upcomingEvents.length > 0) {
     const totalInvited = upcomingEvents.reduce((sum, ev) => sum + linkedIds(ev, 'Stakeholders invited').length, 0);
-    improvements.push({ icon: '\ud83c�', priority: 'medium', title: 'Leverage Events', text: `${upcomingEvents.length} upcoming event${upcomingEvents.length > 1 ? 's' : ''} with ${totalInvited} stakeholder${totalInvited !== 1 ? 's' : ''} invited. Use events as warm openers for new stakeholders.` });
+    improvements.push({ icon: '🎫', priority: 'medium', title: 'Leverage Events', text: `${upcomingEvents.length} upcoming event${upcomingEvents.length > 1 ? 's' : ''} with ${totalInvited} stakeholder${totalInvited !== 1 ? 's' : ''} invited. Use events as warm openers for new stakeholders.` });
   }
 
   // Solutions coverage
@@ -614,7 +614,7 @@ Write in English. Be direct. Quote specific numbers from the data above.`;
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '18px 12px', borderBottom: bouncedCount > 0 ? '3px solid #ea580c' : undefined }}>
           <div style={{ fontSize: 32, fontWeight: 800, color: bouncedCount > 0 ? '#ea580c' : 'var(--globant-muted)', lineHeight: 1 }}>{bouncedCount}</div>
-          <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>💭 Bounced</div>
+          <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 6 }}>📭 Bounced</div>
           {bouncedCount > 0 && <div style={{ fontSize: 9, color: '#ea580c', marginTop: 4, fontWeight: 600 }}>{bouncedRate}% of touches · fix emails</div>}
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '18px 12px' }}>
