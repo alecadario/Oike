@@ -8,6 +8,7 @@ import {
   CHANNEL_BENCHMARKS, MESSAGE_PROMPTS, MESSAGE_PROMPT_DEFAULTS, saveMessagePrompts,
   resolvePromptTemplate, saveCompanyProfile, channelIcon, logoutUser,
   CLIENT_CONFIG, AUTH_TOKEN, loadBranding, BRANDING_LS_KEY, ONBOARDING_KEY,
+  getAuthHeaders,
 } from '../globals.js';
 import {
   F, linkedIds, resolveLinked, InfoTip, REPLY_STATUSES, computeEnrichment,
