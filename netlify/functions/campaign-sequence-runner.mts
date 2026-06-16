@@ -11,6 +11,7 @@ const T = {
   outreach:     'tblAvzPQnug9VBcX5',
   stakeholders: 'tblwwNrPg6q2jYxfv',
   accounts:     'tblkeZ9zXiH2YQJu0',
+  solutions:    'tbl1Ji8Mr8eBcAf15',
 };
 
 // ── Types ──
@@ -126,38 +127,118 @@ async function createGmailDraft(to: string, subject: string, body: string, acces
   return data.id || null;
 }
 
+// ── Offering auto-match (mirrors getBestOffering in MessageLab) ──
+function getBestOffering(acc: any | null, solutions: any[]): any | null {
+  if (!solutions.length) return null;
+  // 1. Account directly linked to a solution
+  if (acc) {
+    const accSolIds: string[] = Array.isArray(acc.fields?.['Solutions']) ? acc.fields['Solutions'] : [];
+    if (accSolIds.length) {
+      const sol = solutions.find(s => accSolIds.includes(s.id));
+      if (sol) return sol;
+    }
+    // 2. Match by industry
+    const industry = F(acc, 'Industry');
+    if (industry) {
+      const byIndustry = solutions.find(s =>
+        (F(s,'Target Industry') || F(s,'Industry') || '').toLowerCase().includes(industry.toLowerCase())
+      );
+      if (byIndustry) return byIndustry;
+    }
+  }
+  // 3. Fallback: first solution
+  return solutions[0];
+}
+
+// Default prompt templates (mirrors MESSAGE_PROMPT_DEFAULTS in globals.js)
+const PROMPT_DEFAULTS = {
+  first:    `First message to {{name}} — they don't know you yet. Open a conversation, earn a reply. No pitch. Genuine curiosity. One sentence intro: who you are, your role, {{company}}.`,
+  followup: `Follow-up to {{name}} ({{touchCount}} touches, {{replyState}}).\n\nRead the conversation history and diagnose the state:\n• ENGAGED → advance with a concrete next step\n• STALLED → nudge with a NEW signal or angle from their pain points or LinkedIn\n• GHOSTED → radically different angle (shorter, question-first, pattern-interrupt)\n• OBJECTION → address it honestly\n\nDO NOT repeat phrases or angles used before. Feel like a natural continuation.`,
+  breakup:  `Last message to {{name}} — {{touchCount}} attempts, {{replyState}}. Ultra-short (max 3 sentences).\n\nRead the history: what didn't land? Pick ONE honest observation. Close the loop with zero pressure. Leave a door open (e.g. "if X changes for you") but don't beg.\n\nHuman, warm, final. No guilt-tripping, no final pitch.`,
+};
+
+function resolveTpl(tpl: string, vars: Record<string, string | number>): string {
+  return tpl
+    .replace(/\{\{name\}\}/g,       String(vars.name       || ''))
+    .replace(/\{\{company\}\}/g,    String(vars.company    || ''))
+    .replace(/\{\{touchCount\}\}/g, String(vars.touchCount ?? ''))
+    .replace(/\{\{replyCount\}\}/g, String(vars.replyCount ?? ''))
+    .replace(/\{\{replyState\}\}/g, String(vars.replyState || ''));
+}
+
 // ── OpenAI message generation ──
-async function generateMessage(stk: any, campaign: any, step: SeqStep, acc: any | null, recentOutreach: any[]): Promise<string> {
+async function generateMessage(stk: any, campaign: any, step: SeqStep, acc: any | null, recentOutreach: any[], offering: any | null): Promise<string> {
   const openaiKey = Netlify.env.get('OPENAI_API_KEY');
   const sName = `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim();
   const role = F(stk,'Role') || '';
-  const pain = (F(stk,'Pain Points (Generated)') || F(stk,'Pain points') || '').slice(0,300);
-  const linkedinNews = (F(stk,'LinkedIn News (Generated)') || F(stk,'Linkedin lates news') || '').slice(0,200);
+  const pain = (F(stk,'Pain Points (Generated)') || F(stk,'Pain points') || '').slice(0,400);
+  const linkedinNews = (F(stk,'LinkedIn News (Generated)') || F(stk,'Linkedin lates news') || '').slice(0,300);
   const accName = acc ? F(acc,'Account Name') : '';
   const industry = acc ? F(acc,'Industry') : '';
-  const accNews = acc ? (F(acc,'Recent News')||'').slice(0,150) : '';
-  const history = recentOutreach.slice(0,3).map(o => `[${F(o,'Channel')||'?'}] ${(F(o,'Message')||'').slice(0,100)}`).join('\n') || 'First contact';
+  const accNews = acc ? (F(acc,'Recent News')||'').slice(0,250) : '';
+  const accIntel = acc ? (F(acc,'Intel')||F(acc,'Notes')||'').slice(0,200) : '';
   const campaignName = F(campaign,'Name') || '';
   const campaignType = F(campaign,'Type') || '';
   const template = F(campaign,'Message Template') || '';
   const campaignContext = (F(campaign,'Context') || '').slice(0,600);
-  const stepNote = step.note || (step.condition === 'no_reply' ? 'Follow-up / breakup' : 'First contact');
 
-  const prompt = `B2B sales rep. Write ONE personalized email. Start with "Subject: [subject]", blank line, body. Max 3 sentences. No fluff.
+  // Determine message type from step position / note
+  const stepNote = step.note || '';
+  const isBreakup = /break.?up|last|final/i.test(stepNote);
+  const isFirst = step.waitDays === 0;
+  const touchCount = recentOutreach.length;
+  const hasReplied = recentOutreach.some(o => ['received','replied'].includes(F(o,'Status').toLowerCase()));
+  const replyState = hasReplied ? 'got a reply at some point' : touchCount === 0 ? 'no prior contact' : `${touchCount} touches, no reply`;
+  const promptType = isBreakup ? 'breakup' : isFirst || touchCount === 0 ? 'first' : 'followup';
+  const missionTpl = PROMPT_DEFAULTS[promptType];
+  const mission = resolveTpl(missionTpl, { name: sName, company: accName || 'their company', touchCount, replyState });
 
-CONTACT: ${sName} | ${role} | ${accName}${industry ? ` — ${industry}` : ''}
-${pain ? `Pain: ${pain}` : ''}${linkedinNews ? `\nLinkedIn: ${linkedinNews}` : ''}${accNews ? `\nCompany news: ${accNews}` : ''}
-History: ${history}
-STEP: ${stepNote} (day ${step.waitDays} of sequence)
-CAMPAIGN: "${campaignName}" (${campaignType})
-${campaignContext ? `CAMPAIGN CONTEXT:\n${campaignContext}\n` : ''}${template ? `Angle (rewrite for this person, DO NOT copy verbatim): "${template.slice(0,300)}"` : ''}
-BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brackets/placeholders.`;
+  // History block (last 5)
+  const historyLines = recentOutreach.slice(0,5).map(o => {
+    const channel = F(o,'Channel') || '?';
+    const date = F(o,'Date') || '';
+    const msg = (F(o,'Message') || '').slice(0,150);
+    const status = F(o,'Status') || '';
+    return `[${channel}${date ? ` ${date}` : ''}${status ? ` • ${status}` : ''}] ${msg}`;
+  });
+  const historyBlock = historyLines.length ? historyLines.join('\n') : 'No prior contact.';
+
+  // Offering block
+  let offeringBlock = '';
+  if (offering) {
+    const oName = F(offering,'Name') || F(offering,'Solution Name') || '';
+    const oDesc = (F(offering,'Description') || F(offering,'Short Description') || '').slice(0,300);
+    const oValue = (F(offering,'Value Proposition') || F(offering,'Value Props') || '').slice(0,200);
+    const oIndustry = F(offering,'Target Industry') || F(offering,'Industry') || '';
+    offeringBlock = `\nOFFERING: ${oName}${oIndustry ? ` (for ${oIndustry})` : ''}${oDesc ? `\n${oDesc}` : ''}${oValue ? `\nValue: ${oValue}` : ''}`;
+  }
+
+  const prompt = `You are a B2B sales rep. Write ONE personalized email to send right now.
+Format: first line "Subject: [subject]", blank line, then the body. Max 4 sentences. No fluff.
+
+MISSION: ${mission}
+
+CONTACT: ${sName}${role ? ` — ${role}` : ''} @ ${accName || 'unknown company'}${industry ? ` (${industry})` : ''}
+${pain ? `Pain points: ${pain}` : ''}
+${linkedinNews ? `LinkedIn intel: ${linkedinNews}` : ''}
+${accNews ? `Company news: ${accNews}` : ''}
+${accIntel ? `Intel: ${accIntel}` : ''}${offeringBlock}
+
+OUTREACH HISTORY (most recent first):
+${historyBlock}
+
+CAMPAIGN: "${campaignName}"${campaignType ? ` — ${campaignType}` : ''}
+${campaignContext ? `Campaign context: ${campaignContext}` : ''}
+${stepNote ? `Step note: ${stepNote}` : ''}
+${template ? `\nAngle to weave in (rewrite for this person, do NOT copy verbatim):\n"${template.slice(0,400)}"` : ''}
+
+BANNED PHRASES: "following up", "checking in", "hope this finds you well", "touching base", "just wanted to", "I hope you're doing well". No brackets, no placeholders.`;
 
   if (!openaiKey) return `Hi ${sName}, I wanted to reach out about ${campaignName}. Would love to connect quickly.`;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.75, max_tokens: 250 }),
+    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.75, max_tokens: 300 }),
   });
   if (!res.ok) return `Hi ${sName}, I wanted to connect about ${campaignName}.`;
   const data = await res.json();
@@ -288,10 +369,11 @@ export default async (req?: Request) => {
       if (activeCampaigns.length === 0) continue;
 
       // Fetch supporting data once per base — no fields filter to avoid URL encoding issues
-      const [stakeholders, outreach, accounts] = await Promise.all([
+      const [stakeholders, outreach, accounts, solutions] = await Promise.all([
         getAllRecords(baseId, stakeholdersTableId, airtableKey),
         getAllRecords(baseId, outreachTableId, airtableKey),
         getAllRecords(baseId, accountsTableId, airtableKey),
+        getAllRecords(baseId, T.solutions, airtableKey).catch(() => []),
       ]);
 
       const stkMap = Object.fromEntries(stakeholders.map(s => [s.id, s]));
@@ -369,9 +451,10 @@ export default async (req?: Request) => {
           const recentOutreach = outreach
             .filter(o => linkedIds(o,'Stakeholder').includes(stkId))
             .sort((a,b) => (b.fields?.['Date']||'').localeCompare(a.fields?.['Date']||''))
-            .slice(0,3);
+            .slice(0,5);
+          const offering = getBestOffering(acc, solutions);
 
-          const msg = await generateMessage(stk, campaign, step, acc, recentOutreach);
+          const msg = await generateMessage(stk, campaign, step, acc, recentOutreach, offering);
           const lines = msg.split('\n');
           const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
           let subject = en.gmailSubject || `${F(campaign,'Name')} — ${F(stk,'Name')||''}`;
@@ -464,7 +547,7 @@ export default async (req?: Request) => {
 
   console.log(`[seq-runner] Done — sent: ${totalSent}, skipped: ${totalSkipped}, errors: ${totalErrors}, logErrors: ${diagLogErrors}, enrollErrors: ${diagEnrollErrors} | diag: ${diagUsers}u, ${diagBases}b, ${diagCampaigns}c, ${diagDue}due`);
   return new Response(
-    JSON.stringify({ v: 7, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue, logErrors: diagLogErrors, enrollErrors: diagEnrollErrors } }),
+    JSON.stringify({ v: 8, sent: totalSent, skipped: totalSkipped, errors: totalErrors, firstError, diag: { users: diagUsers, bases: diagBases, campaigns: diagCampaigns, due: diagDue, logErrors: diagLogErrors, enrollErrors: diagEnrollErrors } }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
 };
