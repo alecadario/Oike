@@ -70,6 +70,8 @@ function getAccount(s, accounts) {
   return ids.length ? accounts.find(a => a.id === ids[0]) || null : null;
 }
 
+function accName(acc) { return acc ? (F(acc, 'Account Name') || '') : ''; }
+
 function getOutreachFor(id, outreach) {
   return outreach.filter(o => {
     const ids = linkedIds(o, 'Stakeholder') || linkedIds(o, 'Stakeholders') || [];
@@ -87,7 +89,7 @@ function getCampaignsFor(id, campaigns) {
 function buildPrompt(s, account, outreach, campaigns, msgType, channel) {
   const cp = COMPANY_PROFILE || {};
   const name = F(s, 'Name') || 'the contact';
-  const accName = account ? (F(account, 'Name') || '') : '';
+  const accName = account ? (F(account, 'Account Name') || '') : '';
   const role = F(s, 'Title') || F(s, 'Role') || '';
   const industry = account ? (F(account, 'Industry') || '') : '';
   const painPoints = F(s, 'Pain Points (Generated)') || F(s, 'Pain Points') || '';
@@ -167,7 +169,7 @@ function ContactPicker({ stakeholders, accounts, value, onChange, placeholder })
       const acc = getAccount(s, accounts);
       if (acc && !seen.has(acc.id)) { seen.add(acc.id); list.push(acc); }
     });
-    return list.sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || ''));
+    return list.sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
   }, [stakeholders, accounts]);
 
   const contactsInCompany = useMemo(() => {
@@ -192,7 +194,7 @@ function ContactPicker({ stakeholders, accounts, value, onChange, placeholder })
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
       <select style={SEL} value={companyId} onChange={handleCompanyChange}>
         <option value="">Select company…</option>
-        {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Name')}</option>)}
+        {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
       </select>
       <select style={{ ...SEL, minWidth: 180 }} value={value?.id || ''} onChange={handleContactChange} disabled={!companyId}>
         <option value="">Select contact…</option>
@@ -245,7 +247,7 @@ function IndividualTab({ data }) {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>{F(selected, 'Name')}</div>
-              <div style={MUTED}>{F(selected, 'Title') || F(selected, 'Role') || '—'} · {account ? F(account, 'Name') : '—'}</div>
+              <div style={MUTED}>{F(selected, 'Title') || F(selected, 'Role') || '—'} · {account ? F(account, 'Account Name') : '—'}</div>
               <div style={{ ...MUTED, marginTop: 3 }}>
                 Last channel: {channelIcon[lastChannel] || ''} {lastChannel} · {hist.length} messages
               </div>
@@ -312,7 +314,7 @@ function BulkTab({ data }) {
       const acc = getAccount(s, accounts);
       if (acc && !seen.has(acc.id)) { seen.add(acc.id); list.push(acc); }
     });
-    return list.sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || ''));
+    return list.sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
   }, [stakeholders, accounts]);
 
   const uniqueIndustries = useMemo(() => {
@@ -401,7 +403,7 @@ function BulkTab({ data }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <select style={SEL} value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
           <option value="">All Companies</option>
-          {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Name')}</option>)}
+          {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
         </select>
         <select style={SEL} value={industryFilter} onChange={e => setIndustryFilter(e.target.value)}>
           <option value="">All Industries</option>
@@ -445,7 +447,7 @@ function BulkTab({ data }) {
                       <input type="checkbox" checked={isChecked} onChange={() => toggleOne(s.id)} />
                     </td>
                     <td style={{ padding: '7px 12px', fontWeight: 500 }}>{F(s, 'Name')}</td>
-                    <td style={{ padding: '7px 12px', color: 'var(--globant-muted)' }}>{acc ? F(acc, 'Name') : '—'}</td>
+                    <td style={{ padding: '7px 12px', color: 'var(--globant-muted)' }}>{acc ? F(acc, 'Account Name') : '—'}</td>
                     <td style={{ padding: '7px 12px' }}>
                       <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.08)' }}>{F(s, 'Status') || '—'}</span>
                     </td>
@@ -561,7 +563,7 @@ function SequencesTab({ data }) {
       const acc = getAccount(s, accounts);
       if (acc && !seen.has(acc.id)) { seen.add(acc.id); list.push(acc); }
     });
-    return list.sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || ''));
+    return list.sort((a, b) => (F(a, 'Account Name') || '').localeCompare(F(b, 'Account Name') || ''));
   }, [stakeholders, accounts]);
 
   const enrollContacts = useMemo(() => {
@@ -748,7 +750,7 @@ function SequencesTab({ data }) {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
                         <div>
                           <span style={{ fontWeight: 600 }}>{F(s, 'Name')}</span>
-                          <span style={MUTED}> · {acc ? F(acc, 'Name') : '—'}</span>
+                          <span style={MUTED}> · {acc ? F(acc, 'Account Name') : '—'}</span>
                           <div style={{ fontSize: 11, color: GREEN, marginTop: 2 }}>
                             Step {e.step + 1}: {channelIcon[step?.channel]} {step?.channel}
                             {e.nextTime && <span style={MUTED}> · {e.nextTime} {e.timezone || ''}</span>}
@@ -797,7 +799,7 @@ function SequencesTab({ data }) {
                     <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.04)', flexWrap: 'wrap', gap: 4 }}>
                       <div>
                         <span style={{ fontWeight: 500 }}>{F(s, 'Name')}</span>
-                        <span style={MUTED}> · {acc ? F(acc, 'Name') : '—'}</span>
+                        <span style={MUTED}> · {acc ? F(acc, 'Account Name') : '—'}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--globant-muted)' }}>
                         {step && <span>{channelIcon[step.channel]} Step {e.step + 1}</span>}
@@ -822,7 +824,7 @@ function SequencesTab({ data }) {
                     <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                       <div>
                         <span style={{ fontWeight: 500 }}>{F(s, 'Name')}</span>
-                        <span style={MUTED}> · {acc ? F(acc, 'Name') : '—'}</span>
+                        <span style={MUTED}> · {acc ? F(acc, 'Account Name') : '—'}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 8, fontSize: 11, color: 'var(--globant-muted)' }}>
                         <span style={{ color: GREEN }}>✓ All {(e.sentSteps || []).length} steps sent</span>
@@ -842,7 +844,7 @@ function SequencesTab({ data }) {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
                 <select style={SEL} value={enrollCompany} onChange={e => { setEnrollCompany(e.target.value); setEnrollSelected(new Set()); }}>
                   <option value="">Select company…</option>
-                  {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Name')}</option>)}
+                  {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
                 </select>
                 <input type="date" style={{ ...INPUT, width: 150 }} value={enrollDate}
                   onChange={e => setEnrollDate(e.target.value)} title="First touch date" />
