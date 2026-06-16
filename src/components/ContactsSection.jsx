@@ -36,7 +36,6 @@ function ContactsSection({ data, api, onLogActivity, onAddRecord, onUpdateRecord
     window.addEventListener('oike:openContact', handler);
     return () => window.removeEventListener('oike:openContact', handler);
   }, [stakeholders]);
-  const [selectedStakeholder, setSelectedStakeholder] = useState(null);
   const [showNewContact, setShowNewContact] = useState(false);
   const [ctxNewName, setCtxNewName] = useState('');
   const [ctxNewLast, setCtxNewLast] = useState('');
@@ -810,7 +809,6 @@ Pain points must be specific to their role, reference industry challenges, and c
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => setSelectedStakeholder(s)}>✨</button>
                         {phone && <button className="action-btn btn-whatsapp" style={{ fontSize: 11, padding: '4px 8px' }} title="WhatsApp" onClick={() => useMessage(s, 'WhatsApp', fallback)}>💬</button>}
                         {email && <button className="action-btn btn-email" style={{ fontSize: 11, padding: '4px 8px' }} title="Email" onClick={() => useMessage(s, 'Email', fallback)}>✉️</button>}
                         {linkedin && <button className="action-btn btn-linkedin" style={{ fontSize: 11, padding: '4px 8px' }} title="LinkedIn" onClick={() => useMessage(s, 'LinkedIn', fallback)}>🔗</button>}
@@ -827,9 +825,7 @@ Pain points must be specific to their role, reference industry challenges, and c
         )}
       </div>
 
-      {selectedStakeholder && (
-        <AIMessageModal stakeholder={selectedStakeholder} onClose={() => setSelectedStakeholder(null)} onSend={useMessage} onSuccess={() => { setSelectedStakeholder(null); if (onLogActivity) onLogActivity(); }} data={data} />
-      )}
+
       {historyStakeholder && (
         <StakeholderHistoryModal
           stakeholder={historyStakeholder}
