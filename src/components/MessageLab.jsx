@@ -4,6 +4,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = React;
 import {
   COMPANY_PROFILE, callOpenAI, channelIcon,
   MESSAGE_PROMPTS, resolvePromptTemplate,
+  AUTH_TOKEN, AIRTABLE_BASE_ID, TABLE_IDS,
 } from '../globals.js';
 import { F, linkedIds } from '../utils.js';
 
@@ -71,8 +72,6 @@ function getAccount(s, accounts) {
   return ids.length ? accounts.find(a => a.id === ids[0]) || null : null;
 }
 
-function accName(acc) { return acc ? (F(acc, 'Account Name') || '') : ''; }
-
 function getOutreachFor(id, outreach) {
   return outreach.filter(o => {
     const ids = linkedIds(o, 'Stakeholder') || linkedIds(o, 'Stakeholders') || [];
@@ -90,7 +89,7 @@ function getCampaignsFor(id, campaigns) {
 function buildPrompt(s, account, outreach, campaigns, msgType, channel, language) {
   const cp = COMPANY_PROFILE || {};
   const name = F(s, 'Name') || 'the contact';
-  const accName = account ? (F(account, 'Account Name') || '') : '';
+  const aName = account ? (F(account, 'Account Name') || '') : '';
   const role = F(s, 'Title') || F(s, 'Role') || '';
   const industry = account ? (F(account, 'Industry') || '') : '';
   const painPoints = F(s, 'Pain Points (Generated)') || F(s, 'Pain Points') || '';
@@ -103,7 +102,7 @@ function buildPrompt(s, account, outreach, campaigns, msgType, channel, language
 
   const typeKey = MSG_TYPE_KEY[msgType] || 'first';
   const missionTemplate = MESSAGE_PROMPTS[typeKey] || MESSAGE_PROMPTS.first;
-  const mission = resolvePromptTemplate(missionTemplate, { name, company: accName, touchCount, replyCount, replyState });
+  const mission = resolvePromptTemplate(missionTemplate, { name, company: aName, touchCount, replyCount, replyState });
 
   const campCtx = getCampaignsFor(s.id, campaigns)
     .map(c => `${F(c, 'Name') || 'Campaign'}: ${F(c, 'Description') || ''}`)
@@ -114,15 +113,19 @@ function buildPrompt(s, account, outreach, campaigns, msgType, channel, language
     .join('\n');
 
   const channelRules = channel === 'Email'
-    ? 'Up to 5 sentences. Include Subject line. Professional but warm.'
+    ? 'Up to 5 sentences. Include Subject line on first line as "Subject: ...". Professional but warm.'
     : 'Max 3 sentences. Concise, direct, conversational. No generic openers.';
+
+  const langRule = (!language || language.startsWith('Auto'))
+    ? `Use the language most appropriate for the contact based on their country/region.`
+    : `Write in ${language} only.`;
 
   return `You are ${cp.senderName || 'the sender'}, ${cp.senderTitle || 'a sales rep'} at ${cp.companyName || 'our company'}.
 IMPORTANT: Sign the message as "${cp.senderName || 'the sender'}" — never use placeholders like [Tu Nombre] or [Your Name].
 ${cp.services ? `Services: ${cp.services}` : ''}
 ${cp.voiceTone ? `Tone: ${cp.voiceTone}` : ''}
 
-Recipient: ${name}${role ? `, ${role}` : ''}${accName ? ` at ${accName}` : ''}${industry ? ` (${industry})` : ''}
+Recipient: ${name}${role ? `, ${role}` : ''}${aName ? ` at ${aName}` : ''}${industry ? ` (${industry})` : ''}
 ${painPoints ? `Pain points: ${painPoints}` : ''}
 ${campCtx ? `Campaign context: ${campCtx}` : ''}
 
@@ -132,10 +135,38 @@ Mission: ${mission}
 
 Channel: ${channel}
 ${channelRules}
-
-Language: ${(!language || language.startsWith('Auto')) ? `Use the language most appropriate for ${accName || 'the contact'} based on their country/region.` : `Write in ${language} only.`}
+Language: ${langRule}
 
 Write ONE message only. No preamble, explanation, or meta-commentary. Just the message.`;
+}
+
+// ─── Email via Gmail ──────────────────────────────────────────────────────────
+async function sendEmailViaGmail(stakeholder, message) {
+  const email = F(stakeholder, 'Email');
+  if (!email) throw new Error('No email address on file');
+  const lines = message.split('\n');
+  const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
+  let subject = `Message for ${F(stakeholder, 'Name') || email}`;
+  let body = message;
+  if (si !== -1) {
+    subject = lines[si].replace(/^subject:\s*/i, '').trim();
+    body = lines.slice(si + 1).join('\n').trim();
+  }
+  const res = await fetch('/api/gmail/send', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: email, subject, message: body,
+      stakeholderId: stakeholder.id,
+      accountIds: linkedIds(stakeholder, 'Account'),
+      baseId: AIRTABLE_BASE_ID,
+      outreachTableId: TABLE_IDS.outreach,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Send failed');
+  }
 }
 
 // ─── Small shared UI ─────────────────────────────────────────────────────────
@@ -155,20 +186,66 @@ function StatusBadge({ status }) {
     generating: ['⏳', '#facc15'],
     done: ['✓', GREEN],
     error: ['✕', '#f87171'],
-    sent: ['📤 Sent', GREEN],
-    'not sent': ['—', 'var(--globant-muted)'],
   };
   const [icon, color] = map[status] || ['?', 'var(--globant-muted)'];
   return <span style={{ fontSize: 11, color }}>{icon}</span>;
 }
 
-// ─── Contact picker: Company dropdown → Contact dropdown ──────────────────────
-function ContactPicker({ stakeholders, accounts, value, onChange, placeholder }) {
+// ─── Send buttons (WhatsApp manual, Email real send, LinkedIn manual) ─────────
+function SendButtons({ stakeholder, message, onEmailSent, emailOnly }) {
+  const phone = F(stakeholder, 'Phone number');
+  const linkedin = F(stakeholder, 'LinkedIn');
+  const email = F(stakeholder, 'Email');
+  const msg = message || '';
+  const [emailStatus, setEmailStatus] = useState('idle');
+  const [emailError, setEmailError] = useState('');
+  const btnStyle = { fontSize: 12, padding: '5px 12px' };
+
+  async function handleSendEmail() {
+    setEmailStatus('sending');
+    setEmailError('');
+    try {
+      await sendEmailViaGmail(stakeholder, msg);
+      setEmailStatus('sent');
+      if (onEmailSent) onEmailSent();
+    } catch (e) {
+      setEmailStatus('error');
+      setEmailError(e.message || 'Error');
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: emailOnly ? 0 : 8, alignItems: 'center' }}>
+      {!emailOnly && phone && (
+        <a href={`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`}
+          target="_blank" rel="noopener noreferrer" className="action-btn btn-whatsapp" style={btnStyle}>
+          💬 WhatsApp
+        </a>
+      )}
+      {email && (
+        <button className="action-btn btn-email" style={btnStyle}
+          onClick={handleSendEmail} disabled={emailStatus === 'sending' || emailStatus === 'sent'}>
+          {emailStatus === 'sending' ? '⏳ Sending…' : emailStatus === 'sent' ? '✓ Email Sent' : '📤 Send Email'}
+        </button>
+      )}
+      {!emailOnly && linkedin && (
+        <a href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`}
+          target="_blank" rel="noopener noreferrer" className="action-btn btn-linkedin" style={btnStyle}>
+          🔗 LinkedIn
+        </a>
+      )}
+      {emailStatus === 'error' && <span style={{ fontSize: 11, color: '#f87171' }}>{emailError}</span>}
+      {!emailOnly && !phone && !email && !linkedin && <span style={MUTED}>No contact channels available</span>}
+    </div>
+  );
+}
+
+// ─── Contact picker: Company → Contact dropdowns ──────────────────────────────
+function ContactPicker({ stakeholders, accounts, value, onChange }) {
   const [companyId, setCompanyId] = useState('');
 
   const uniqueAccounts = useMemo(() => {
-    const seen = new Set();
-    const list = [];
+    const seen = new Set(); const list = [];
     stakeholders.forEach(s => {
       const acc = getAccount(s, accounts);
       if (acc && !seen.has(acc.id)) { seen.add(acc.id); list.push(acc); }
@@ -178,29 +255,18 @@ function ContactPicker({ stakeholders, accounts, value, onChange, placeholder })
 
   const contactsInCompany = useMemo(() => {
     if (!companyId) return [];
-    return stakeholders.filter(s => {
-      const ids = linkedIds(s, 'Account');
-      return ids.includes(companyId);
-    }).sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || ''));
+    return stakeholders.filter(s => linkedIds(s, 'Account').includes(companyId))
+      .sort((a, b) => (F(a, 'Name') || '').localeCompare(F(b, 'Name') || ''));
   }, [companyId, stakeholders]);
-
-  function handleCompanyChange(e) {
-    setCompanyId(e.target.value);
-    onChange(null);
-  }
-
-  function handleContactChange(e) {
-    const s = stakeholders.find(st => st.id === e.target.value);
-    onChange(s || null);
-  }
 
   return (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-      <select style={SEL} value={companyId} onChange={handleCompanyChange}>
+      <select style={SEL} value={companyId} onChange={e => { setCompanyId(e.target.value); onChange(null); }}>
         <option value="">Select company…</option>
         {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
       </select>
-      <select style={{ ...SEL, minWidth: 180 }} value={value?.id || ''} onChange={handleContactChange} disabled={!companyId}>
+      <select style={{ ...SEL, minWidth: 180 }} value={value?.id || ''} disabled={!companyId}
+        onChange={e => onChange(stakeholders.find(st => st.id === e.target.value) || null)}>
         <option value="">Select contact…</option>
         {contactsInCompany.map(s => <option key={s.id} value={s.id}>{F(s, 'Name')}</option>)}
       </select>
@@ -249,19 +315,11 @@ function IndividualTab({ data }) {
 
       {selected && (
         <div style={CARD}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>{F(selected, 'Name')}</div>
-              <div style={MUTED}>{F(selected, 'Title') || F(selected, 'Role') || '—'} · {account ? F(account, 'Account Name') : '—'}</div>
-              <div style={{ ...MUTED, marginTop: 3 }}>
-                Last channel: {channelIcon[lastChannel] || ''} {lastChannel} · {hist.length} messages
-              </div>
-            </div>
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{F(selected, 'Name')}</div>
+          <div style={MUTED}>{F(selected, 'Title') || F(selected, 'Role') || '—'} · {account ? F(account, 'Account Name') : '—'}</div>
+          <div style={{ ...MUTED, marginTop: 3 }}>Last channel: {channelIcon[lastChannel] || ''} {lastChannel} · {hist.length} messages</div>
           <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap' }}>
-            {stakeholderCampaigns.map(c => (
-              <span key={c.id} style={CHIP}>📣 {F(c, 'Name') || 'Campaign'}</span>
-            ))}
+            {stakeholderCampaigns.map(c => <span key={c.id} style={CHIP}>📣 {F(c, 'Name') || 'Campaign'}</span>)}
             {hist.length > 0 && <span style={CHIP}>💬 {hist.length} messages</span>}
             {(F(selected, 'Pain Points (Generated)') || F(selected, 'Pain Points')) && <span style={CHIP}>🎯 Pain points</span>}
             <span style={CHIP}>🏢 {(COMPANY_PROFILE || {}).companyName || 'Offering'}</span>
@@ -296,6 +354,7 @@ function IndividualTab({ data }) {
           </div>
           <textarea style={{ ...INPUT, minHeight: 120, resize: 'vertical', lineHeight: 1.6 }}
             value={generatedMsg} onChange={e => setGeneratedMsg(e.target.value)} />
+          {selected && <SendButtons stakeholder={selected} message={generatedMsg} />}
         </div>
       )}
     </div>
@@ -404,11 +463,8 @@ function BulkTab({ data }) {
     navigator.clipboard.writeText(lines);
   }
 
-  const selectedStakeholders = stakeholders.filter(s => selected.has(s.id));
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Filters */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <select style={SEL} value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
           <option value="">All Companies</option>
@@ -429,7 +485,6 @@ function BulkTab({ data }) {
         <span style={MUTED}>{filtered.length} contacts</span>
       </div>
 
-      {/* Contact table */}
       <div style={{ ...CARD, padding: 0, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -467,7 +522,7 @@ function BulkTab({ data }) {
                           {msgState.status === 'done' && (
                             <>
                               <button style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 11 }}
-                                onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
+                                onClick={e => { e.stopPropagation(); setExpanded(prev => { const n = new Set(prev); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; }); }}>
                                 {isExpanded ? '▲' : '▼ View'}
                               </button>
                               <CopyBtn text={msgState.text} />
@@ -484,6 +539,7 @@ function BulkTab({ data }) {
                         <textarea style={{ ...INPUT, minHeight: 80, resize: 'vertical' }}
                           value={msgState.text}
                           onChange={e => setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], text: e.target.value } }))} />
+                        <SendButtons stakeholder={s} message={msgState.text} />
                       </td>
                     </tr>
                   )}
@@ -497,7 +553,6 @@ function BulkTab({ data }) {
         </table>
       </div>
 
-      {/* Action bar */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         {selected.size > 0 && (
           <span style={{ ...CHIP, fontSize: 13, padding: '4px 12px' }}>{selected.size} selected</span>
@@ -569,7 +624,6 @@ function SequencesTab({ data }) {
     if (selectedSeqId === id) setSelectedSeqId(null);
   }
 
-  // Enroll contacts picker
   const uniqueAccounts = useMemo(() => {
     const seen = new Set(); const list = [];
     stakeholders.forEach(s => {
@@ -587,14 +641,12 @@ function SequencesTab({ data }) {
 
   function handleEnroll() {
     if (!selectedSeq || !enrollSelected.size) return;
-    const step0Days = selectedSeq.steps[0]?.waitDays || 0;
-    const startDate = addDays(step0Days);
     const updated = { ...selectedSeq, enrollments: { ...selectedSeq.enrollments } };
     enrollSelected.forEach(id => {
       if (!updated.enrollments[id]) {
         updated.enrollments[id] = {
           step: 0,
-          nextDate: startDate,
+          nextDate: enrollDate,
           nextTime: enrollTime,
           timezone: enrollTz,
           status: 'active',
@@ -620,12 +672,7 @@ function SequencesTab({ data }) {
         ...selectedSeq.enrollments,
         [stakeholderId]: isLast
           ? { ...e, sentSteps, status: 'completed' }
-          : {
-              ...e,
-              step: nextStep,
-              sentSteps,
-              nextDate: addDays(selectedSeq.steps[nextStep].waitDays),
-            },
+          : { ...e, step: nextStep, sentSteps, nextDate: addDays(selectedSeq.steps[nextStep].waitDays) },
       },
     };
     updateSeq(updated);
@@ -646,7 +693,7 @@ function SequencesTab({ data }) {
     if (!s || !e) return;
     const step = selectedSeq.steps[e.step];
     const acc = getAccount(s, accounts);
-    const stepCtx = `\n\nThis is step ${e.step + 1} of ${selectedSeq.steps.length} in sequence "${selectedSeq.name}": ${step.note || ''} via ${step.channel}${step.waitDays ? ` (${step.waitDays} days after previous)` : ' (day 0)'}. `;
+    const stepCtx = `\n\nSequence step ${e.step + 1}/${selectedSeq.steps.length} in "${selectedSeq.name}": ${step.note || ''} via ${step.channel}${step.waitDays ? ` (+${step.waitDays}d)` : ' (day 0)'}. `;
     const prompt = buildPrompt(s, acc, outreach, campaigns, e.step === 0 ? 'First Touch' : 'Follow-up', step.channel, language) + stepCtx;
     setGeneratingFor(stakeholderId);
     try {
@@ -674,9 +721,7 @@ function SequencesTab({ data }) {
     <div style={{ display: 'flex', gap: 16, minHeight: 400 }}>
       {/* Left: sequence list */}
       <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button className="action-btn" onClick={() => setShowNewForm(true)} style={{ width: '100%' }}>
-          + New Sequence
-        </button>
+        <button className="action-btn" onClick={() => setShowNewForm(true)} style={{ width: '100%' }}>+ New Sequence</button>
         {sequences.map(seq => (
           <div key={seq.id} onClick={() => setSelectedSeqId(seq.id)} style={{
             ...CARD, padding: '10px 12px', cursor: 'pointer',
@@ -689,26 +734,23 @@ function SequencesTab({ data }) {
               onClick={e => { e.stopPropagation(); handleDelete(seq.id); }}>Delete</button>
           </div>
         ))}
-        {!sequences.length && !showNewForm && (
-          <div style={{ ...MUTED, textAlign: 'center', padding: 16 }}>No sequences yet</div>
-        )}
+        {!sequences.length && !showNewForm && <div style={{ ...MUTED, textAlign: 'center', padding: 16 }}>No sequences yet</div>}
       </div>
 
       {/* Right: detail */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* New sequence form */}
         {showNewForm && (
           <div style={CARD}>
             <div style={{ fontWeight: 700, marginBottom: 12 }}>New Sequence</div>
             <input style={{ ...INPUT, marginBottom: 10 }} placeholder="Sequence name…"
               value={newSeqName} onChange={e => setNewSeqName(e.target.value)} />
-            <div style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 6 }}>Steps</div>
+            <div style={{ ...MUTED, marginBottom: 6 }}>Steps</div>
             {newSteps.map((step, i) => (
               <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
                 <span style={{ ...MUTED, minWidth: 22 }}>#{i + 1}</span>
-                <input type="number" style={{ ...INPUT, width: 70 }} value={step.waitDays}
-                  onChange={e => handleStepField(i, 'waitDays', e.target.value)} placeholder="Days" title="Wait days from previous step" />
+                <input type="number" style={{ ...INPUT, width: 70 }} value={step.waitDays} placeholder="Days"
+                  onChange={e => handleStepField(i, 'waitDays', e.target.value)} />
                 <select style={{ ...SEL, minWidth: 120 }} value={step.channel} onChange={e => handleStepField(i, 'channel', e.target.value)}>
                   {CHANNELS.map(c => <option key={c}>{c}</option>)}
                 </select>
@@ -732,7 +774,7 @@ function SequencesTab({ data }) {
             {/* Steps timeline */}
             <div style={CARD}>
               <div style={{ fontWeight: 700, marginBottom: 10 }}>{selectedSeq.name}</div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', overflowX: 'auto', gap: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', overflowX: 'auto' }}>
                 {selectedSeq.steps.map((step, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'flex-start' }}>
                     <div style={{ textAlign: 'center', minWidth: 100 }}>
@@ -754,7 +796,7 @@ function SequencesTab({ data }) {
               <div style={{ ...CARD, borderColor: GREEN }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div style={{ fontWeight: 700, color: GREEN }}>📅 Due Today ({dueToday.length})</div>
-                  <select style={{ ...SEL, minWidth: 160 }} value={language} onChange={e => setLanguage(e.target.value)}>
+                  <select style={{ ...SEL, minWidth: 160 }} value={language} onChange={e2 => setLanguage(e2.target.value)}>
                     {LANGUAGES.map(l => <option key={l}>{l}</option>)}
                   </select>
                 </div>
@@ -763,6 +805,8 @@ function SequencesTab({ data }) {
                   const acc = getAccount(s, accounts);
                   const step = selectedSeq.steps[e.step];
                   const msg = stepMsgs[e.id];
+                  const isEmail = step?.channel === 'Email';
+                  const hasEmail = !!F(s, 'Email');
                   return (
                     <div key={e.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10, marginTop: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
@@ -772,17 +816,21 @@ function SequencesTab({ data }) {
                           <div style={{ fontSize: 11, color: GREEN, marginTop: 2 }}>
                             Step {e.step + 1}: {channelIcon[step?.channel]} {step?.channel}
                             {e.nextTime && <span style={MUTED}> · {e.nextTime} {e.timezone || ''}</span>}
+                            {isEmail && !hasEmail && <span style={{ color: '#f87171', marginLeft: 6 }}>⚠ no email on file</span>}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <button className="action-btn" onClick={() => handleGenerateStep(e.id)}
                             disabled={generatingFor === e.id} style={{ fontSize: 11 }}>
                             {generatingFor === e.id ? '⏳' : '✨ Generate'}
                           </button>
-                          <button className="action-btn" onClick={() => handleMarkSent(e.id)} style={{ fontSize: 11 }}
-                            title="Mark that YOU sent this manually — does not send automatically">
-                            ✓ I Sent This
-                          </button>
+                          {isEmail && hasEmail && msg ? (
+                            <SendButtons stakeholder={s} message={msg} onEmailSent={() => handleMarkSent(e.id)} emailOnly />
+                          ) : (
+                            <button className="action-btn" onClick={() => handleMarkSent(e.id)} style={{ fontSize: 11 }}>
+                              {isEmail ? '✓ Mark Sent' : '✓ I Sent This'}
+                            </button>
+                          )}
                         </div>
                       </div>
                       {msg && (
@@ -791,12 +839,13 @@ function SequencesTab({ data }) {
                             value={msg} onChange={ev => setStepMsgs(prev => ({ ...prev, [e.id]: ev.target.value }))} />
                           <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
                             <CopyBtn text={msg} label={`${channelIcon[step?.channel] || '📋'} Copy`} />
+                            {!isEmail && <SendButtons stakeholder={s} message={msg} />}
                           </div>
                         </div>
                       )}
                       {(e.sentSteps || []).length > 0 && (
                         <div style={{ ...MUTED, marginTop: 4 }}>
-                          Sent steps: {(e.sentSteps || []).map(ss => `Step ${ss.step + 1} (${ss.sentAt?.slice(0, 10) || '?'})`).join(', ')}
+                          Sent: {(e.sentSteps || []).map(ss => `Step ${ss.step + 1} (${ss.sentAt?.slice(0, 10) || '?'})`).join(', ')}
                         </div>
                       )}
                     </div>
@@ -857,22 +906,16 @@ function SequencesTab({ data }) {
             {/* Enroll contacts */}
             <div style={CARD}>
               <div style={{ fontWeight: 700, marginBottom: 12 }}>Enroll Contacts</div>
-
-              {/* Schedule */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{ ...MUTED, marginBottom: 6, fontWeight: 600 }}>📅 Schedule first touch</div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <input type="date" style={{ ...INPUT, width: 150 }} value={enrollDate}
-                    onChange={e => setEnrollDate(e.target.value)} />
-                  <input type="time" style={{ ...INPUT, width: 110 }} value={enrollTime}
-                    onChange={e => setEnrollTime(e.target.value)} />
+                  <input type="date" style={{ ...INPUT, width: 150 }} value={enrollDate} onChange={e => setEnrollDate(e.target.value)} />
+                  <input type="time" style={{ ...INPUT, width: 110 }} value={enrollTime} onChange={e => setEnrollTime(e.target.value)} />
                   <select style={{ ...SEL, minWidth: 200 }} value={enrollTz} onChange={e => setEnrollTz(e.target.value)}>
                     {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
                   </select>
                 </div>
               </div>
-
-              {/* Company picker */}
               <div style={{ ...MUTED, marginBottom: 6, fontWeight: 600 }}>👥 Pick contacts</div>
               <div style={{ marginBottom: 8 }}>
                 <select style={{ ...SEL, width: '100%' }} value={enrollCompany} onChange={e => { setEnrollCompany(e.target.value); setEnrollSelected(new Set()); }}>
@@ -880,7 +923,6 @@ function SequencesTab({ data }) {
                   {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
                 </select>
               </div>
-
               {enrollContacts.length > 0 && (
                 <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 10 }}>
                   {enrollContacts.map(s => {
@@ -897,7 +939,6 @@ function SequencesTab({ data }) {
                   })}
                 </div>
               )}
-
               <button className="action-btn" onClick={handleEnroll} disabled={!enrollSelected.size}
                 style={{ opacity: enrollSelected.size ? 1 : 0.5 }}>
                 Enroll {enrollSelected.size > 0 ? `(${enrollSelected.size})` : ''}
@@ -933,7 +974,6 @@ export default function MessageLab({ data, api, onLogActivity, onUpdateRecord })
           AI-powered outreach — uses your prompts from Settings, campaign context, and full conversation history
         </p>
       </div>
-
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--globant-border)' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -943,7 +983,6 @@ export default function MessageLab({ data, api, onLogActivity, onUpdateRecord })
           }}>{t.label}</button>
         ))}
       </div>
-
       {tab === 'individual' && <IndividualTab data={data} />}
       {tab === 'bulk' && <BulkTab data={data} />}
       {tab === 'sequences' && <SequencesTab data={data} />}
