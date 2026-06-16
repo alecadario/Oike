@@ -195,6 +195,52 @@ function FollowupCenter({ data, api, onLogActivity, onAddRecord, onUpdateRecord,
 
   const followupPending = dailyFocusItems;
 
+  // ── Manual sequence steps due today (WhatsApp / LinkedIn — can't auto-send) ──
+  const manualSeqStepsDueToday = useMemo(() => {
+    const campaigns = data.campaigns || [];
+    const now = new Date();
+    const results = [];
+    campaigns.forEach(campaign => {
+      let steps, enrollments, seqCfg;
+      try {
+        steps = JSON.parse(F(campaign, 'Sequence Steps') || '[]');
+        enrollments = JSON.parse(F(campaign, 'Sequence Enrollments') || '{}');
+        seqCfg = JSON.parse(F(campaign, 'Sequence Config') || '{}');
+      } catch { return; }
+      if (!steps.length || seqCfg.active === false) return;
+      Object.entries(enrollments).forEach(([stkId, en]) => {
+        if (en.status !== 'active') return;
+        const step = steps[en.step];
+        if (!step) return;
+        if (step.channel === 'Email') return; // auto-sent by runner
+        const dt = en.nextDateTime ? new Date(en.nextDateTime) : (en.nextDate ? new Date(en.nextDate) : null);
+        if (!dt || dt > now) return;
+        const stk = stakeholders.find(s => s.id === stkId);
+        if (!stk) return;
+        const accId = (stk.fields?.['Account'] || [])[0];
+        const acc = accId ? accounts.find(a => a.id === accId) : null;
+        results.push({ stk, acc, campaign, step, en, stepIdx: en.step });
+      });
+    });
+    return results.sort((a, b) => {
+      const da = a.en.nextDateTime || a.en.nextDate || '';
+      const db = b.en.nextDateTime || b.en.nextDate || '';
+      return da.localeCompare(db);
+    });
+  }, [data.campaigns, stakeholders, accounts]);
+
+  const [dismissedManualSteps, setDismissedManualSteps] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('oike_dismissed_manual_steps') || '[]')); }
+    catch { return new Set(); }
+  });
+  const dismissManualStep = (key) => {
+    setDismissedManualSteps(prev => {
+      const next = new Set(prev); next.add(key);
+      try { localStorage.setItem('oike_dismissed_manual_steps', JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+
   const DONE_STATUSES = new Set(['Completado', 'Cerrado', 'Done', 'Closed']);
   const urgentActions = useMemo(() => {
     const todayIso = new Date().toISOString().split('T')[0];
@@ -764,6 +810,67 @@ function FollowupCenter({ data, api, onLogActivity, onAddRecord, onUpdateRecord,
           </div>
         );
       })}
+
+      {(() => {
+        const visible = manualSeqStepsDueToday.filter(({ stk, campaign, stepIdx }) =>
+          !dismissedManualSteps.has(`${stk.id}:${campaign.id}:${stepIdx}`)
+        );
+        if (!visible.length) return null;
+        return (
+          <div className="card" style={{ borderLeft: '3px solid #a78bfa', background: 'rgba(167,139,250,0.03)', marginBottom: 16 }}>
+            <div className="card-header" style={{ marginBottom: 12 }}>
+              <h3 style={{ color: '#a78bfa', margin: 0 }}>📬 Manual sequence steps — due today ({visible.length})</h3>
+              <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>WhatsApp & LinkedIn steps from active sequences — send manually</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {visible.map(({ stk, acc, campaign, step, stepIdx }) => {
+                const key = `${stk.id}:${campaign.id}:${stepIdx}`;
+                const name = `${F(stk,'Name')}${F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}`;
+                const role = F(stk,'Role');
+                const accName = acc ? F(acc,'Account Name') : '';
+                const phone = F(stk,'Phone number');
+                const linkedin = F(stk,'LinkedIn');
+                const chColor = step.channel === 'LinkedIn' ? '#6366f1' : '#4ade80';
+                const chBg = step.channel === 'LinkedIn' ? 'rgba(99,102,241,0.15)' : 'rgba(74,222,128,0.12)';
+                const chIcon = step.channel === 'LinkedIn' ? '🔗' : '💬';
+                const campName = F(campaign,'Name');
+                const totalSteps = (() => { try { return JSON.parse(F(campaign,'Sequence Steps')||'[]').length; } catch { return '?'; } })();
+                return (
+                  <div key={key} style={{ display: 'flex', gap: 12, padding: '12px 14px', borderRadius: 8, background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)', alignItems: 'flex-start' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: chBg, border: `2px solid ${chColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0, marginTop: 2 }}>{chIcon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', cursor: 'pointer' }} onClick={() => setHistoryStakeholder(stk)}>{name}</span>
+                        {role && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{role}</span>}
+                        {accName && <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>· {accName}</span>}
+                        <span style={{ fontSize: 10, fontWeight: 700, color: chColor, padding: '2px 8px', borderRadius: 10, background: chBg, border: `1px solid ${chColor}55` }}>{step.channel}</span>
+                        <span style={{ fontSize: 10, color: 'var(--globant-muted)', padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--globant-border)' }}>Step {stepIdx + 1}/{totalSteps} · {campName}</span>
+                      </div>
+                      {step.note && <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 6 }}>&#34;{step.note}&#34;</div>}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {step.channel === 'WhatsApp' && phone && (
+                          <a href={`https://wa.me/${phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                            style={{ fontSize: 11, padding: '5px 12px', borderRadius: 6, background: 'rgba(37,211,102,0.15)', color: '#25d366', border: '1px solid rgba(37,211,102,0.3)', textDecoration: 'none', fontWeight: 600 }}>
+                            💬 Open WhatsApp
+                          </a>
+                        )}
+                        {step.channel === 'LinkedIn' && linkedin && (
+                          <a href={linkedin} target="_blank" rel="noreferrer"
+                            style={{ fontSize: 11, padding: '5px 12px', borderRadius: 6, background: 'rgba(10,102,194,0.15)', color: '#0a66c2', border: '1px solid rgba(10,102,194,0.3)', textDecoration: 'none', fontWeight: 600 }}>
+                            🔗 Open LinkedIn
+                          </a>
+                        )}
+                        <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setHistoryStakeholder(stk)}>History</button>
+                        <button onClick={() => dismissManualStep(key)} style={{ fontSize: 11, padding: '5px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--globant-border)', color: 'var(--globant-muted)', cursor: 'pointer' }}>✕ Done</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {urgentActions.length > 0 && (
         <div className="card" style={{ borderLeft: '3px solid #ef4444', background: 'rgba(239,68,68,0.03)' }}>
