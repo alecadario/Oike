@@ -37,6 +37,7 @@ import ICPSection from './components/ICPSection.jsx';
 import SolutionsHub from './components/SolutionsHub.jsx';
 import ProposalsHub from './components/ProposalsHub.jsx';
 import CampaignsHub from './components/CampaignsHub.jsx';
+import MessageLab from './components/MessageLab.jsx';
 import ContentLab from './components/ContentLab.jsx';
 import LandingsHub from './components/LandingsHub.jsx';
 import ReportBuilder from './components/ReportBuilder.jsx';
@@ -370,6 +371,7 @@ function App() {
     proposals: <ProposalsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} navigateToProposalId={navigateToProposalId} clearNavigateProposal={() => setNavigateToProposalId('')} />,
     insights: <InsightsView data={data} />,
     campaigns: <CampaignsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} onDeleteRecord={removeFromData} campaignPrefill={campaignPrefill} clearCampaignPrefill={() => setCampaignPrefill(null)} />,
+    messagelab: <MessageLab data={data} api={api} onLogActivity={bgSync} onUpdateRecord={updateInData} />,
     contentlab: <ContentLab data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onDeleteRecord={removeFromData} />,
     landings: <LandingsHub data={data} api={api} onLogActivity={bgSync} onAddRecord={addToData} onUpdateRecord={updateInData} />,
     reports:  <ReportBuilder data={data} api={api} onAddRecord={addToData} onCreateCampaignFromInsight={createCampaignFromInsight} />,
@@ -387,6 +389,7 @@ function App() {
     { icon: '🏢', label: 'Accounts', key: 'accounts', bdr: true, group: 1 },
     { icon: '👤', label: 'Contacts', key: 'contacts', bdr: true, group: 1 },
     { icon: '📣', label: 'Campaigns', key: 'campaigns', bdr: true, group: 1 },
+    { icon: '✉️', label: 'Message Lab', key: 'messagelab', bdr: true, group: 1 },
     // Group 2 — Outreach & Pipeline
     { icon: '🎪', label: 'Events', key: 'events', group: 2 },
     { icon: '📈', label: 'Activity Tracker', key: 'activity', group: 2 },
