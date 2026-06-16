@@ -159,6 +159,45 @@ function StatusBadge({ status }) {
   return <span style={{ fontSize: 11, color }}>{icon}</span>;
 }
 
+// ─── Send buttons based on available contact info ────────────────────────────
+function SendButtons({ stakeholder, message }) {
+  const phone = F(stakeholder, 'Phone number');
+  const linkedin = F(stakeholder, 'LinkedIn');
+  const email = F(stakeholder, 'Email');
+  const msg = message || '';
+
+  const btnStyle = { fontSize: 12, padding: '5px 12px' };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+      {phone && (
+        <a href={`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="action-btn btn-whatsapp" style={btnStyle}>
+          💬 WhatsApp
+        </a>
+      )}
+      {email && (
+        <a href={`mailto:${email}?body=${encodeURIComponent(msg)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="action-btn btn-email" style={btnStyle}>
+          ✉️ Email
+        </a>
+      )}
+      {linkedin && (
+        <a href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`}
+          target="_blank" rel="noopener noreferrer"
+          className="action-btn btn-linkedin" style={btnStyle}>
+          🔗 LinkedIn
+        </a>
+      )}
+      {!phone && !email && !linkedin && (
+        <span style={MUTED}>No contact channels available</span>
+      )}
+    </div>
+  );
+}
+
 // ─── Contact picker: Company dropdown → Contact dropdown ──────────────────────
 function ContactPicker({ stakeholders, accounts, value, onChange, placeholder }) {
   const [companyId, setCompanyId] = useState('');
@@ -289,6 +328,7 @@ function IndividualTab({ data }) {
           </div>
           <textarea style={{ ...INPUT, minHeight: 120, resize: 'vertical', lineHeight: 1.6 }}
             value={generatedMsg} onChange={e => setGeneratedMsg(e.target.value)} />
+          {selected && <SendButtons stakeholder={selected} message={generatedMsg} />}
         </div>
       )}
     </div>
@@ -476,6 +516,7 @@ function BulkTab({ data }) {
                         <textarea style={{ ...INPUT, minHeight: 80, resize: 'vertical' }}
                           value={msgState.text}
                           onChange={e => setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], text: e.target.value } }))} />
+                        <SendButtons stakeholder={s} message={msgState.text} />
                       </td>
                     </tr>
                   )}
@@ -575,14 +616,12 @@ function SequencesTab({ data }) {
 
   function handleEnroll() {
     if (!selectedSeq || !enrollSelected.size) return;
-    const step0Days = selectedSeq.steps[0]?.waitDays || 0;
-    const startDate = addDays(step0Days);
     const updated = { ...selectedSeq, enrollments: { ...selectedSeq.enrollments } };
     enrollSelected.forEach(id => {
       if (!updated.enrollments[id]) {
         updated.enrollments[id] = {
           step: 0,
-          nextDate: startDate,
+          nextDate: enrollDate,
           nextTime: enrollTime,
           timezone: enrollTz,
           status: 'active',
@@ -774,6 +813,7 @@ function SequencesTab({ data }) {
                             value={msg} onChange={ev => setStepMsgs(prev => ({ ...prev, [e.id]: ev.target.value }))} />
                           <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
                             <CopyBtn text={msg} label={`${channelIcon[step?.channel] || '📋'} Copy`} />
+                            <SendButtons stakeholder={s} message={msg} />
                           </div>
                         </div>
                       )}
