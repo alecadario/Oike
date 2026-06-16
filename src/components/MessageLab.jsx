@@ -12,6 +12,7 @@ const CHANNELS = ['WhatsApp', 'LinkedIn', 'Email'];
 const MSG_TYPES = ['First Touch', 'Follow-up', 'Breakup'];
 const MSG_TYPE_KEY = { 'First Touch': 'first', 'Follow-up': 'followup', 'Breakup': 'breakup' };
 const SEQ_LS_KEY = 'oike_sequences';
+const LANGUAGES = ['Auto (contact country)', 'English', 'Spanish', 'Portuguese', 'French', 'German', 'Italian'];
 
 const TIMEZONES = [
   'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -86,7 +87,7 @@ function getCampaignsFor(id, campaigns) {
   });
 }
 
-function buildPrompt(s, account, outreach, campaigns, msgType, channel) {
+function buildPrompt(s, account, outreach, campaigns, msgType, channel, language) {
   const cp = COMPANY_PROFILE || {};
   const name = F(s, 'Name') || 'the contact';
   const accName = account ? (F(account, 'Account Name') || '') : '';
@@ -132,6 +133,8 @@ Mission: ${mission}
 Channel: ${channel}
 ${channelRules}
 
+Language: ${(!language || language.startsWith('Auto')) ? `Use the language most appropriate for ${accName || 'the contact'} based on their country/region.` : `Write in ${language} only.`}
+
 Write ONE message only. No preamble, explanation, or meta-commentary. Just the message.`;
 }
 
@@ -157,45 +160,6 @@ function StatusBadge({ status }) {
   };
   const [icon, color] = map[status] || ['?', 'var(--globant-muted)'];
   return <span style={{ fontSize: 11, color }}>{icon}</span>;
-}
-
-// ─── Send buttons based on available contact info ────────────────────────────
-function SendButtons({ stakeholder, message }) {
-  const phone = F(stakeholder, 'Phone number');
-  const linkedin = F(stakeholder, 'LinkedIn');
-  const email = F(stakeholder, 'Email');
-  const msg = message || '';
-
-  const btnStyle = { fontSize: 12, padding: '5px 12px' };
-
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-      {phone && (
-        <a href={`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`}
-          target="_blank" rel="noopener noreferrer"
-          className="action-btn btn-whatsapp" style={btnStyle}>
-          💬 WhatsApp
-        </a>
-      )}
-      {email && (
-        <a href={`mailto:${email}?body=${encodeURIComponent(msg)}`}
-          target="_blank" rel="noopener noreferrer"
-          className="action-btn btn-email" style={btnStyle}>
-          ✉️ Email
-        </a>
-      )}
-      {linkedin && (
-        <a href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`}
-          target="_blank" rel="noopener noreferrer"
-          className="action-btn btn-linkedin" style={btnStyle}>
-          🔗 LinkedIn
-        </a>
-      )}
-      {!phone && !email && !linkedin && (
-        <span style={MUTED}>No contact channels available</span>
-      )}
-    </div>
-  );
 }
 
 // ─── Contact picker: Company dropdown → Contact dropdown ──────────────────────
@@ -254,6 +218,7 @@ function IndividualTab({ data }) {
   const [selected, setSelected] = useState(null);
   const [msgType, setMsgType] = useState('First Touch');
   const [channel, setChannel] = useState('WhatsApp');
+  const [language, setLanguage] = useState('Auto (contact country)');
   const [generatedMsg, setGeneratedMsg] = useState('');
   const [generating, setGenerating] = useState(false);
 
@@ -267,7 +232,7 @@ function IndividualTab({ data }) {
     setGenerating(true);
     setGeneratedMsg('');
     try {
-      const prompt = buildPrompt(selected, account, outreach, campaigns, msgType, channel);
+      const prompt = buildPrompt(selected, account, outreach, campaigns, msgType, channel, language);
       const result = await callOpenAI({ prompt, max_tokens: 450, temperature: 0.75 });
       setGeneratedMsg(result || '');
     } catch (e) {
@@ -311,6 +276,9 @@ function IndividualTab({ data }) {
         <select style={SEL} value={channel} onChange={e => setChannel(e.target.value)}>
           {CHANNELS.map(c => <option key={c}>{channelIcon[c] || ''} {c}</option>)}
         </select>
+        <select style={SEL} value={language} onChange={e => setLanguage(e.target.value)}>
+          {LANGUAGES.map(l => <option key={l}>{l}</option>)}
+        </select>
         <button className="action-btn" onClick={handleGenerate} disabled={!selected || generating}
           style={{ opacity: (!selected || generating) ? 0.5 : 1 }}>
           {generating ? '⏳ Generating…' : '✨ Generate'}
@@ -328,7 +296,6 @@ function IndividualTab({ data }) {
           </div>
           <textarea style={{ ...INPUT, minHeight: 120, resize: 'vertical', lineHeight: 1.6 }}
             value={generatedMsg} onChange={e => setGeneratedMsg(e.target.value)} />
-          {selected && <SendButtons stakeholder={selected} message={generatedMsg} />}
         </div>
       )}
     </div>
@@ -344,6 +311,7 @@ function BulkTab({ data }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [channel, setChannel] = useState('WhatsApp');
+  const [language, setLanguage] = useState('Auto (contact country)');
   const [msgType, setMsgType] = useState('First Touch');
   const [bulkMsgs, setBulkMsgs] = useState({});
   const [generating, setGenerating] = useState(false);
@@ -418,7 +386,7 @@ function BulkTab({ data }) {
       });
       await Promise.all(chunk.map(async s => {
         const acc = getAccount(s, accounts);
-        const prompt = buildPrompt(s, acc, outreach, campaigns, msgType, channel);
+        const prompt = buildPrompt(s, acc, outreach, campaigns, msgType, channel, language);
         try {
           const result = await callOpenAI({ prompt, max_tokens: 450, temperature: 0.75 });
           setBulkMsgs(prev => ({ ...prev, [s.id]: { text: result || '', status: 'done' } }));
@@ -516,7 +484,6 @@ function BulkTab({ data }) {
                         <textarea style={{ ...INPUT, minHeight: 80, resize: 'vertical' }}
                           value={msgState.text}
                           onChange={e => setBulkMsgs(prev => ({ ...prev, [s.id]: { ...prev[s.id], text: e.target.value } }))} />
-                        <SendButtons stakeholder={s} message={msgState.text} />
                       </td>
                     </tr>
                   )}
@@ -540,6 +507,9 @@ function BulkTab({ data }) {
         </select>
         <select style={SEL} value={channel} onChange={e => setChannel(e.target.value)}>
           {CHANNELS.map(c => <option key={c}>{channelIcon[c] || ''} {c}</option>)}
+        </select>
+        <select style={SEL} value={language} onChange={e => setLanguage(e.target.value)}>
+          {LANGUAGES.map(l => <option key={l}>{l}</option>)}
         </select>
         <button className="action-btn" onClick={handleGenerateAll} disabled={!selected.size || generating}
           style={{ opacity: (!selected.size || generating) ? 0.5 : 1 }}>
@@ -567,6 +537,7 @@ function SequencesTab({ data }) {
   const [enrollTime, setEnrollTime] = useState('09:00');
   const [enrollTz, setEnrollTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York');
   const [generatingFor, setGeneratingFor] = useState(null);
+  const [language, setLanguage] = useState('Auto (contact country)');
   const [stepMsgs, setStepMsgs] = useState({});
 
   const today = todayISO();
@@ -616,12 +587,14 @@ function SequencesTab({ data }) {
 
   function handleEnroll() {
     if (!selectedSeq || !enrollSelected.size) return;
+    const step0Days = selectedSeq.steps[0]?.waitDays || 0;
+    const startDate = addDays(step0Days);
     const updated = { ...selectedSeq, enrollments: { ...selectedSeq.enrollments } };
     enrollSelected.forEach(id => {
       if (!updated.enrollments[id]) {
         updated.enrollments[id] = {
           step: 0,
-          nextDate: enrollDate,
+          nextDate: startDate,
           nextTime: enrollTime,
           timezone: enrollTz,
           status: 'active',
@@ -674,7 +647,7 @@ function SequencesTab({ data }) {
     const step = selectedSeq.steps[e.step];
     const acc = getAccount(s, accounts);
     const stepCtx = `\n\nThis is step ${e.step + 1} of ${selectedSeq.steps.length} in sequence "${selectedSeq.name}": ${step.note || ''} via ${step.channel}${step.waitDays ? ` (${step.waitDays} days after previous)` : ' (day 0)'}. `;
-    const prompt = buildPrompt(s, acc, outreach, campaigns, e.step === 0 ? 'First Touch' : 'Follow-up', step.channel) + stepCtx;
+    const prompt = buildPrompt(s, acc, outreach, campaigns, e.step === 0 ? 'First Touch' : 'Follow-up', step.channel, language) + stepCtx;
     setGeneratingFor(stakeholderId);
     try {
       const result = await callOpenAI({ prompt, max_tokens: 450, temperature: 0.75 });
@@ -779,7 +752,12 @@ function SequencesTab({ data }) {
             {/* Due today */}
             {dueToday.length > 0 && (
               <div style={{ ...CARD, borderColor: GREEN }}>
-                <div style={{ fontWeight: 700, color: GREEN, marginBottom: 10 }}>📅 Due Today ({dueToday.length})</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ fontWeight: 700, color: GREEN }}>📅 Due Today ({dueToday.length})</div>
+                  <select style={{ ...SEL, minWidth: 160 }} value={language} onChange={e => setLanguage(e.target.value)}>
+                    {LANGUAGES.map(l => <option key={l}>{l}</option>)}
+                  </select>
+                </div>
                 {dueToday.map(e => {
                   const s = e.stakeholder;
                   const acc = getAccount(s, accounts);
@@ -813,7 +791,6 @@ function SequencesTab({ data }) {
                             value={msg} onChange={ev => setStepMsgs(prev => ({ ...prev, [e.id]: ev.target.value }))} />
                           <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
                             <CopyBtn text={msg} label={`${channelIcon[step?.channel] || '📋'} Copy`} />
-                            <SendButtons stakeholder={s} message={msg} />
                           </div>
                         </div>
                       )}
