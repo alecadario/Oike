@@ -167,7 +167,7 @@ function resolveTpl(tpl: string, vars: Record<string, string | number>): string 
 }
 
 // ── OpenAI message generation ──
-async function generateMessage(stk: any, campaign: any, step: SeqStep, acc: any | null, recentOutreach: any[], offering: any | null): Promise<string> {
+async function generateMessage(stk: any, campaign: any, step: SeqStep, acc: any | null, recentOutreach: any[], offering: any | null, customPrompts?: Record<string, string>): Promise<string> {
   const openaiKey = Netlify.env.get('OPENAI_API_KEY');
   const sName = `${F(stk,'Name')||''} ${F(stk,'Last name')||''}`.trim();
   const role = F(stk,'Role') || '';
@@ -190,7 +190,8 @@ async function generateMessage(stk: any, campaign: any, step: SeqStep, acc: any 
   const hasReplied = recentOutreach.some(o => ['received','replied'].includes(F(o,'Status').toLowerCase()));
   const replyState = hasReplied ? 'got a reply at some point' : touchCount === 0 ? 'no prior contact' : `${touchCount} touches, no reply`;
   const promptType = isBreakup ? 'breakup' : isFirst || touchCount === 0 ? 'first' : 'followup';
-  const missionTpl = PROMPT_DEFAULTS[promptType];
+  const activePrompts = customPrompts ? { ...PROMPT_DEFAULTS, ...customPrompts } : PROMPT_DEFAULTS;
+  const missionTpl = activePrompts[promptType];
   const mission = resolveTpl(missionTpl, { name: sName, company: accName || 'their company', touchCount, replyState });
 
   // History block (last 5)
@@ -383,7 +384,7 @@ export default async (req?: Request) => {
         const campName = F(campaign,'Name');
         let steps: SeqStep[];
         let enrollments: Enrollments;
-        let seqCfg: { sendHour: number; timezone: string; active?: boolean };
+        let seqCfg: { sendHour: number; timezone: string; active?: boolean; prompts?: Record<string, string> };
         const rawEnrollments = F(campaign,'Sequence Enrollments');
         const rawSteps = F(campaign,'Sequence Steps');
         console.log(`[seq-runner] Parsing "${campName}": enrollments length=${rawEnrollments.length}, steps length=${rawSteps.length}`);
@@ -454,7 +455,7 @@ export default async (req?: Request) => {
             .slice(0,5);
           const offering = getBestOffering(acc, solutions);
 
-          const msg = await generateMessage(stk, campaign, step, acc, recentOutreach, offering);
+          const msg = await generateMessage(stk, campaign, step, acc, recentOutreach, offering, seqCfg.prompts);
           const lines = msg.split('\n');
           const si = lines.findIndex(l => /^subject:/i.test(l.trim()));
           let subject = en.gmailSubject || `${F(campaign,'Name')} — ${F(stk,'Name')||''}`;
