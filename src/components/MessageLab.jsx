@@ -116,7 +116,8 @@ function buildPrompt(s, account, outreach, campaigns, msgType, channel) {
     ? 'Up to 5 sentences. Include Subject line. Professional but warm.'
     : 'Max 3 sentences. Concise, direct, conversational. No generic openers.';
 
-  return `You are ${cp.senderTitle || 'a sales rep'} at ${cp.companyName || 'our company'}.
+  return `You are ${cp.senderName || 'the sender'}, ${cp.senderTitle || 'a sales rep'} at ${cp.companyName || 'our company'}.
+IMPORTANT: Sign the message as "${cp.senderName || 'the sender'}" — never use placeholders like [Tu Nombre] or [Your Name].
 ${cp.services ? `Services: ${cp.services}` : ''}
 ${cp.voiceTone ? `Tone: ${cp.voiceTone}` : ''}
 
@@ -442,9 +443,9 @@ function BulkTab({ data }) {
               const isExpanded = expanded.has(s.id);
               return (
                 <React.Fragment key={s.id}>
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isChecked ? 'rgba(74,222,128,0.04)' : 'transparent' }}>
+                  <tr onClick={() => toggleOne(s.id)} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isChecked ? 'rgba(74,222,128,0.04)' : 'transparent', cursor: 'pointer' }}>
                     <td style={{ padding: '7px 12px' }}>
-                      <input type="checkbox" checked={isChecked} onChange={() => toggleOne(s.id)} />
+                      <input type="checkbox" checked={isChecked} onChange={() => toggleOne(s.id)} onClick={e => e.stopPropagation()} />
                     </td>
                     <td style={{ padding: '7px 12px', fontWeight: 500 }}>{F(s, 'Name')}</td>
                     <td style={{ padding: '7px 12px', color: 'var(--globant-muted)' }}>{acc ? F(acc, 'Account Name') : '—'}</td>
@@ -838,20 +839,28 @@ function SequencesTab({ data }) {
 
             {/* Enroll contacts */}
             <div style={CARD}>
-              <div style={{ fontWeight: 700, marginBottom: 10 }}>Enroll Contacts</div>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>Enroll Contacts</div>
 
-              {/* Company picker + date/time/tz */}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-                <select style={SEL} value={enrollCompany} onChange={e => { setEnrollCompany(e.target.value); setEnrollSelected(new Set()); }}>
+              {/* Schedule */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ ...MUTED, marginBottom: 6, fontWeight: 600 }}>📅 Schedule first touch</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input type="date" style={{ ...INPUT, width: 150 }} value={enrollDate}
+                    onChange={e => setEnrollDate(e.target.value)} />
+                  <input type="time" style={{ ...INPUT, width: 110 }} value={enrollTime}
+                    onChange={e => setEnrollTime(e.target.value)} />
+                  <select style={{ ...SEL, minWidth: 200 }} value={enrollTz} onChange={e => setEnrollTz(e.target.value)}>
+                    {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Company picker */}
+              <div style={{ ...MUTED, marginBottom: 6, fontWeight: 600 }}>👥 Pick contacts</div>
+              <div style={{ marginBottom: 8 }}>
+                <select style={{ ...SEL, width: '100%' }} value={enrollCompany} onChange={e => { setEnrollCompany(e.target.value); setEnrollSelected(new Set()); }}>
                   <option value="">Select company…</option>
                   {uniqueAccounts.map(a => <option key={a.id} value={a.id}>{F(a, 'Account Name')}</option>)}
-                </select>
-                <input type="date" style={{ ...INPUT, width: 150 }} value={enrollDate}
-                  onChange={e => setEnrollDate(e.target.value)} title="First touch date" />
-                <input type="time" style={{ ...INPUT, width: 110 }} value={enrollTime}
-                  onChange={e => setEnrollTime(e.target.value)} title="Send time" />
-                <select style={{ ...SEL, minWidth: 180 }} value={enrollTz} onChange={e => setEnrollTz(e.target.value)}>
-                  {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
                 </select>
               </div>
 
