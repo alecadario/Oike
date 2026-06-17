@@ -17,6 +17,7 @@ import {
   formatCurrency, formatDate, strSimilarity, FileNotesRenderer,
 } from '../utils.js';
 import StakeholderHistoryModal from './StakeholderHistoryModal.jsx';
+import ContentLab from './ContentLab.jsx';
 
 
 function CampaignsHub({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, campaignPrefill, clearCampaignPrefill }) {
@@ -277,6 +278,7 @@ Format as 3-4 short sections with ### headers: Target, Angle, Pain Addressed, De
   const [seqConfig, setSeqConfig] = useState({ sendHour: 9, timezone: 'America/Argentina/Buenos_Aires' });
   const [seqDirty, setSeqDirty] = useState(false);
   const [savingSeq, setSavingSeq] = useState(false);
+  const [seqTab, setSeqTab] = useState('steps');
   const [enrolling, setEnrolling] = useState(false);
   const [enrollDateTime, setEnrollDateTime] = useState('');
   const [runningSeq, setRunningSeq] = useState(false);
@@ -513,7 +515,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
   // ── Sequence helpers ──
   const parseSeqSteps = (c) => { try { return JSON.parse(F(c,'Sequence Steps') || '[]'); } catch { return []; } };
   const parseSeqEnrollments = (c) => { try { return JSON.parse(F(c,'Sequence Enrollments') || '{}'); } catch { return {}; } };
-  const parseSeqConfig = (c) => { try { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', active: true, sendMode: 'send', ...JSON.parse(F(c,'Sequence Config') || '{}') }; } catch { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', active: true, sendMode: 'send' }; } };
+  const parseSeqConfig = (c) => { try { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', active: true, sendMode: 'send', sendOnEnroll: false, ...JSON.parse(F(c,'Sequence Config') || '{}') }; } catch { return { sendHour: 9, timezone: 'America/Argentina/Buenos_Aires', active: true, sendMode: 'send', sendOnEnroll: false }; } };
 
   const parseTplContent = (html) => {
     try {
@@ -567,7 +569,7 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
     if (!selectedCampaign) return;
     setSavingSeq(true);
     const stepsJson  = JSON.stringify(seqSteps);
-    const configJson = JSON.stringify(seqConfig);
+    const configJson = JSON.stringify({ ...seqConfig, prompts: MESSAGE_PROMPTS });
     try {
       const a = api || new AirtableAPI();
       await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Steps': stepsJson, 'Sequence Config': configJson });
@@ -605,6 +607,9 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
       await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': json });
       if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
       window.__oikeToast(`✅ ${toEnroll.length} contact${toEnroll.length>1?'s':''} enrolled in sequence.`, 'success');
+      if (seqConfig.sendOnEnroll && seqConfig.active !== false) {
+        setTimeout(() => runSequenceNow(), 800);
+      }
     } catch(e) { window.__oikeToast('Enrollment failed: ' + e.message, 'error'); }
     setEnrolling(false);
   };
@@ -619,9 +624,29 @@ BANNED: "following up"/"checking in"/"hope this finds you"/"touching base"/brack
     if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': json });
   };
 
-  // Feature 4: Trigger sequence runner manually
-  const runSequenceNow = async () => {
+  // Force-advance all active enrollments to now, then run the sequence
+  const forceRunSequenceNow = async () => {
+    if (!selectedCampaign) return;
     setRunningSeq(true);
+    try {
+      const current = parseSeqEnrollments(selectedCampaign);
+      const nowIso = new Date().toISOString();
+      let changed = false;
+      Object.values(current).forEach(en => {
+        if (en.status === 'active') { en.nextDateTime = nowIso; en.nextDate = nowIso.split('T')[0]; changed = true; }
+      });
+      if (changed) {
+        const a = api || new AirtableAPI();
+        await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Enrollments': JSON.stringify(current) });
+        if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Enrollments': JSON.stringify(current) });
+      }
+    } catch(e) { window.__oikeToast('Error advancing schedule: ' + e.message, 'error'); setRunningSeq(false); return; }
+    await runSequenceNow(true);
+  };
+
+  // Feature 4: Trigger sequence runner manually
+  const runSequenceNow = async (alreadyLoading = false) => {
+    if (!alreadyLoading) setRunningSeq(true);
     try {
       const res = await fetch('/.netlify/functions/campaign-sequence-runner', {
         method: 'POST',
@@ -1573,549 +1598,328 @@ If email: line 1 = "Subject: [subject]", blank line, body. Output ONLY the messa
 
 
         {/* Sequence */}
-        <div className="card" style={{ marginBottom: 14, borderLeft: `3px solid ${seqConfig.active !== false ? '#a78bfa' : 'var(--globant-border)'}`, padding: '12px 14px' }}>
-          {/* Header row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 1 }}>🗓️ Drip Sequence</div>
-              {seqSteps.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{
-                    fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20,
-                    background: seqConfig.active !== false ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)',
-                    color: seqConfig.active !== false ? '#4ade80' : 'var(--globant-muted)',
-                    border: `1px solid ${seqConfig.active !== false ? 'rgba(74,222,128,0.35)' : 'var(--globant-border)'}`,
-                  }}>
-                    {seqConfig.active !== false ? '🟢 Active' : '⏸ Paused'}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      const newActive = seqConfig.active === false ? true : false;
-                      const newCfg = { ...seqConfig, active: newActive };
-                      setSeqConfig(newCfg);
-                      const a = api || new AirtableAPI();
-                      await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Config': JSON.stringify(newCfg) });
-                      if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Config': JSON.stringify(newCfg) });
-                      window.__oikeToast(newActive ? '🟢 Sequence activated — emails will go out automatically.' : '⏸ Sequence paused — no emails will be sent.', newActive ? 'success' : 'warning');
-                    }}
-                    style={{ fontSize: 11, background: 'none', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-muted)', cursor: 'pointer', padding: '2px 8px' }}>
-                    {seqConfig.active !== false ? 'Pause' : 'Activate'}
-                  </button>
-                </div>
-              )}
-            </div>
-            <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setShowSeq(!showSeq)}>
-              {showSeq ? '▲ Collapse' : (seqSteps.length > 0 ? `▼ ${seqSteps.length} step${seqSteps.length>1?'s':''} · Edit` : '▼ Set up sequence')}
-            </button>
-          </div>
+        {(() => {
+          const enrollments = parseSeqEnrollments(selectedCampaign);
+          const enrolledIds = Object.keys(enrollments);
+          const now = new Date();
+          const isDue = (en) => {
+            if (en.status !== 'active') return false;
+            const dt = en.nextDateTime ? new Date(en.nextDateTime) : (en.nextDate ? new Date(en.nextDate) : null);
+            return dt && dt <= now;
+          };
+          const getNextDate = (en) => { const dt = en.nextDateTime || en.nextDate; return dt ? new Date(dt) : new Date(9999,0); };
+          const groupDue = enrolledIds.filter(id => isDue(enrollments[id]));
+          const groupScheduled = enrolledIds.filter(id => enrollments[id].status === 'active' && !isDue(enrollments[id])).sort((a,b) => getNextDate(enrollments[a]) - getNextDate(enrollments[b]));
+          const groupFinished = enrolledIds.filter(id => ['completed','replied'].includes(enrollments[id].status));
+          const activeCount = enrolledIds.filter(id => enrollments[id].status === 'active').length;
+          const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
+          const completedCount = enrolledIds.filter(id => enrollments[id].status === 'completed').length;
+          const pctDone = enrolledIds.length > 0 ? Math.round((completedCount + repliedCount) / enrolledIds.length * 100) : 0;
+          const getDueLabel = (en) => {
+            const nextDT = en.nextDateTime || en.nextDate;
+            if (!nextDT) return null;
+            const diffMs = new Date(nextDT) - new Date();
+            const diffD = Math.ceil(diffMs / (1000*60*60*24));
+            if (diffMs <= 0) return { label: 'Due now', color: '#ef4444' };
+            if (diffD <= 1) return { label: 'Tomorrow', color: '#fbbf24' };
+            if (diffD <= 3) return { label: `In ${diffD}d`, color: '#fb923c' };
+            const d = new Date(nextDT);
+            return { label: d.toLocaleDateString('en', { month:'short', day:'numeric' }), color: 'var(--globant-muted)' };
+          };
+          const pendingToEnroll = pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed');
+          const isActive = seqConfig.active !== false;
+          const STATUS_C = { active: '#60a5fa', completed: 'var(--globant-muted)', replied: '#4ade80', paused: '#a78bfa' };
 
-          {/* Always-visible summary when there are enrollments */}
-          {!showSeq && seqSteps.length > 0 && (() => {
-            const enrollments = parseSeqEnrollments(selectedCampaign);
-            const todayStr = new Date().toISOString().split('T')[0];
-            const now = new Date();
-            const dueToday = Object.values(enrollments).filter(e => {
-              if (e.status !== 'active') return false;
-              const dt = e.nextDateTime ? new Date(e.nextDateTime) : new Date(e.nextDate);
-              return dt <= now;
-            });
-            const activeCount = Object.values(enrollments).filter(e => e.status === 'active').length;
-            const repliedCount = Object.values(enrollments).filter(e => e.status === 'replied').length;
-            const completedCount = Object.values(enrollments).filter(e => e.status === 'completed').length;
-            const totalEnrolled = Object.values(enrollments).length;
-            const pctDone = totalEnrolled > 0 ? Math.round((completedCount + repliedCount) / totalEnrolled * 100) : 0;
-            if (totalEnrolled === 0) return null;
+          const renderContactRow = (stkId, showDivider) => {
+            const en = enrollments[stkId];
+            const stk = stakeholders.find(s => s.id === stkId);
+            if (!stk) return null;
+            const name = `${F(stk,'Name')}${F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}`;
+            const step = en.step || 0;
+            const contactIsDue = isDue(en);
+            const dueInfo = en.status === 'active' ? getDueLabel(en) : null;
+            let centerContent = null;
+            if (en.status === 'completed') centerContent = <span style={{ color:'#4ade80', fontSize:11 }}>✅ All {seqSteps.length} steps sent</span>;
+            else if (en.status === 'replied') centerContent = <span style={{ color:'#4ade80', fontSize:11 }}>💬 Replied — stopped</span>;
+            else if (contactIsDue) centerContent = <span style={{ color:'#ef4444', fontSize:11, fontWeight:600 }}>🔴 Step {step+1} due now</span>;
+            else centerContent = (
+              <span style={{ fontSize:11 }}>
+                {step > 0 && <span style={{ color:'#4ade80' }}>✅ {step} sent · </span>}
+                <span style={{ color:'var(--globant-muted)' }}>Step {step+1} — </span>
+                <span style={{ color: dueInfo?.color || 'var(--globant-muted)', fontWeight:600 }}>{dueInfo?.label || '—'}</span>
+              </span>
+            );
+            const pillColor = contactIsDue ? '#ef4444' : (STATUS_C[en.status] || 'var(--globant-muted)');
             return (
-              <div style={{ marginTop: 10 }}>
-                {/* Today's outbox — the key clarity element */}
-                {dueToday.length > 0 && seqConfig.active !== false ? (
-                  <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#4ade80' }}>
-                        📬 {dueToday.length} email{dueToday.length > 1 ? 's' : ''} going out today
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>
-                        Sending at {String(seqConfig.sendHour).padStart(2,'0')}:00 · {seqConfig.sendMode === 'draft' ? 'Goes to Gmail Drafts for review' : 'Sent automatically via your Gmail'}
-                      </div>
-                    </div>
-                    <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '5px 12px', flexShrink: 0 }}
-                      disabled={runningSeq} onClick={runSequenceNow}>
-                      {runningSeq ? '⏳…' : '⚡ Send now'}
-                    </button>
-                  </div>
-                ) : dueToday.length > 0 && seqConfig.active === false ? (
-                  <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, color: '#fbbf24' }}>⏸ {dueToday.length} email{dueToday.length > 1 ? 's' : ''} pending — sequence is paused. Activate to resume sending.</div>
-                  </div>
-                ) : (
-                  <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--globant-border)', marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, color: 'var(--globant-muted)' }}>No emails due today — sequence is running on schedule.</div>
-                  </div>
-                )}
-                {/* Mini progress */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-                    <span style={{ color: '#60a5fa' }}>🔵 {activeCount} active</span>
-                    <span style={{ color: '#4ade80' }}>✅ {repliedCount} replied</span>
-                    <span style={{ color: 'var(--globant-muted)' }}>⬜ {completedCount} done</span>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>{pctDone}%</span>
+              <div key={stkId} style={{ display:'flex', alignItems:'center', padding:'8px 12px', borderBottom: showDivider ? '1px solid var(--globant-border)' : 'none', gap:8 }}>
+                <div style={{ minWidth:120, flexShrink:0 }}>
+                  <div style={{ fontWeight:700, fontSize:12 }}>{name}</div>
+                  <div style={{ fontSize:10, color:'var(--globant-muted)' }}>Step {step}/{seqSteps.length}</div>
                 </div>
-                <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: pctDone + '%', background: 'linear-gradient(90deg, #4ade80, #60a5fa)', borderRadius: 2, transition: 'width 0.4s ease' }} />
+                <div style={{ flex:1 }}>{centerContent}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:pillColor, padding:'2px 7px', borderRadius:10, background:`${pillColor}20`, border:`1px solid ${pillColor}40` }}>{en.status}</span>
+                  <button onClick={() => unenrollFromSequence(stkId)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:12, padding:0 }} title="Remove">✕</button>
                 </div>
               </div>
             );
-          })()}
+          };
 
-          {showSeq && (() => {
-            const enrollments = parseSeqEnrollments(selectedCampaign);
-            const enrolledIds = Object.keys(enrollments);
-            const activeCount = enrolledIds.filter(id => enrollments[id].status === 'active').length;
-            const completedCount = enrolledIds.filter(id => enrollments[id].status === 'completed').length;
-            const repliedCount = enrolledIds.filter(id => enrollments[id].status === 'replied').length;
-            const todayStr = new Date().toISOString().split('T')[0];
-            const now2 = new Date();
-            const dueToday = enrolledIds.filter(id => {
-              const e = enrollments[id];
-              if (e.status !== 'active') return false;
-              const dt = e.nextDateTime ? new Date(e.nextDateTime) : new Date(e.nextDate);
-              return dt <= now2;
-            });
-            return (
-              <div style={{ marginTop: 12 }}>
+          return (
+            <div className="card" style={{ marginBottom:14, borderLeft:`3px solid ${isActive && seqSteps.length > 0 ? '#a78bfa' : 'var(--globant-border)'}`, padding:'14px 16px' }}>
+              {/* Header */}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.8 }}>📨 Email Sequence</span>
+                  {seqSteps.length > 0 && (
+                    <span style={{ fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background: isActive ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)', color: isActive ? '#4ade80' : 'var(--globant-muted)', border:`1px solid ${isActive ? 'rgba(74,222,128,0.35)' : 'var(--globant-border)'}` }}>
+                      {isActive ? '🟢 Active' : '⏸ Paused'}
+                    </span>
+                  )}
+                  {enrolledIds.length > 0 && <span style={{ fontSize:11, color:'var(--globant-muted)' }}>{activeCount} active · {enrolledIds.length} total</span>}
+                </div>
+                {seqSteps.length > 0 && (
+                  <button onClick={async () => {
+                    const newCfg = { ...seqConfig, active: !isActive };
+                    setSeqConfig(newCfg);
+                    const a = api || new AirtableAPI();
+                    await a.updateRecord(TABLE_IDS.campaigns, selectedCampaign.id, { 'Sequence Config': JSON.stringify(newCfg) });
+                    if (onUpdateRecord) onUpdateRecord('campaigns', selectedCampaign.id, { 'Sequence Config': JSON.stringify(newCfg) });
+                    window.__oikeToast(!isActive ? '🟢 Sequence activated.' : '⏸ Sequence paused.', !isActive ? 'success' : 'warning');
+                  }} style={{ fontSize:11, background:'none', border:'1px solid var(--globant-border)', borderRadius:6, color:'var(--globant-muted)', cursor:'pointer', padding:'3px 10px' }}>
+                    {isActive ? 'Pause' : 'Activate'}
+                  </button>
+                )}
+              </div>
 
-                {/* ── Status banner ── */}
-                <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 8,
-                  background: seqConfig.active !== false ? 'rgba(74,222,128,0.07)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${seqConfig.active !== false ? 'rgba(74,222,128,0.25)' : 'var(--globant-border)'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: seqConfig.active !== false ? '#4ade80' : 'var(--globant-muted)', marginBottom: 2 }}>
-                        {seqConfig.active !== false ? '🟢 Sequence is active' : '⏸ Sequence is paused'}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>
-                        {seqConfig.active !== false
-                          ? `Emails go out at ${String(seqConfig.sendHour).padStart(2,'0')}:00 · ${seqConfig.sendMode === 'draft' ? 'Saved to Gmail Drafts for review' : 'Sent automatically from your Gmail'}`
-                          : 'No emails will be sent until you activate the sequence.'}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      {/* Send mode — single toggle for whole sequence */}
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        {[{val:'send', label:'🤖 Auto-send'}, {val:'draft', label:'📝 Draft first'}].map(opt => (
-                          <button key={opt.val}
-                            onClick={() => { setSeqConfig(p => ({...p, sendMode: opt.val})); setSeqDirty(true); }}
-                            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontWeight: (seqConfig.sendMode||'send') === opt.val ? 700 : 400,
-                              background: (seqConfig.sendMode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.2)' : 'rgba(251,191,36,0.15)') : 'rgba(0,0,0,0.15)',
-                              color: (seqConfig.sendMode||'send') === opt.val ? (opt.val === 'send' ? 'var(--globant-green)' : '#fbbf24') : 'var(--globant-muted)',
-                              border: `1px solid ${(seqConfig.sendMode||'send') === opt.val ? (opt.val === 'send' ? 'rgba(91,191,181,0.4)' : 'rgba(251,191,36,0.4)') : 'var(--globant-border)'}` }}>
+              {/* Tabs */}
+              <div style={{ display:'flex', borderBottom:'1px solid var(--globant-border)', marginBottom:16 }}>
+                {[['steps', `📋 Steps (${seqSteps.length})`], ['contacts', `👥 Contacts (${enrolledIds.length})`]].map(([key, label]) => (
+                  <button key={key} onClick={() => setSeqTab(key)} style={{ padding:'6px 16px', fontSize:12, fontWeight: seqTab===key ? 700 : 400, cursor:'pointer', background:'none', border:'none', borderBottom: seqTab===key ? '2px solid #a78bfa' : '2px solid transparent', color: seqTab===key ? '#a78bfa' : 'var(--globant-muted)', marginBottom:-1 }}>{label}</button>
+                ))}
+              </div>
+
+              {/* STEPS TAB */}
+              {seqTab === 'steps' && (
+                <div>
+                  {/* When to send */}
+                  <div style={{ marginBottom:14, padding:'10px 12px', background:'rgba(167,139,250,0.05)', borderRadius:8, border:'1px solid rgba(167,139,250,0.15)' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>When to send</div>
+                    <div style={{ display:'flex', gap:6, marginBottom: seqConfig.sendOnEnroll ? 0 : 10, flexWrap:'wrap' }}>
+                      {[{ val: true, label:'⚡ Immediately on enroll' }, { val: false, label:'🕐 Scheduled' }].map(opt => {
+                        const active = !!seqConfig.sendOnEnroll === opt.val;
+                        return (
+                          <button key={String(opt.val)} onClick={() => { setSeqConfig(p => ({...p, sendOnEnroll: opt.val})); setSeqDirty(true); }}
+                            style={{ padding:'5px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight: active ? 700 : 400, background: active ? 'rgba(167,139,250,0.18)' : 'rgba(0,0,0,0.1)', color: active ? '#a78bfa' : 'var(--globant-muted)', border:`1px solid ${active ? 'rgba(167,139,250,0.5)' : 'var(--globant-border)'}` }}>
                             {opt.label}
                           </button>
-                        ))}
+                        );
+                      })}
+                    </div>
+                    {!seqConfig.sendOnEnroll && (
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                        <div>
+                          <div style={{ fontSize:9, color:'var(--globant-muted)', marginBottom:3, fontWeight:600, textTransform:'uppercase' }}>Hour</div>
+                          <select className="input-field" style={{ fontSize:12, padding:'4px 8px' }} value={seqConfig.sendHour} onChange={e => { setSeqConfig(p => ({...p, sendHour: parseInt(e.target.value)})); setSeqDirty(true); }}>
+                            {Array.from({length:24}, (_,h) => <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex:1, minWidth:180 }}>
+                          <div style={{ fontSize:9, color:'var(--globant-muted)', marginBottom:3, fontWeight:600, textTransform:'uppercase' }}>Timezone</div>
+                          <select className="input-field" style={{ fontSize:12, padding:'4px 8px', width:'100%' }} value={seqConfig.timezone} onChange={e => { setSeqConfig(p => ({...p, timezone: e.target.value})); setSeqDirty(true); }}>
+                            {SEQ_TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                          </select>
+                        </div>
                       </div>
-                      {dueToday.length > 0 && seqConfig.active !== false && (
-                        <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '5px 12px' }}
-                          disabled={runningSeq} onClick={runSequenceNow}>
-                          {runningSeq ? '⏳ Running…' : `⚡ Send ${dueToday.length} due now`}
+                    )}
+                  </div>
+
+                  {/* Send mode */}
+                  <div style={{ marginBottom:14, display:'flex', gap:6, alignItems:'center' }}>
+                    <span style={{ fontSize:11, color:'var(--globant-muted)', flexShrink:0 }}>Mode:</span>
+                    {[{ val:'send', label:'🤖 Auto-send' }, { val:'draft', label:'📝 Save as draft' }].map(opt => {
+                      const active = (seqConfig.sendMode || 'send') === opt.val;
+                      return (
+                        <button key={opt.val} onClick={() => { setSeqConfig(p => ({...p, sendMode: opt.val})); setSeqDirty(true); }}
+                          style={{ padding:'4px 12px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight: active ? 700 : 400, background: active ? (opt.val==='send' ? 'rgba(91,191,181,0.18)' : 'rgba(251,191,36,0.15)') : 'rgba(0,0,0,0.1)', color: active ? (opt.val==='send' ? 'var(--globant-green)' : '#fbbf24') : 'var(--globant-muted)', border:`1px solid ${active ? (opt.val==='send' ? 'rgba(91,191,181,0.4)' : 'rgba(251,191,36,0.4)') : 'var(--globant-border)'}` }}>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Message angle */}
+                  <div style={{ marginBottom:14, borderRadius:6, border:'1px solid rgba(91,191,181,0.2)', overflow:'hidden' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 12px', background:'rgba(91,191,181,0.06)', cursor:'pointer' }} onClick={() => { if (!editingTemplate) setTplOpen(o => !o); }}>
+                      <span style={{ fontSize:10, fontWeight:700, color:'var(--globant-green)', textTransform:'uppercase', letterSpacing:0.5 }}>
+                        {tplOpen ? '▲' : '▼'} ✍️ Message Angle
+                        {!tplOpen && F(selectedCampaign,'Message Template') && <span style={{ marginLeft:8, fontWeight:400, color:'var(--globant-muted)', textTransform:'none', letterSpacing:0, fontSize:11 }}>{F(selectedCampaign,'Message Template').slice(0,60).trim()}{F(selectedCampaign,'Message Template').length > 60 ? '…' : ''}</span>}
+                      </span>
+                      <div style={{ display:'flex', gap:6 }} onClick={e => e.stopPropagation()}>
+                        {!editingTemplate ? (
+                          <button className="action-btn btn-ghost" style={{ fontSize:10 }} onClick={() => { setTemplateDraft(F(selectedCampaign,'Message Template')||''); setEditingTemplate(true); setTplOpen(true); }}>{F(selectedCampaign,'Message Template') ? '✏️ Edit' : '➕ Add'}</button>
+                        ) : (
+                          <>
+                            <button className="action-btn btn-primary" style={{ fontSize:10 }} onClick={saveCampaignTemplate} disabled={savingTemplate}>{savingTemplate ? '⏳' : '💾 Save'}</button>
+                            <button className="action-btn btn-ghost" style={{ fontSize:10 }} onClick={() => setEditingTemplate(false)}>Cancel</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {(tplOpen || editingTemplate) && (
+                      <div style={{ padding:'10px 12px' }}>
+                        {editingTemplate ? (
+                          <textarea className="input-field" style={{ width:'100%', minHeight:80, resize:'vertical', fontFamily:'inherit', fontSize:12, lineHeight:1.6 }} placeholder="Describe the angle and goal. AI will personalize per contact using your Settings prompts..." value={templateDraft} onChange={e => setTemplateDraft(e.target.value)} />
+                        ) : F(selectedCampaign,'Message Template') ? (
+                          <div style={{ fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{F(selectedCampaign,'Message Template')}</div>
+                        ) : (
+                          <div style={{ fontSize:11, color:'var(--globant-muted)', fontStyle:'italic' }}>No angle yet — click "Add" to write the focus the AI will use for every step.</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Steps */}
+                  <div style={{ fontSize:10, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Steps</div>
+                  {seqSteps.length === 0 && <div style={{ fontSize:12, color:'var(--globant-muted)', fontStyle:'italic', marginBottom:10 }}>No steps yet — add your first step below.</div>}
+                  <div style={{ display:'flex', flexDirection:'column' }}>
+                    {seqSteps.map((step, i) => {
+                      const chColor = step.channel === 'Email' ? '#60a5fa' : step.channel === 'LinkedIn' ? '#6366f1' : '#4ade80';
+                      const chBg = step.channel === 'Email' ? 'rgba(96,165,250,0.18)' : step.channel === 'LinkedIn' ? 'rgba(99,102,241,0.18)' : 'rgba(74,222,128,0.18)';
+                      const chIcon = step.channel === 'Email' ? '✉️' : step.channel === 'LinkedIn' ? '🔗' : '💬';
+                      return (
+                        <div key={i} style={{ display:'flex', gap:0 }}>
+                          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', width:36, flexShrink:0 }}>
+                            <div style={{ width:28, height:28, borderRadius:'50%', background:chBg, border:`2px solid ${chColor}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, zIndex:1 }}>{chIcon}</div>
+                            {i < seqSteps.length - 1 && <div style={{ width:2, flex:1, minHeight:14, background:'var(--globant-border)', margin:'2px 0' }} />}
+                          </div>
+                          <div style={{ flex:1, marginBottom:10, marginLeft:10, padding:'10px 12px', borderRadius:8, background:'var(--globant-surface)', border:'1px solid var(--globant-border)' }}>
+                            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                              <span style={{ fontSize:10, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', minWidth:22 }}>#{i+1}</span>
+                              {i === 0 ? (
+                                <span style={{ fontSize:11, color:'var(--globant-muted)', background:'rgba(167,139,250,0.1)', padding:'2px 8px', borderRadius:6 }}>Day 0 — sends on enroll</span>
+                              ) : (
+                                <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, color:'var(--globant-muted)' }}>
+                                  Wait <input type="number" min={1} value={step.waitDays} onChange={e => updateSeqStep(i,'waitDays',parseInt(e.target.value)||1)} style={{ width:40, textAlign:'center', background:'rgba(255,255,255,0.06)', border:'1px solid var(--globant-border)', borderRadius:4, color:'var(--globant-text)', fontSize:11, padding:'1px 4px' }} /> days
+                                </div>
+                              )}
+                              <select value={step.channel} onChange={e => updateSeqStep(i,'channel',e.target.value)} className="input-field" style={{ fontSize:11, padding:'3px 6px', minWidth:90 }}>
+                                <option>Email</option><option>LinkedIn</option><option>WhatsApp</option>
+                              </select>
+                              <select value={step.condition} onChange={e => updateSeqStep(i,'condition',e.target.value)} className="input-field" style={{ fontSize:11, padding:'3px 6px', minWidth:120 }}>
+                                <option value="always">Always send</option>
+                                <option value="no_reply">Only if no reply</option>
+                              </select>
+                              <input value={step.note||''} onChange={e => updateSeqStep(i,'note',e.target.value)} className="input-field" placeholder="Note (optional)" style={{ flex:1, minWidth:100, fontSize:11, padding:'3px 6px' }} />
+                              <button onClick={() => removeSeqStep(i)} style={{ background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:14, padding:'0 4px', flexShrink:0 }}>✕</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display:'flex', gap:8, marginTop:4 }}>
+                    <button className="action-btn btn-ghost" style={{ fontSize:11 }} onClick={addSeqStep}>+ Add Step</button>
+                    {seqDirty && <button className="action-btn btn-primary" style={{ fontSize:11 }} onClick={saveSeqSteps} disabled={savingSeq}>{savingSeq ? '⏳ Saving...' : '💾 Save Sequence'}</button>}
+                  </div>
+                </div>
+              )}
+
+              {/* CONTACTS TAB */}
+              {seqTab === 'contacts' && seqSteps.length === 0 && (
+                <div style={{ padding:'20px', textAlign:'center', color:'var(--globant-muted)', fontSize:12 }}>Set up your steps first, then enroll contacts here.</div>
+              )}
+              {seqTab === 'contacts' && seqSteps.length > 0 && (
+                <div>
+                  {enrolledIds.length > 0 && (
+                    <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+                      {groupDue.length > 0 && <span style={{ fontSize:11, fontWeight:600, color:'#ef4444', padding:'3px 8px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.25)' }}>🔴 {groupDue.length} due now</span>}
+                      {groupScheduled.length > 0 && <span style={{ fontSize:11, fontWeight:600, color:'#60a5fa', padding:'3px 8px', borderRadius:10, background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.25)' }}>📅 {groupScheduled.length} scheduled</span>}
+                      {repliedCount > 0 && <span style={{ fontSize:11, fontWeight:600, color:'#4ade80', padding:'3px 8px', borderRadius:10, background:'rgba(74,222,128,0.1)', border:'1px solid rgba(74,222,128,0.25)' }}>💬 {repliedCount} replied</span>}
+                      {completedCount > 0 && <span style={{ fontSize:11, color:'var(--globant-muted)', padding:'3px 8px', borderRadius:10, background:'rgba(255,255,255,0.04)', border:'1px solid var(--globant-border)' }}>✅ {completedCount} done</span>}
+                      <div style={{ flex:1 }} />
+                      {isActive && activeCount > 0 && (
+                        <button className="action-btn btn-primary" style={{ fontSize:11 }} onClick={groupDue.length > 0 ? runSequenceNow : forceRunSequenceNow} disabled={runningSeq}>
+                          {runningSeq ? '⏳ Sending…' : groupDue.length > 0 ? `⚡ Send ${groupDue.length} now` : `⚡ Send ${activeCount} now`}
                         </button>
                       )}
                     </div>
-                  </div>
-                </div>
-
-                {/* ── Send time config ── */}
-                <div style={{ display: 'flex', gap: 10, marginBottom: 14, padding: '10px 12px', background: 'rgba(167,139,250,0.07)', borderRadius: 6, border: '1px solid rgba(167,139,250,0.2)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase' }}>Send time</div>
-                    <select className="input-field" style={{ fontSize: 12, padding: '5px 8px' }}
-                      value={seqConfig.sendHour}
-                      onChange={e => { setSeqConfig(p => ({...p, sendHour: parseInt(e.target.value)})); setSeqDirty(true); }}>
-                      {Array.from({length: 24}, (_,h) => (
-                        <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase' }}>Timezone</div>
-                    <select className="input-field" style={{ fontSize: 12, padding: '5px 8px', width: '100%' }}
-                      value={seqConfig.timezone}
-                      onChange={e => { setSeqConfig(p => ({...p, timezone: e.target.value})); setSeqDirty(true); }}>
-                      {SEQ_TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* ── Message Template ── */}
-                <div style={{ marginBottom: 14, borderRadius: 6, border: '1px solid rgba(91,191,181,0.2)', overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(91,191,181,0.06)', cursor: 'pointer' }}
-                    onClick={() => { if (!editingTemplate) setTplOpen(o => !o); }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-green)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {tplOpen ? '▲' : '▼'} ✍️ Message Template
-                      {!tplOpen && F(selectedCampaign,'Message Template') && (
-                        <span style={{ marginLeft: 8, fontWeight: 400, color: 'var(--globant-muted)', textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
-                          {F(selectedCampaign,'Message Template').slice(0, 60).trim()}{F(selectedCampaign,'Message Template').length > 60 ? '…' : ''}
-                        </span>
-                      )}
-                    </span>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                      {[['en','🇬🇧'],['es','🇦🇷'],['pt','🇧🇷'],['fr','🇫🇷']].map(([lang, flag]) => (
-                        <button key={lang} onClick={() => setTplLanguage(lang)}
-                          style={{ padding:'2px 8px', borderRadius:4, border:`1px solid ${tplLanguage===lang ? 'var(--globant-green)' : 'var(--globant-border)'}`, background: tplLanguage===lang ? 'rgba(91,191,181,0.15)' : 'transparent', color: tplLanguage===lang ? 'var(--globant-green)' : 'var(--globant-muted)', cursor:'pointer', fontSize:12 }}>
-                          {flag}
-                        </button>
-                      ))}
-                      <div style={{ width:1, height:14, background:'var(--globant-border)' }} />
-                      {!editingTemplate ? (
-                        <button className="action-btn btn-ghost" style={{ fontSize: 10 }}
-                          onClick={() => { setTemplateDraft(F(selectedCampaign,'Message Template') || ''); setEditingTemplate(true); setTplOpen(true); }}>
-                          {F(selectedCampaign,'Message Template') ? '✏️ Edit' : '➕ Add'}
-                        </button>
-                      ) : (
+                  )}
+                  {enrolledIds.length > 0 && (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--globant-muted)', marginBottom:4 }}>
+                        <span>Sequence progress</span><span style={{ fontWeight:700, color:'var(--globant-green)' }}>{pctDone}%</span>
+                      </div>
+                      <div style={{ height:4, borderRadius:2, background:'rgba(255,255,255,0.08)', overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${pctDone}%`, background:'linear-gradient(90deg,#4ade80,#60a5fa)', borderRadius:2 }} />
+                      </div>
+                    </div>
+                  )}
+                  {pendingToEnroll.length > 0 && (
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:12, padding:'10px 12px', background:'rgba(167,139,250,0.06)', borderRadius:8, border:'1px solid rgba(167,139,250,0.2)' }}>
+                      <div style={{ flex:1, minWidth:200 }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:'#a78bfa', marginBottom:4 }}>{pendingToEnroll.length} contact{pendingToEnroll.length>1?'s':''} ready to enroll</div>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+                          <label style={{ fontSize:11, color:'var(--globant-muted)' }}>Step 1 sends:</label>
+                          <select className="input-field" style={{ fontSize:11, padding:'3px 6px' }}
+                            value={enrollDateTime === '' ? 'now' : 'custom'}
+                            onChange={e => {
+                              if (e.target.value === 'now') setEnrollDateTime('');
+                              else { const d = new Date(); d.setMinutes(0,0,0); d.setHours(d.getHours()+1); setEnrollDateTime(d.toISOString().slice(0,16)); }
+                            }}>
+                            <option value="now">⚡ Immediately</option>
+                            <option value="custom">📅 Custom date &amp; time</option>
+                          </select>
+                          {enrollDateTime !== '' && (
+                            <input type="datetime-local" className="input-field" style={{ fontSize:11, padding:'3px 6px' }} value={enrollDateTime} onChange={e => setEnrollDateTime(e.target.value)} />
+                          )}
+                        </div>
+                      </div>
+                      <button className="action-btn btn-primary" style={{ fontSize:11 }} onClick={enrollInSequence} disabled={enrolling}>
+                        {enrolling ? '⏳ Enrolling...' : `+ Enroll ${pendingToEnroll.length}`}
+                      </button>
+                    </div>
+                  )}
+                  {enrolledIds.length > 0 && (
+                    <div style={{ border:'1px solid var(--globant-border)', borderRadius:6, overflow:'hidden', maxHeight:360, overflowY:'auto' }}>
+                      {groupDue.length > 0 && (
                         <>
-                          <button className="action-btn btn-primary" style={{ fontSize: 10 }} onClick={saveCampaignTemplate} disabled={savingTemplate}>
-                            {savingTemplate ? '⏳' : '💾 Save'}
-                          </button>
-                          <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setEditingTemplate(false)}>Cancel</button>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', background:'rgba(239,68,68,0.05)', borderBottom:'1px solid var(--globant-border)' }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:'#ef4444', textTransform:'uppercase', letterSpacing:0.8 }}>🔴 Due now ({groupDue.length})</span>
+                            <div style={{ flex:1, height:1, background:'var(--globant-border)' }} />
+                          </div>
+                          {groupDue.map((id, i) => renderContactRow(id, i < groupDue.length-1 || groupScheduled.length > 0 || groupFinished.length > 0))}
+                        </>
+                      )}
+                      {groupScheduled.length > 0 && (
+                        <>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', background:'rgba(255,255,255,0.03)', borderBottom:'1px solid var(--globant-border)' }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:0.8 }}>📅 Scheduled ({groupScheduled.length})</span>
+                            <div style={{ flex:1, height:1, background:'var(--globant-border)' }} />
+                          </div>
+                          {groupScheduled.map((id, i) => renderContactRow(id, i < groupScheduled.length-1 || groupFinished.length > 0))}
+                        </>
+                      )}
+                      {groupFinished.length > 0 && (
+                        <>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', background:'rgba(255,255,255,0.03)', borderBottom:'1px solid var(--globant-border)' }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:'var(--globant-muted)', textTransform:'uppercase', letterSpacing:0.8 }}>✅ Finished ({groupFinished.length})</span>
+                            <div style={{ flex:1, height:1, background:'var(--globant-border)' }} />
+                          </div>
+                          {groupFinished.map((id, i) => renderContactRow(id, i < groupFinished.length-1))}
                         </>
                       )}
                     </div>
-                  </div>
-                  {(tplOpen || editingTemplate) && (
-                    <div style={{ padding: '10px 12px', background: 'rgba(91,191,181,0.03)' }}>
-                      {editingTemplate ? (
-                        <textarea className="input-field"
-                          style={{ width: '100%', minHeight: 100, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}
-                          placeholder="Write the angle the AI will personalize per contact..."
-                          value={templateDraft} onChange={e => setTemplateDraft(e.target.value)} />
-                      ) : F(selectedCampaign,'Message Template') ? (
-                        <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{F(selectedCampaign,'Message Template')}</div>
-                      ) : (
-                        <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No template yet — click "Add" to write the angle the AI will use for every step.</div>
-                      )}
-                    </div>
+                  )}
+                  {enrolledIds.length === 0 && pendingToEnroll.length === 0 && (
+                    <div style={{ padding:'20px', textAlign:'center', color:'var(--globant-muted)', fontSize:12 }}>No contacts enrolled yet.</div>
                   )}
                 </div>
+              )}
+            </div>
+          );
+        })()}
 
-                {/* ── Step builder — vertical timeline ── */}
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Steps</div>
-                {seqSteps.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 10 }}>No steps yet — click "Add Step" to define the sequence.</div>
-                )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {seqSteps.map((step, i) => {
-                  const chColor = step.channel === 'Email' ? '#60a5fa' : step.channel === 'LinkedIn' ? '#6366f1' : '#4ade80';
-                  const chBg   = step.channel === 'Email' ? 'rgba(96,165,250,0.2)' : step.channel === 'LinkedIn' ? 'rgba(99,102,241,0.2)' : 'rgba(74,222,128,0.2)';
-                  const chIcon = step.channel === 'Email' ? '✉️' : step.channel === 'LinkedIn' ? '🔗' : '💬';
-                  return (
-                    React.createElement('div', { key: i, style: { display: 'flex', gap: 0 } },
-                      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: 40, flexShrink: 0 } },
-                        React.createElement('div', { style: { width: 28, height: 28, borderRadius: '50%', background: chBg, border: `2px solid ${chColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0, zIndex: 1 } }, chIcon),
-                        i < seqSteps.length - 1 && React.createElement('div', { style: { width: 2, flex: 1, minHeight: 20, background: 'var(--globant-border)', margin: '2px 0' } })
-                      ),
-                      React.createElement('div', { style: { flex: 1, marginBottom: 12, marginLeft: 10, padding: '12px 14px', borderRadius: 10, background: 'var(--globant-surface)', border: '1px solid var(--globant-border)' } },
-                        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
-                          React.createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-                            React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase' } }, `Step ${i + 1}`),
-                            i === 0
-                              ? React.createElement('span', { style: { fontSize: 11, color: 'var(--globant-muted)' } }, 'Sends on enrollment day')
-                              : React.createElement('span', { style: { fontSize: 11, color: 'var(--globant-muted)', display: 'flex', alignItems: 'center', gap: 4 } },
-                                  'Wait ',
-                                  React.createElement('input', { type: 'number', min: 1, value: step.waitDays, onChange: e => { updateSeqStep(i, 'waitDays', parseInt(e.target.value)||1); },
-                                    style: { width: 42, textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--globant-border)', borderRadius: 4, color: 'var(--globant-text)', fontSize: 11, padding: '1px 4px' } }),
-                                  ' days')
-                          ),
-                          React.createElement('button', { onClick: () => removeSeqStep(i), style: { background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 14, padding: '0 4px' } }, '✕')
-                        ),
-                        React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 } },
-                          React.createElement('div', null,
-                            React.createElement('label', { style: { fontSize: 10, color: 'var(--globant-muted)', display: 'block', marginBottom: 3 } }, 'Channel'),
-                            React.createElement('select', { value: step.channel, onChange: e => updateSeqStep(i, 'channel', e.target.value), className: 'input-field', style: { fontSize: 11, padding: '4px 8px', minWidth: 100 } },
-                              React.createElement('option', null, 'Email'),
-                              React.createElement('option', null, 'LinkedIn'),
-                              React.createElement('option', null, 'WhatsApp')
-                            )
-                          ),
-                          React.createElement('div', null,
-                            React.createElement('label', { style: { fontSize: 10, color: 'var(--globant-muted)', display: 'block', marginBottom: 3 } }, 'Send if'),
-                            React.createElement('select', { value: step.condition, onChange: e => updateSeqStep(i, 'condition', e.target.value), className: 'input-field', style: { fontSize: 11, padding: '4px 8px', minWidth: 130 } },
-                              React.createElement('option', { value: 'always' }, 'Always'),
-                              React.createElement('option', { value: 'no_reply' }, 'Only if no reply')
-                            )
-                          ),
-                          React.createElement('div', { style: { flex: 1, minWidth: 120 } },
-                            React.createElement('label', { style: { fontSize: 10, color: 'var(--globant-muted)', display: 'block', marginBottom: 3 } }, 'Note (optional)'),
-                            React.createElement('input', { value: step.note || '', onChange: e => updateSeqStep(i, 'note', e.target.value), className: 'input-field', placeholder: 'e.g. Follow-up angle', style: { fontSize: 11, padding: '4px 8px', width: '100%', boxSizing: 'border-box' } })
-                          )
-                        ),
-                        /* Content type toggle */
-                        React.createElement('div', { style: { marginBottom: 8 } },
-                          React.createElement('div', { style: { fontSize: 9, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Email content'),
-                          React.createElement('div', { style: { display: 'flex', gap: 6 } },
-                            ...[
-                              { val: 'ai_text', label: '🤖 AI plain text', desc: 'AI writes a personalized message' },
-                              { val: 'html',    label: '📧 HTML template',  desc: emailTplHtml ? 'Uses your saved HTML template' : '⚠️ No HTML template saved yet' },
-                            ].map(opt => {
-                              const active = (step.contentType || 'ai_text') === opt.val;
-                              const disabled = opt.val === 'html' && !emailTplHtml;
-                              return React.createElement('button', { key: opt.val,
-                                onClick: () => !disabled && updateSeqStep(i, 'contentType', opt.val),
-                                style: { flex: 1, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: active ? 700 : 400, opacity: disabled ? 0.5 : 1,
-                                  background: active ? (opt.val === 'html' ? 'rgba(96,165,250,0.18)' : 'rgba(91,191,181,0.18)') : 'rgba(0,0,0,0.15)',
-                                  color: active ? (opt.val === 'html' ? '#60a5fa' : 'var(--globant-green)') : 'var(--globant-muted)',
-                                  border: `1px solid ${active ? (opt.val === 'html' ? 'rgba(96,165,250,0.4)' : 'rgba(91,191,181,0.4)') : 'var(--globant-border)'}` } },
-                                opt.label,
-                                React.createElement('span', { style: { display: 'block', fontSize: 9, fontWeight: 400, marginTop: 1, opacity: 0.8 } }, opt.desc)
-                              );
-                            })
-                          )
-                        ),
-                        /* Preview for this step */
-                        (step.contentType || 'ai_text') === 'html' ? (
-                          emailTplHtml ? (
-                            React.createElement('div', null,
-                              React.createElement('div', { style: { fontSize:10, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 } }, '📧 HTML Template Preview'),
-                              React.createElement('div', { style: { borderRadius:6, overflow:'hidden', border:'1px solid rgba(96,165,250,0.25)', background:'#fff' } },
-                                React.createElement('iframe', { srcDoc: emailTplHtml, style: { width:'100%', height:320, border:'none', display:'block' }, sandbox: 'allow-same-origin', title: `HTML preview step ${i+1}` })
-                              ),
-                              React.createElement('div', { style: { fontSize:10, color:'var(--globant-muted)', marginTop:4, fontStyle:'italic' } }, 'AI will inject a personalized opener per contact before sending.')
-                            )
-                          ) : (
-                            React.createElement('div', { style: { fontSize:11, color:'#fbbf24', padding:'6px 10px', background:'rgba(251,191,36,0.08)', borderRadius:6, border:'1px solid rgba(251,191,36,0.2)' } },
-                              '⚠️ No HTML template saved yet — build one in the Email Template section below, then come back and select it here.'
-                            )
-                          )
-                        ) : (
-                          React.createElement('div', null,
-                            React.createElement('button', { onClick: () => generateStepPreview(i, step), disabled: generatingStepPreview === i,
-                              style: { background:'none', border:'1px dashed rgba(167,139,250,0.4)', borderRadius:6, color:'#a78bfa', cursor:'pointer', fontSize:11, padding:'4px 12px', width:'100%', fontWeight:600 } },
-                              generatingStepPreview === i ? '⏳ Generating preview...' : stepPreviews[i] ? '🔄 Re-generate preview' : '👁️ Preview AI message for this step'
-                            ),
-                            stepPreviews[i] && React.createElement('div', { style: { marginTop:8, padding:'10px 12px', background:'rgba(167,139,250,0.06)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:6 } },
-                              React.createElement('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 } },
-                                React.createElement('span', { style: { fontSize:10, fontWeight:700, color:'#a78bfa', textTransform:'uppercase', letterSpacing:0.5 } }, `Sample — Step ${i+1}`),
-                                React.createElement('button', { onClick: () => { try { navigator.clipboard.writeText(stepPreviews[i]); } catch {} }, style: { background:'none', border:'none', color:'var(--globant-muted)', cursor:'pointer', fontSize:10 } }, '📋 Copy')
-                              ),
-                              React.createElement('div', { style: { fontSize:12, color:'var(--globant-text)', lineHeight:1.7, whiteSpace:'pre-wrap' } }, stepPreviews[i])
-                            )
-                          )
-                        )
-                      )
-                    )
-                  );
-                })}
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={addSeqStep}>+ Add Step</button>
-                  {seqDirty && (
-                    <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={saveSeqSteps} disabled={savingSeq}>
-                      {savingSeq ? '⏳ Saving...' : '💾 Save Sequence'}
-                    </button>
-                  )}
-                </div>
-
-                {/* ── Enrollment controls ── */}
-                {seqSteps.length > 0 && (() => {
-                  const enrollmentValues = Object.values(enrollments);
-                  const totalEnrolled = enrollmentValues.length;
-                  const countPaused = enrollmentValues.filter(e => e.status === 'paused').length;
-                  const pctDone = totalEnrolled > 0 ? Math.round((completedCount + repliedCount) / totalEnrolled * 100) : 0;
-                  const getDueLabel = (en) => {
-                    const nextDT = en.nextDateTime || en.nextDate;
-                    if (!nextDT) return null;
-                    const diffMs = new Date(nextDT) - new Date();
-                    const diffH = Math.ceil(diffMs / (1000 * 60 * 60));
-                    const diffD = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-                    if (diffMs <= 0) return { label: '🔴 Due now', color: '#ef4444' };
-                    if (diffH <= 2) return { label: `🔴 In ${diffH}h`, color: '#ef4444' };
-                    if (diffD <= 1) return { label: '🟡 Tomorrow', color: '#fbbf24' };
-                    if (diffD <= 3) return { label: `🟠 In ${diffD}d`, color: '#fb923c' };
-                    // Show exact date if > 3 days
-                    const d = new Date(nextDT);
-                    const dateStr = d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-                    const timeStr = en.nextDateTime ? d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) : '';
-                    return { label: `📅 ${dateStr}${timeStr ? ` ${timeStr}` : ''}`, color: 'var(--globant-muted)' };
-                  };
-                  const pendingToEnroll = pendingEmailContacts.filter(s => !enrollments[s.id] || enrollments[s.id].status === 'completed');
-
-                  // Build grouped contact lists for redesigned view
-                  const STATUS_C = { active: '#60a5fa', completed: 'var(--globant-muted)', replied: '#4ade80', paused: '#a78bfa' };
-                  const isDue = (en) => {
-                    if (en.status !== 'active') return false;
-                    const dt = en.nextDateTime ? new Date(en.nextDateTime) : (en.nextDate ? new Date(en.nextDate) : null);
-                    return dt && dt <= new Date();
-                  };
-                  const getNextDate = (en) => {
-                    const dt = en.nextDateTime || en.nextDate;
-                    return dt ? new Date(dt) : new Date(9999, 0, 1);
-                  };
-                  const groupDue = enrolledIds.filter(id => isDue(enrollments[id]));
-                  const groupScheduled = enrolledIds.filter(id => enrollments[id].status === 'active' && !isDue(enrollments[id])).sort((a, b) => getNextDate(enrollments[a]) - getNextDate(enrollments[b]));
-                  const groupFinished = enrolledIds.filter(id => enrollments[id].status === 'completed' || enrollments[id].status === 'replied');
-
-                  const renderContactRow = (stkId, showDivider) => {
-                    const en = enrollments[stkId];
-                    const stk = stakeholders.find(s => s.id === stkId);
-                    if (!stk) return null;
-                    const name = `${F(stk,'Name')}${F(stk,'Last name') ? ` ${F(stk,'Last name')}` : ''}`;
-                    const step = en.step || 0;
-                    const totalSteps = seqSteps.length;
-                    const stepProgress = `Step ${step} / ${totalSteps}`;
-                    const dueInfo = en.status === 'active' ? getDueLabel(en) : null;
-                    const contactIsDue = isDue(en);
-
-                    let centerContent = null;
-                    if (en.status === 'completed') {
-                      centerContent = <span style={{ color: '#4ade80', fontSize: 11 }}>✅ All {totalSteps} steps sent</span>;
-                    } else if (en.status === 'replied') {
-                      centerContent = <span style={{ color: '#4ade80', fontSize: 11 }}>💬 Replied — sequence stopped</span>;
-                    } else if (step === 0 && contactIsDue) {
-                      centerContent = <span style={{ color: '#ef4444', fontSize: 11, fontWeight: 600 }}>🔴 Step 1 due now</span>;
-                    } else if (step === 0 && !contactIsDue) {
-                      centerContent = <span style={{ color: 'var(--globant-muted)', fontSize: 11 }}>⏳ Step 1 sends <span style={{ color: dueInfo ? dueInfo.color : 'var(--globant-muted)', fontWeight: 600 }}>{dueInfo ? dueInfo.label.replace(/^[🔴🟡🟠📅]\s*/u, '') : '—'}</span></span>;
-                    } else if (step > 0 && contactIsDue) {
-                      centerContent = <span style={{ fontSize: 11 }}><span style={{ color: '#4ade80' }}>✅ {step} sent</span><span style={{ color: 'var(--globant-muted)' }}> · </span><span style={{ color: '#ef4444', fontWeight: 600 }}>🔴 Step {step + 1} due now</span></span>;
-                    } else if (step > 0 && !contactIsDue) {
-                      centerContent = <span style={{ fontSize: 11 }}><span style={{ color: '#4ade80' }}>✅ {step} sent</span><span style={{ color: 'var(--globant-muted)' }}> · Step {step + 1} sends </span><span style={{ color: dueInfo ? dueInfo.color : 'var(--globant-muted)', fontWeight: 600 }}>{dueInfo ? dueInfo.label.replace(/^[🔴🟡🟠📅]\s*/u, '') : '—'}</span></span>;
-                    }
-
-                    const pillColor = contactIsDue ? '#ef4444' : (STATUS_C[en.status] || 'var(--globant-muted)');
-                    const pillBg = contactIsDue ? 'rgba(239,68,68,0.15)' : `${pillColor}20`;
-                    const pillBorder = contactIsDue ? 'rgba(239,68,68,0.4)' : `${pillColor}40`;
-
-                    return (
-                      <div key={stkId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: showDivider ? '1px solid var(--globant-border)' : 'none', gap: 8 }}>
-                        {/* Left: name + step progress */}
-                        <div style={{ minWidth: 120, flexShrink: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--globant-text)' }}>{name}</div>
-                          <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 1 }}>{stepProgress}</div>
-                        </div>
-                        {/* Center: what happened / what's next */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {centerContent}
-                        </div>
-                        {/* Right: status pill + remove */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: pillColor, padding: '2px 7px', borderRadius: 10, background: pillBg, border: `1px solid ${pillBorder}`, animation: contactIsDue ? 'pulse 2s infinite' : 'none', whiteSpace: 'nowrap' }}>{en.status}</span>
-                          <button onClick={() => unenrollFromSequence(stkId)} style={{ background: 'none', border: 'none', color: 'var(--globant-muted)', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0 }} title="Remove from sequence">✕</button>
-                        </div>
-                      </div>
-                    );
-                  };
-
-                  const GroupHeader = ({ icon, label, count, action }) => (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--globant-border)' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.8, whiteSpace: 'nowrap' }}>{icon} {label} ({count})</span>
-                      <div style={{ flex: 1, height: 1, background: 'var(--globant-border)' }} />
-                      {action}
-                    </div>
-                  );
-
-                  return (
-                    <>
-                      {/* Header row: label + enroll controls */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Enrolled contacts</div>
-                        {pendingToEnroll.length > 0 && (
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <label style={{ fontSize: 11, color: 'var(--globant-muted)', flexShrink: 0 }}>Step 1 sends:</label>
-                              <select className="input-field" style={{ fontSize: 11, padding: '4px 8px' }}
-                                value={enrollDateTime === '' ? 'now' : 'custom'}
-                                onChange={e => {
-                                  if (e.target.value === 'now') setEnrollDateTime('');
-                                  else {
-                                    const d = new Date();
-                                    d.setMinutes(0, 0, 0);
-                                    d.setHours(d.getHours() + 1);
-                                    setEnrollDateTime(d.toISOString().slice(0, 16));
-                                  }
-                                }}>
-                                <option value="now">⚡ Immediately</option>
-                                <option value="custom">📅 Custom date &amp; time</option>
-                              </select>
-                              {enrollDateTime !== '' && (
-                                <input type="datetime-local" className="input-field" style={{ fontSize: 11, padding: '4px 8px' }}
-                                  value={enrollDateTime}
-                                  onChange={e => setEnrollDateTime(e.target.value)} />
-                              )}
-                            </div>
-                            <button className="action-btn btn-primary" style={{ fontSize: 11 }}
-                              onClick={enrollInSequence} disabled={enrolling}>
-                              {enrolling ? '⏳ Enrolling...' : `+ Enroll ${pendingToEnroll.length} pending`}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Summary bar */}
-                      {totalEnrolled > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                          {groupDue.length > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', padding: '3px 8px', borderRadius: 10, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }}>🔴 {groupDue.length} due now</span>
-                          )}
-                          {groupScheduled.length > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#60a5fa', padding: '3px 8px', borderRadius: 10, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)' }}>📅 {groupScheduled.length} scheduled</span>
-                          )}
-                          {repliedCount > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#4ade80', padding: '3px 8px', borderRadius: 10, background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)' }}>💬 {repliedCount} replied</span>
-                          )}
-                          {completedCount > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--globant-muted)', padding: '3px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)' }}>✅ {completedCount} done</span>
-                          )}
-                          <div style={{ flex: 1 }} />
-                          <button
-                            className="action-btn btn-primary"
-                            style={{ fontSize: 11, opacity: runningSeq ? 0.6 : 1 }}
-                            onClick={runSequenceNow}
-                            disabled={runningSeq}
-                          >
-                            {runningSeq ? '⏳ Running...' : (dueToday.length > 0 ? `⚡ Send ${dueToday.length} now` : '⚡ Run sequence')}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Grouped contact list */}
-                      {enrolledIds.length > 0 && (
-                        <div style={{ border: '1px solid var(--globant-border)', borderRadius: 6, marginBottom: 10, overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }}>
-                          {/* Group: Due now */}
-                          {groupDue.length > 0 && (
-                            <>
-                              <GroupHeader icon="🔴" label="Due now" count={groupDue.length} action={
-                                <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '2px 8px' }} onClick={runSequenceNow} disabled={runningSeq}>
-                                  {runningSeq ? '⏳' : `⚡ Send ${groupDue.length} now`}
-                                </button>
-                              } />
-                              {groupDue.map((id, i) => renderContactRow(id, i < groupDue.length - 1 || groupScheduled.length > 0 || groupFinished.length > 0))}
-                            </>
-                          )}
-                          {/* Group: Scheduled */}
-                          {groupScheduled.length > 0 && (
-                            <>
-                              <GroupHeader icon="📅" label="Scheduled" count={groupScheduled.length} action={null} />
-                              {groupScheduled.map((id, i) => renderContactRow(id, i < groupScheduled.length - 1 || groupFinished.length > 0))}
-                            </>
-                          )}
-                          {/* Group: Finished */}
-                          {groupFinished.length > 0 && (
-                            <>
-                              <GroupHeader icon="✅" label="Finished" count={groupFinished.length} action={null} />
-                              {groupFinished.map((id, i) => renderContactRow(id, i < groupFinished.length - 1))}
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {enrolledIds.length === 0 && pendingToEnroll.length === 0 && (
-                        <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic', marginBottom: 10 }}>No contacts enrolled yet.</div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            );
-          })()}
-        </div>
         {/* Stats */}
         <div className="kpi-row" style={{ gridTemplateColumns:'repeat(3,1fr)', marginBottom:14 }}>
           <div className="kpi-card">
