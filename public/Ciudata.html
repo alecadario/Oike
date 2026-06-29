@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Propuesta Ciudata - Trabajo Conjunto</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        header {
+            background: linear-gradient(135deg, #12121F 0%, #3D9E94 100%);
+            color: white;
+            padding: 60px 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        section {
+            margin-bottom: 60px;
+        }
+        
+        h2 {
+            color: #12121F;
+            border-bottom: 3px solid #3D9E94;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            font-size: 1.8em;
+        }
+        
+        h3 {
+            color: #3D9E94;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        h4 {
+            color: #12121F;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .option-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        .option-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 30px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .option-card:hover {
+            border-color: #3D9E94;
+            box-shadow: 0 5px 15px rgba(61, 158, 148, 0.2);
+        }
+        
+        .option-card.consultoría {
+            border-top: 5px solid #12121F;
+        }
+        
+        .option-card.ejecución {
+            border-top: 5px solid #3D9E94;
+        }
+        
+        .option-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .model-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        
+        .consultoría .model-badge {
+            background: #12121F;
+            color: white;
+        }
+        
+        .ejecución .model-badge {
+            background: #3D9E94;
+            color: white;
+        }
+        
+        .option-letter {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3D9E94;
+        }
+        
+        .price {
+            font-size: 1.6em;
+            font-weight: bold;
+            color: #3D9E94;
+            margin: 15px 0;
+        }
+        
+        .what-includes {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .what-includes h5 {
+            color: #12121F;
+            margin-bottom: 12px;
+            font-size: 0.95em;
+        }
+        
+        .includes {
+            list-style: none;
+            margin: 0;
+        }
+        
+        .includes li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+        
+        .includes li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #3D9E94;
+            font-weight: bold;
+        }
+        
+        .result-box {
+            background: #e8f5f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            color: #12121F;
+            border-left: 4px solid #3D9E94;
+        }
+        
+        .result-box strong {
+            color: #3D9E94;
+        }
+        
+        .simple-box {
+            background: #fff8e1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .diagnostic-detail {
+            background: #f0f8f7;
+            border: 2px dashed #3D9E94;
+            padding: 30px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }
+        
+        .phase {
+            background: white;
+            border-left: 5px solid #3D9E94;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .phase-title {
+            color: #3D9E94;
+            font-weight: bold;
+            font-size: 1.05em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .phase-number {
+            display: inline-block;
+            background: #3D9E94;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .outbound-section {
+            background: #f8f8f8;
+            border-left: 5px solid #3D9E94;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .outbound-section h5 {
+            color: #3D9E94;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .comparison-table th {
+            background: #12121F;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+        }
+        
+        .comparison-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .comparison-table tr:hover {
+            background: #f5f5f5;
+        }
+        
+        footer {
+            background: #12121F;
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .cta-section {
+            background: #e8f5f1;
+            padding: 30px;
+            border-radius: 8px;
+            margin: 40px 0;
+            text-align: center;
+            border: 2px solid #3D9E94;
+        }
+        
+        .cta-section h3 {
+            margin-top: 0;
+        }
+        
+        .cta-section p {
+            font-size: 1.05em;
+            line-height: 1.8;
+            color: #12121F;
+        }
+        
+        @media (max-width: 768px) {
+            .option-container {
+                grid-template-columns: 1fr;
+            }
+            
+            header h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Propuesta de Trabajo Conjunto</h1>
+            <p>Estructura Comercial, Pipeline Strategy y Outbound para Ciudata</p>
+        </header>
+        
+        <div class="content">
+            <!-- RESUMEN EJECUTIVO -->
+            <section>
+                <h2>I. Resumen Ejecutivo</h2>
+                <p>Ciudata tiene un producto fuerte pero un embudo comercial débil. 188 oportunidades en pipeline, 17 clientes activos, pero 50+ "Temporarily Lost" sin diagnosis clara.</p>
+                <p style="margin-top: 15px;"><strong>Esta propuesta cubre TRES frentes:</strong></p>
+                <div class="highlight">
+                    <p><strong>1. Sistema de Pipeline:</strong> Diagnosticar y seguir lo que existe</p>
+                    <p style="margin-top: 10px;"><strong>2. Outbound Strategy:</strong> Generar NUEVOS leads con método</p>
+                    <p style="margin-top: 10px;"><strong>3. Dos Modelos:</strong> Ale diseña + ustedes ejecutan, O Ale diseña + ejecuta</p>
+                </div>
+            </section>
+            
+            <!-- DIAGNÓSTICO -->
+            <section>
+                <h2>II. Diagnóstico: Estado Actual</h2>
+                
+                <h3>Pipeline Analysis</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>Etapa</th>
+                        <th>Volumen</th>
+                        <th>Problema</th>
+                    </tr>
+                    <tr>
+                        <td>Won - Current</td>
+                        <td>17</td>
+                        <td>Base pequeña</td>
+                    </tr>
+                    <tr>
+                        <td>Presentación</td>
+                        <td>25+</td>
+                        <td>Sin conversión clara</td>
+                    </tr>
+                    <tr>
+                        <td>Interés PLUS</td>
+                        <td>15+</td>
+                        <td>Estancado</td>
+                    </tr>
+                    <tr>
+                        <td>Temporarily Lost</td>
+                        <td>50+</td>
+                        <td><strong>Sin diagnosis</strong></td>
+                    </tr>
+                    <tr>
+                        <td>New-Awareness</td>
+                        <td>30+</td>
+                        <td>No se cualifica</td>
+                    </tr>
+                </table>
+                
+                <div class="diagnostic-detail">
+                    <h4>El Problema Raíz</h4>
+                    <ul class="includes">
+                        <li>Embudo concentrado: 60+ sin conversión clara</li>
+                        <li>50+ "Temporarily Lost" <strong>sin saber por qué</strong></li>
+                        <li>Diego + Camila hacen TODO (awareness, demos, cierre, fundraising) → No hay sistema</li>
+                        <li>Sin generación sistemática de leads NUEVOS → Crecimiento limitado</li>
+                    </ul>
+                    <p style="margin-top: 20px;"><strong>✓ Conclusión:</strong> El problema no es producto. Es PROCESO y SISTEMA.</p>
+                </div>
+            </section>
+            
+            <!-- OPCIÓN A -->
+            <section>
+                <h2>III. Opción A: Diagnóstico + Outbound Básico</h2>
+                <p style="margin-bottom: 20px; color: #666;"><strong>Duración:</strong> 3-4 semanas | <strong>Objetivo:</strong> Sistema + primeros leads nuevos</p>
+                
+                <div class="option-container">
+                    <!-- A1 -->
+                    <div class="option-card consultoría">
+                        <div class="option-header">
+                            <span class="model-badge">CONSULTORÍA</span>
+                            <span class="option-letter">A1</span>
+                        </div>
+                        <div class="price">USD $2,500</div>
+                        
+                        <div class="simple-box">
+                            <strong>Una cosa simple:</strong> Ale diseña el sistema + outbound. Ustedes ejecutan.
+                        </div>
+                        
+                        <div class="what-includes">
+                            <h5>DIAGNÓSTICO + SISTEMA:</h5>
+                            <ul class="includes">
+                                <li>Audit del pipeline: 188 deals analizados</li>
+                                <li>Identificación: dónde y por qué se pierden</li>
+                                <li>Diseño de sistema de seguimiento (templates + criterios)</li>
+                                <li>Sesión de capacitación: "Así se ejecuta"</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="outbound-section">
+                            <h5>OUTBOUND STRATEGY:</h5>
+                            <ul class="includes">
+                                <li>ICP refinado: perfiles exactos que compran</li>
+                                <li>Mapeo de targets por vertical (CPG, Retail, Banca)</li>
+                                <li>Cadencia multi-canal: LinkedIn, email, WhatsApp, call</li>
+                                <li>Scripts + templates personalizados</li>
+                                <li>Plan de prospección: 30-40 empresas para primeras 4 semanas</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="result-box">
+                            <strong>Resultado:</strong> Playbook completo (diagnóstico + outbound) + equipo capacitado para ejecutar
+                        </div>
+                    </div>
+                    
+                    <!-- A2 -->
+                    <div class="option-card ejecución">
+                        <div class="option-header">
+                            <span class="model-badge">EJECUCIÓN</span>
+                            <span class="option-letter">A2</span>
+                        </div>
+                        <div class="price">USD $5,000</div>
+                        
+                        <div class="simple-box">
+                            <strong>Todo de A1, PLUS:</strong> Ale ejecuta prospección en vivo.
+                        </div>
+                        
+                        <div class="what-includes">
+                            <h5>EJECUCIÓN DE OUTBOUND:</h5>
+                            <ul class="includes">
+                                <li>Ale ejecuta 3-4 semanas de prospección</li>
+                                <li>Genera 10-15 leads calificados en pipeline caliente</li>
+                                <li>Equipo observa cómo se hace, aprende en vivo</li>
+                                <li>Documentación: "Así se hace en el día a día"</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="result-box">
+                            <strong>Resultado:</strong> Pipeline real generado + equipo sabe cómo replicarlo
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- OPCIÓN B -->
+            <section>
+                <h2>IV. Opción B: Sistema Completo + Expocruz</h2>
+                <p style="margin-bottom: 20px; color: #666;"><strong>Duración:</strong> 8-10 semanas | <strong>Incluye:</strong> Feria Expocruz (Sept 18-27) | <strong>Objetivo:</strong> Validación + Scaling</p>
+                
+                <div class="option-container">
+                    <!-- B1 -->
+                    <div class="option-card consultoría">
+                        <div class="option-header">
+                            <span class="model-badge">CONSULTORÍA</span>
+                            <span class="option-letter">B1</span>
+                        </div>
+                        <div class="price">USD $5,000</div>
+                        
+                        <div class="simple-box">
+                            <strong>A1 + Expocruz en vivo.</strong> Ale diseña todo, ustedes ejecutan.
+                        </div>
+                        
+                        <div class="diagnostic-detail">
+                            <h4>DESGLOSE SEMANA POR SEMANA</h4>
+                            
+                            <div class="phase">
+                                <div class="phase-title">
+                                    <span class="phase-number">1</span>
+                                    SEMANAS 1-2: DIAGNÓSTICO COMPLETO
+                                </div>
+                                <p style="margin-bottom: 12px;"><strong>Qué hace Ale:</strong></p>
+                                <ul class="includes">
+                                    <li>Audit de 188 deals: etapa actual, bloqueadores, decisores</li>
+                                    <li>Análisis por vertical: ciclos diferentes CPG vs Retail vs Banca</li>
+                                    <li>Mapeo de pérdidas: por qué se pierden 50+ deals</li>
+                                    <li>Identificación de patrones y oportunidades de reactivación</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="phase">
+                                <div class="phase-title">
+                                    <span class="phase-number">2</span>
+                                    SEMANA 3: DISEÑO DE SISTEMA + OUTBOUND
+                                </div>
+                                <p style="margin-bottom: 12px;"><strong>Qué diseña Ale (ustedes reciben documentado):</strong></p>
+                                <ul class="includes">
+                                    <li>Sistema de cualificación: "¿Esta oportunidad es real?"</li>
+                                    <li>Sistema de diagnóstico: dónde está, qué bloqueador existe</li>
+                                    <li>Playbook de objeciones por vertical + cómo desbloquear</li>
+                                    <li>ICP refinado: perfiles exactos que compran</li>
+                                    <li>Cadencia de prospección multi-canal</li>
+                                    <li>Scripts + templates personalizados por vertical</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="phase">
+                                <div class="phase-title">
+                                    <span class="phase-number">3</span>
+                                    SEMANA 4: ESTRATEGIA EXPOCRUZ + OUTBOUND
+                                </div>
+                                <p style="margin-bottom: 12px;"><strong>Qué define Ale para que ustedes ejecuten:</strong></p>
+                                <ul class="includes">
+                                    <li>Mapeo de 30-40 empresas que asistirán a Expocruz</li>
+                                    <li>Plan pre-Expocruz: prospección de targets 4 semanas antes</li>
+                                    <li>Roles en la feria: quién hace demo, quién cierra, quién prospera</li>
+                                    <li>Scripts de apertura: "Hola, somos Ciudata. ¿Tienes 5 minutos?"</li>
+                                    <li>Post-Expocruz: cadencia de seguimiento a 20-30 contactos</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="phase">
+                                <div class="phase-title">
+                                    <span class="phase-number">4</span>
+                                    SEMANA 5-6: CAPACITACIÓN INTENSIVA
+                                </div>
+                                <p style="margin-bottom: 12px;"><strong>Ale capacita al equipo:</strong></p>
+                                <ul class="includes">
+                                    <li>Cómo usar el playbook en el día a día</li>
+                                    <li>Role-play: objeciones, cierres, cualificación</li>
+                                    <li>Demostración: Ale hace 2-3 prospecciones en vivo</li>
+                                    <li>CRM setup: dónde registrar, qué campos llenar, seguimiento</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="phase">
+                                <div class="phase-title">
+                                    <span class="phase-number">5</span>
+                                    SEPT 18-27: EXPOCRUZ (USTEDES EJECUTAN)
+                                </div>
+                                <p style="margin-bottom: 12px;"><strong>Ustedes ejecutan. Ale acompaña remotamente:</strong></p>
+                                <ul class="includes">
+                                    <li>Ustedes: en el stand, demos, cierres, prospección en vivo</li>
+                                    <li>Ale: disponible por WhatsApp/call si necesitan ayuda</li>
+                                    <li>Resultado esperado: 10-15 en propuesta + 20-30 leads calientes nuevos</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="phase">
+                                <div class="phase-title">
+                                    <span class="phase-number">6</span>
+                                    SEPT 28 - OCT 10: POST-EXPOCRUZ + PLAN OUTBOUND
+                                </div>
+                                <p style="margin-bottom: 12px;"><strong>Ale + ustedes hacen review:</strong></p>
+                                <ul class="includes">
+                                    <li>¿Qué salió bien? Doble eso</li>
+                                    <li>¿Qué no? Ajustes al playbook</li>
+                                    <li>Plan de outbound para octubre: 50 targets nuevos</li>
+                                    <li>Entrega final: Playbook mejorado + pronóstico 3 meses</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="result-box">
+                            <strong>Resultado Final B1:</strong> Sistema + Expocruz validado. 10-15 deals en propuesta. 20-30 leads nuevos. Outbound setup y listo para escalar. Equipo independiente.
+                        </div>
+                    </div>
+                    
+                    <!-- B2 -->
+                    <div class="option-card ejecución">
+                        <div class="option-header">
+                            <span class="model-badge">EJECUCIÓN</span>
+                            <span class="option-letter">B2</span>
+                        </div>
+                        <div class="price">USD $12,000</div>
+                        
+                        <div class="simple-box">
+                            <strong>Todo de B1, PERO:</strong> Ale va a Expocruz y ejecuta en vivo.
+                        </div>
+                        
+                        <div class="what-includes">
+                            <h5>QUÉ CAMBIA EN B2:</h5>
+                            <ul class="includes">
+                                <li>Ale viaja a Santa Cruz (18-27 septiembre)</li>
+                                <li>Ale en el stand: demos, cierres, prospección en vivo</li>
+                                <li>Pre-Expocruz: Ale ejecuta calentamiento de 30-40 targets</li>
+                                <li>Post-Expocruz: Ale ejecuta seguimiento a 20-30 contactos</li>
+                                <li>Ustedes están presentes, ven cómo se hace, aprenden en vivo</li>
+                                <li>Resultado: 15-20 deals en propuesta + 30-40 leads calientes nuevos</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="result-box">
+                            <strong>Resultado Final B2:</strong> 15-20 deals reales en propuesta. 30-40 leads nuevos generados. Equipo vio cómo se ejecuta. Outbound operativo. Case study completado.
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- OPCIÓN C -->
+            <section>
+                <h2>V. Opción C: Implementación 6 Meses Completa</h2>
+                <p style="margin-bottom: 20px; color: #666;"><strong>Duración:</strong> 6 meses | <strong>Objetivo:</strong> Sistema escalable + Outbound operativo continuo</p>
+                
+                <div class="option-container">
+                    <!-- C1 -->
+                    <div class="option-card consultoría">
+                        <div class="option-header">
+                            <span class="model-badge">CONSULTORÍA</span>
+                            <span class="option-letter">C1</span>
+                        </div>
+                        <div class="price">USD $7,500</div>
+                        
+                        <div class="what-includes">
+                            <h5>DESGLOSE 6 MESES:</h5>
+                            <ul class="includes">
+                                <li><strong>Mes 1-2:</strong> Diagnóstico + Diseño completo (B1) + Outbound setup</li>
+                                <li><strong>Mes 2:</strong> Setup de herramientas CRM + templates + cadencias</li>
+                                <li><strong>Mes 3:</strong> Piloto Expocruz (ustedes ejecutan, Ale acompaña) + primeros leads outbound</li>
+                                <li><strong>Mes 3-6:</strong> Coaching semanal (1 h/semana). Ustedes ejecutan prospección.</li>
+                                <li><strong>Mes 4-6:</strong> Auditoría mensual: 50+ leads nuevos generados, sistema refinado</li>
+                                <li><strong>Mes 6:</strong> Handoff: Sistema documentado. Outbound operativo. Equipo independiente.</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="result-box">
+                            <strong>Resultado:</strong> Sistema escalable. Outbound operativo. 150+ leads generados en 6 meses. Equipo capacitado para continuar solo.
+                        </div>
+                    </div>
+                    
+                    <!-- C2 -->
+                    <div class="option-card ejecución">
+                        <div class="option-header">
+                            <span class="model-badge">EJECUCIÓN</span>
+                            <span class="option-letter">C2</span>
+                        </div>
+                        <div class="price">USD $20,000</div>
+                        
+                        <div class="what-includes">
+                            <h5>DESGLOSE 6 MESES:</h5>
+                            <ul class="includes">
+                                <li><strong>Mes 1-2:</strong> Diagnóstico + Diseño. Ale diseña + ejecuta prospección inicial.</li>
+                                <li><strong>Mes 2:</strong> Setup + Ale comienza outbound sistemático</li>
+                                <li><strong>Mes 3:</strong> Expocruz: Ale ejecuta en vivo. Diego/equipo observan y participan.</li>
+                                <li><strong>Mes 3-6:</strong> Ale ejecuta outbound diario + prospección post-Expocruz</li>
+                                <li><strong>Mes 3-6:</strong> Diego/equipo observan, aprenden, gradualmente toman más tareas</li>
+                                <li><strong>Mes 4-6:</strong> Coaching semanal (2 h/semana). Transición a ejecución compartida outbound.</li>
+                                <li><strong>Mes 6:</strong> Handoff: Equipo ejecuta outbound, Ale supervisa. Sistema independiente. 150-200+ leads generados.</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="result-box">
+                            <strong>Resultado:</strong> 150-200+ leads generados en 6 meses. Pipeline real. Equipo sabe cómo replicarlo. Outbound escalable. Sistema independiente.
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- COMPARATIVA -->
+            <section>
+                <h2>VI. Comparativa Rápida</h2>
+                <table class="comparison-table">
+                    <tr>
+                        <th>Opción</th>
+                        <th>MODELO 1 (Consultoría)</th>
+                        <th>MODELO 2 (Ejecución)</th>
+                        <th>Mejor para...</th>
+                    </tr>
+                    <tr>
+                        <td><strong>A</strong></td>
+                        <td>USD $2,500</td>
+                        <td>USD $5,000</td>
+                        <td>Validación rápida</td>
+                    </tr>
+                    <tr>
+                        <td><strong>B (+ Expocruz)</strong></td>
+                        <td>USD $5,000</td>
+                        <td>USD $12,000</td>
+                        <td>Proof of concept</td>
+                    </tr>
+                    <tr>
+                        <td><strong>C (6 meses)</strong></td>
+                        <td>USD $7,500</td>
+                        <td>USD $20,000</td>
+                        <td>Sistema escalable</td>
+                    </tr>
+                </table>
+                
+                <div class="highlight">
+                    <p><strong>📌 LA DIFERENCIA CLAVE:</strong></p>
+                    <p><strong>Modelo 1:</strong> Ustedes ejecutan. Costo ↓ | <strong>Modelo 2:</strong> Ale ejecuta. Resultados garantizados ↑</p>
+                    <p style="margin-top: 10px;"><strong>TODAS LAS OPCIONES INCLUYEN:</strong> Diagnóstico pipeline + Sistema de seguimiento + Outbound strategy</p>
+                </div>
+            </section>
+            
+            <!-- PRÓXIMOS PASOS -->
+            <section>
+                <h2>VII. Próximos Pasos</h2>
+                <ol style="padding-left: 20px; margin-top: 20px; line-height: 2;">
+                    <li>Reunión 20 minutos con Diego + Camila</li>
+                    <li>Revisar modelos y opciones</li>
+                    <li>Elegir: Opción A, B, o C</li>
+                    <li>Elegir: Modelo 1 (ustedes ejecutan) o Modelo 2 (Ale ejecuta)</li>
+                    <li>Firmar acuerdo</li>
+                    <li>Kick-off</li>
+                </ol>
+                
+                <div class="cta-section">
+                    <h3>Próxima Reunión: Demo en Vivo</h3>
+                    <p>Tengo datos reales que ustedes me compartieron. En la reunión puedo mostrarles exactamente cómo se ve el flujo completo desde mi lado:</p>
+                    <p style="margin-top: 15px;"><strong>✓ Cómo se estructura el diagnóstico</strong><br>✓ Cómo se arma la outbound strategy<br>✓ Cómo se integra todo en un sistema<br>✓ Cómo ustedes ejecutan después</p>
+                    <p style="margin-top: 20px; font-size: 0.95em; color: #666;">Con ejemplos de sus propios datos, para que vean exactamente cómo sería el trabajo.</p>
+                </div>
+            </section>
+        </div>
+        
+        <footer>
+            <p><strong>Ale Cadario</strong></p>
+            <p>ale@alecadario.com | +34 611 581 323</p>
+            <p style="margin-top: 15px; font-size: 0.9em;">Propuesta - Junio 2026</p>
+        </footer>
+    </div>
+</body>
+</html>
