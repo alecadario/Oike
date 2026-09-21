@@ -1,18 +1,10 @@
 import type { Config } from "@netlify/functions";
+import { USERS_BASE_ID, USERS_TABLE_ID, STANDARD_TABLES } from './shared/tables.js';
 
 const AIRTABLE_BASE = 'https://api.airtable.com/v0';
-const USERS_BASE_ID  = 'app3plkFpOx28hhmH';
-const USERS_TABLE_ID = 'tblBMyzKhFKmPFX25';
-const STAKEHOLDERS_TABLE = 'tblwwNrPg6q2jYxfv';
 
 // Standard table IDs (same across all client bases)
-const T = {
-  campaigns:    'tblHFXH59guU4QIVU',
-  outreach:     'tblAvzPQnug9VBcX5',
-  stakeholders: 'tblwwNrPg6q2jYxfv',
-  accounts:     'tblkeZ9zXiH2YQJu0',
-  solutions:    'tbl1Ji8Mr8eBcAf15',
-};
+const T = STANDARD_TABLES;
 
 // ── Types ──
 interface SeqStep   { waitDays: number; channel: string; condition: 'always' | 'no_reply'; note: string; mode?: 'send' | 'draft'; }
@@ -285,12 +277,12 @@ async function logActivity(baseId: string, outreachTableId: string, stk: any, ca
 // ── Advance stakeholder status if not protected ──
 async function advanceStatus(baseId: string, stkId: string, airtableKey: string): Promise<void> {
   try {
-    const rec = await atFetch(`/${baseId}/${STAKEHOLDERS_TABLE}/${stkId}`, airtableKey);
+    const rec = await atFetch(`/${baseId}/${T.stakeholders}/${stkId}`, airtableKey);
     const current = String(rec?.fields?.['Status'] || '').trim();
     const PROTECTED = ['DNC','Left Company','Not Interested','Nurture','Bounced','Replied','Meeting Booked'];
     if (PROTECTED.includes(current)) return;
     if (current === 'Contacted') return;
-    await atFetch(`/${baseId}/${STAKEHOLDERS_TABLE}/${stkId}`, airtableKey, {
+    await atFetch(`/${baseId}/${T.stakeholders}/${stkId}`, airtableKey, {
       method: 'PATCH',
       body: JSON.stringify({ fields: { 'Status': 'Contacted' }, typecast: true }),
     });
