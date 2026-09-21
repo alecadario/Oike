@@ -1,5 +1,5 @@
 import type { Context, Config } from "@netlify/functions";
-import { STANDARD_TABLES } from './shared/tables.js';
+import { STANDARD_TABLES } from './shared/tables.ts';
 
 // ── Build config dynamically from baseId ──
 export function buildClientConfig(baseId: string) {

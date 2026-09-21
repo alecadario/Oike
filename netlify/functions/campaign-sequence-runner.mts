@@ -1,5 +1,5 @@
 import type { Config } from "@netlify/functions";
-import { USERS_BASE_ID, USERS_TABLE_ID, STANDARD_TABLES } from './shared/tables.js';
+import { USERS_BASE_ID, USERS_TABLE_ID, STANDARD_TABLES } from './shared/tables.ts';
 
 const AIRTABLE_BASE = 'https://api.airtable.com/v0';
 

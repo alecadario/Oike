@@ -1,5 +1,5 @@
 import type { Context, Config } from "@netlify/functions";
-import { STANDARD_TABLES, USERS_BASE_ID, USERS_TABLE_ID } from './shared/tables.js';
+import { STANDARD_TABLES, USERS_BASE_ID, USERS_TABLE_ID } from './shared/tables.ts';
 
 function buildClientConfig(baseId: string) {
   return { baseId, tables: { ...STANDARD_TABLES }, fields: {} };
