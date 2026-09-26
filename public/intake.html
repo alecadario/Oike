@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oike · Pre-diagnostic</title>
+<style>
+  :root {
+    --bg: #0e1117;
+    --card: #161b27;
+    --border: rgba(255,255,255,0.08);
+    --green: #5BBFB5;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --input-bg: rgba(255,255,255,0.04);
+    --input-border: rgba(255,255,255,0.12);
+    --input-focus: rgba(91,191,181,0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    padding: 0 16px 60px;
+  }
+  .header {
+    text-align: center;
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+    position: relative;
+  }
+  .lang-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .lang-btn {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .lang-btn.active {
+    background: var(--green);
+    color: #0e1117;
+  }
+  .logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .header p {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  .form-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .field .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  input[type="text"], input[type="url"], textarea, select {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+    resize: vertical;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--input-focus); }
+  textarea { min-height: 100px; line-height: 1.6; }
+  textarea.tall { min-height: 140px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .required { color: var(--green); margin-left: 2px; }
+  .submit-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--green);
+    color: #0e1117;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-top: 8px;
+  }
+  .submit-btn:hover { opacity: 0.9; }
+  .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status-msg {
+    text-align: center;
+    padding: 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    display: none;
+  }
+  .status-msg.error { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+  .status-msg.success { background: rgba(91,191,181,0.12); color: var(--green); border: 1px solid rgba(91,191,181,0.3); }
+  .success-screen {
+    display: none;
+    text-align: center;
+    padding: 60px 20px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .success-screen .icon { font-size: 48px; margin-bottom: 20px; }
+  .success-screen h2 { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+  .success-screen p { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  .loading-screen { text-align: center; padding: 80px 20px; color: var(--muted); font-size: 14px; }
+  .error-screen { display: none; text-align: center; padding: 80px 20px; max-width: 400px; margin: 0 auto; }
+  .error-screen h2 { font-size: 18px; margin-bottom: 10px; color: #ef4444; }
+  .error-screen p { font-size: 13px; color: var(--muted); }
+  @media (max-width: 600px) {
+    .header { padding: 32px 0 24px; }
+    .header h1 { font-size: 20px; }
+    .card { padding: 18px; }
+    .lang-toggle { position: static; margin: 0 auto 16px; width: fit-content; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="lang-toggle">
+    <button class="lang-btn active" id="btn-es" onclick="setLang('es')">ES</button>
+    <button class="lang-btn" id="btn-en" onclick="setLang('en')">EN</button>
+  </div>
+  <div class="logo">Oike</div>
+  <h1 data-i18n="title"></h1>
+  <p data-i18n="subtitle"></p>
+</div>
+
+<div id="loading-screen" class="loading-screen">⏳</div>
+<div id="error-screen" class="error-screen">
+  <h2 data-i18n="errorTitle"></h2>
+  <p data-i18n="errorBody"></p>
+</div>
+<div id="already-screen" class="error-screen" style="display:none">
+  <h2 data-i18n="alreadyTitle"></h2>
+  <p data-i18n="alreadyBody"></p>
+</div>
+
+<form id="intake-form" style="display:none" novalidate>
+  <div class="form-wrap">
+
+    <!-- Section 1 -->
+    <div class="card">
+      <div class="section-label" data-i18n="sec1Label"></div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="field">
+          <label data-i18n="f1Label"></label>
+          <div class="hint" data-i18n="f1Hint"></div>
+          <textarea name="Company Context" class="tall" data-i18n-placeholder="f1Ph" required></textarea>
+        </div>
+        <div class="field">
+          <label data-i18n="f2Label"></label>
+          <div class="hint" data-i18n="f2Hint"></div>
+          <textarea name="Current Sales Motion" data-i18n-placeholder="f2Ph"></textarea>
+        </div>
+        <div class="field">
+          <label data-i18n="f3Label"></label>
+          <div class="hint" data-i18n="f3Hint"></div>
+          <input type="text" name="Sales Team Size" data-i18n-placeholder="f3Ph" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2 -->
+    <div class="card">
+      <div class="section-label" data-i18n="sec2Label"></div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="field">
+          <label data-i18n="f4Label"></label>
+          <div class="hint" data-i18n="f4Hint"></div>
+          <textarea name="Main Challenge" class="tall" data-i18n-placeholder="f4Ph" required></textarea>
+        </div>
+        <div class="field">
+          <label data-i18n="f5Label"></label>
+          <div class="hint" data-i18n="f5Hint"></div>
+          <textarea name="What They've Tried" data-i18n-placeholder="f5Ph"></textarea>
+        </div>
+        <div class="field">
+          <label data-i18n="f6Label"></label>
+          <div class="hint" data-i18n="f6Hint"></div>
+          <textarea name="Goals" data-i18n-placeholder="f6Ph" required></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3 -->
+    <div class="card">
+      <div class="section-label" data-i18n="sec3Label"></div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="field">
+          <label data-i18n="f7Label"></label>
+          <div class="hint" data-i18n="f7Hint"></div>
+          <textarea name="Pipeline Last 90 Days" data-i18n-placeholder="f7Ph"></textarea>
+        </div>
+        <div class="field">
+          <label data-i18n="f8Label"></label>
+          <div class="hint" data-i18n="f8Hint"></div>
+          <textarea name="Prospecting Activity" data-i18n-placeholder="f8Ph"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4 -->
+    <div class="card">
+      <div class="section-label" data-i18n="sec4Label"></div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="field">
+          <label data-i18n="f9Label"></label>
+          <div class="hint" data-i18n="f9Hint"></div>
+          <textarea name="Messaging Examples" class="tall" data-i18n-placeholder="f9Ph"></textarea>
+        </div>
+        <div class="field">
+          <label data-i18n="f10Label"></label>
+          <div class="hint" data-i18n="f10Hint"></div>
+          <input type="file" name="Attachment" id="attachment-input" multiple accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg" style="display:none" />
+          <div id="attachment-zone" onclick="document.getElementById('attachment-input').click()" style="border:1px dashed var(--input-border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border-color 0.15s;background:var(--input-bg)">
+            <div style="font-size:22px;margin-bottom:6px">📎</div>
+            <div id="attachment-label" style="font-size:12px;color:var(--muted)" data-i18n="f10Ph"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="f11Label"></label>
+          <textarea name="Additional Context" data-i18n-placeholder="f11Ph"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div id="status-msg" class="status-msg"></div>
+    <button type="submit" class="submit-btn" id="submit-btn" data-i18n="submitBtn"></button>
+
+  </div>
+</form>
+
+<div id="success-screen" class="success-screen">
+  <div class="icon">✅</div>
+  <h2 data-i18n="successTitle"></h2>
+  <p data-i18n="successBody"></p>
+</div>
+
+<script>
+const I18N = {
+  es: {
+    title: 'Pre-diagnóstico comercial',
+    subtitle: 'Antes de empezar, necesitamos entender tu situación actual. Completá este formulario — no hay respuestas incorrectas, solo queremos ver la realidad.',
+    sec1Label: '01 — Tu empresa',
+    f1Label: '¿Qué hace tu empresa y a quién le vende? *',
+    f1Hint: 'Describí el producto/servicio, el tipo de cliente, y el ticket promedio si lo sabés.',
+    f1Ph: 'Ej: Somos una agencia de marketing digital que trabaja con PyMEs de retail en Argentina. Ticket promedio $2.000/mes.',
+    f2Label: '¿Cómo vendés hoy?',
+    f2Hint: 'Referidos, outbound, inbound, redes sociales, ferias, canal de distribución, etc.',
+    f2Ph: 'Ej: El 80% viene por referidos del fundador. Intentamos LinkedIn sin mucho resultado. Tenemos un vendedor junior que hace llamadas frías.',
+    f3Label: '¿Cuántas personas trabajan en ventas?',
+    f3Hint: 'Incluí al fundador si vende activamente.',
+    f3Ph: 'Ej: El fundador + 1 vendedor part-time',
+    sec2Label: '02 — El problema',
+    f4Label: '¿Cuál es el principal desafío comercial que querés resolver? *',
+    f4Hint: 'Sé directo/a. ¿Qué no está funcionando?',
+    f4Ph: 'Ej: No tenemos un proceso claro. Generamos reuniones pero pocas cierran. El fundador lleva todas las relaciones.',
+    f5Label: '¿Qué intentaron antes para resolverlo?',
+    f5Hint: 'Qué funcionó parcialmente, qué no funcionó en absoluto, y por qué creés que no funcionó.',
+    f5Ph: 'Ej: Contratamos un consultor hace 6 meses que nos armó un CRM en HubSpot, pero nadie lo usa.',
+    f6Label: '¿Qué resultado esperás lograr trabajando con Oike? *',
+    f6Hint: 'Sin filtros — ¿qué sería un éxito concreto en 6 meses?',
+    f6Ph: 'Ej: Tener un proceso de ventas que no dependa de mí. Cerrar al menos 3 clientes nuevos por mes.',
+    sec3Label: '03 — Los números (últimos 90 días)',
+    f7Label: 'Pipeline actual',
+    f7Hint: 'Oportunidades abiertas: cuántas, en qué etapa, valor estimado. Una estimación sirve.',
+    f7Ph: 'Ej: 8 oportunidades abiertas. 3 en propuesta ($15k cada una), 5 en primera reunión. Pipeline total estimado: $80k.',
+    f8Label: 'Actividad de prospección',
+    f8Hint: '¿Cuántos contactos nuevos por semana/mes? ¿Por qué canal? ¿Cuántas respuestas?',
+    f8Ph: 'Ej: Mandamos ~50 mensajes por LinkedIn por mes, recibimos 8-10 respuestas.',
+    sec4Label: '04 — Evidencia y contexto adicional',
+    f9Label: 'Ejemplos de mensajería actual',
+    f9Hint: 'Pegá un email, secuencia de LinkedIn, script de llamada, o deck que usen hoy.',
+    f9Ph: 'Pegá acá un ejemplo de mensaje que uses para prospectar o para hacer seguimiento…',
+    f10Label: 'Archivos de soporte',
+    f10Hint: 'Export de CRM, pipeline en Excel, deck de ventas, propuestas actuales — cualquier documento relevante.',
+    f10Ph: 'Hacé clic para adjuntar archivos (PDF, Excel, Word, PPT…)',
+    f11Label: '¿Algo más que quieras contarnos?',
+    f11Ph: 'Contexto de la industria, historia de la empresa, situación del equipo, presupuesto disponible, urgencia…',
+    submitBtn: 'Enviar pre-diagnóstico →',
+    validationErr: 'Completá los campos obligatorios antes de enviar.',
+    sendingBtn: '⏳ Enviando…',
+    sendErr: 'Hubo un error al enviar. Intentá de nuevo o contactá a Ale.',
+    errorTitle: 'Link inválido',
+    errorBody: 'Este link no existe o ya no está activo. Si creés que es un error, contactá a Ale.',
+    alreadyTitle: '✅ Ya completaste el formulario',
+    alreadyBody: 'Tus respuestas fueron recibidas. Ale se pondrá en contacto con vos pronto.',
+    successTitle: 'Listo, recibimos todo',
+    successBody: 'Ale va a revisar tus respuestas antes de la primera sesión. Si necesitás agregar algo, respondé el email con el que te contactamos.',
+    loading: '⏳ Cargando…',
+  },
+  en: {
+    title: 'Commercial pre-diagnostic',
+    subtitle: 'Before we start, we need to understand your current situation. Fill out this form — there are no wrong answers, we just want to see the reality.',
+    sec1Label: '01 — Your company',
+    f1Label: 'What does your company do and who does it sell to? *',
+    f1Hint: 'Describe the product/service, the type of customer, and the average deal size if you know it.',
+    f1Ph: 'E.g.: We are a digital marketing agency working with retail SMEs. Average monthly retainer: $2,000.',
+    f2Label: 'How do you sell today?',
+    f2Hint: 'Referrals, outbound, inbound, social media, events, distribution channel, etc.',
+    f2Ph: 'E.g.: 80% comes from founder referrals. We tried LinkedIn without much success. We have a junior sales rep making cold calls.',
+    f3Label: 'How many people work in sales?',
+    f3Hint: 'Include the founder if they actively sell.',
+    f3Ph: 'E.g.: The founder + 1 part-time sales rep',
+    sec2Label: '02 — The problem',
+    f4Label: 'What is the main commercial challenge you want to solve? *',
+    f4Hint: 'Be direct. What is not working?',
+    f4Ph: 'E.g.: We have no clear process. We get meetings but few close. The founder holds all relationships and nothing comes in without them.',
+    f5Label: 'What have you tried before to solve it?',
+    f5Hint: 'What partially worked, what did not work at all, and why you think it failed.',
+    f5Ph: 'E.g.: We hired a consultant 6 months ago who set up HubSpot for us, but nobody uses it.',
+    f6Label: 'What outcome do you expect from working with Oike? *',
+    f6Hint: 'No filter — what would a concrete success look like in 6 months?',
+    f6Ph: 'E.g.: A sales process that does not depend on me. Closing at least 3 new clients per month.',
+    sec3Label: '03 — The numbers (last 90 days)',
+    f7Label: 'Current pipeline',
+    f7Hint: 'Open opportunities: how many, at what stage, estimated value. A rough estimate is fine.',
+    f7Ph: 'E.g.: 8 open opportunities. 3 in proposal ($15k each), 5 in first meeting. Total estimated pipeline: $80k.',
+    f8Label: 'Prospecting activity',
+    f8Hint: 'How many new contacts per week/month? Through which channel? How many replies?',
+    f8Ph: 'E.g.: We send ~50 LinkedIn messages per month, get 8-10 replies.',
+    sec4Label: '04 — Evidence and additional context',
+    f9Label: 'Current messaging examples',
+    f9Hint: 'Paste an email, LinkedIn sequence, call script, or deck you currently use.',
+    f9Ph: 'Paste a prospecting or follow-up message you use today…',
+    f10Label: 'Supporting files',
+    f10Hint: 'CRM export, pipeline in Excel, sales deck, current proposals — any relevant document.',
+    f10Ph: 'Click to attach files (PDF, Excel, Word, PPT…)',
+    f11Label: 'Anything else you want to share?',
+    f11Ph: 'Industry context, company history, team situation, available budget, urgency…',
+    submitBtn: 'Submit pre-diagnostic →',
+    validationErr: 'Please complete all required fields before submitting.',
+    sendingBtn: '⏳ Sending…',
+    sendErr: 'There was an error submitting. Please try again or contact Ale.',
+    errorTitle: 'Invalid link',
+    errorBody: 'This link does not exist or is no longer active. If you think this is an error, contact Ale.',
+    alreadyTitle: '✅ Already submitted',
+    alreadyBody: 'Your answers were received. Ale will be in touch with you soon.',
+    successTitle: 'All done, we got everything',
+    successBody: 'Ale will review your answers before the first session. If you need to add something, reply to the email we used to contact you.',
+    loading: '⏳ Loading…',
+  },
+};
+
+// ── Attachment handling ──
+const attachmentInput = document.getElementById('attachment-input');
+const attachmentZone = document.getElementById('attachment-zone');
+const attachmentLabel = document.getElementById('attachment-label');
+let selectedFiles = [];
+
+attachmentInput.addEventListener('change', () => {
+  selectedFiles = Array.from(attachmentInput.files);
+  updateAttachmentLabel();
+});
+
+attachmentZone.addEventListener('dragover', e => { e.preventDefault(); attachmentZone.style.borderColor = 'var(--green)'; });
+attachmentZone.addEventListener('dragleave', () => { attachmentZone.style.borderColor = 'var(--input-border)'; });
+attachmentZone.addEventListener('drop', e => {
+  e.preventDefault();
+  attachmentZone.style.borderColor = 'var(--input-border)';
+  selectedFiles = Array.from(e.dataTransfer.files);
+  updateAttachmentLabel();
+});
+
+function updateAttachmentLabel() {
+  if (!selectedFiles.length) { attachmentLabel.textContent = t('f10Ph'); return; }
+  attachmentLabel.textContent = selectedFiles.map(f => f.name).join(', ');
+  attachmentZone.style.borderColor = 'var(--green)';
+}
+
+async function filesToBase64(files) {
+  return Promise.all(files.map(f => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res({ name: f.name, type: f.type, data: r.result.split(',')[1] });
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  })));
+}
+
+let currentLang = (new URLSearchParams(location.search).get('lang') || 'es');
+if (currentLang !== 'en') currentLang = 'es';
+
+function t(key) { return I18N[currentLang][key] || I18N['es'][key] || ''; }
+
+function applyLang() {
+  document.documentElement.lang = currentLang;
+  document.getElementById('btn-es').classList.toggle('active', currentLang === 'es');
+  document.getElementById('btn-en').classList.toggle('active', currentLang === 'en');
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  const loadingEl = document.getElementById('loading-screen');
+  if (loadingEl.style.display !== 'none') loadingEl.textContent = t('loading');
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  applyLang();
+}
+
+applyLang();
+
+const token = new URLSearchParams(location.search).get('token');
+const loadingEl = document.getElementById('loading-screen');
+const errorEl = document.getElementById('error-screen');
+const alreadyEl = document.getElementById('already-screen');
+const formEl = document.getElementById('intake-form');
+const successEl = document.getElementById('success-screen');
+const statusMsg = document.getElementById('status-msg');
+const submitBtn = document.getElementById('submit-btn');
+
+function showMsg(text, type) {
+  statusMsg.textContent = text;
+  statusMsg.className = 'status-msg ' + type;
+  statusMsg.style.display = 'block';
+}
+
+async function init() {
+  if (!token) { loadingEl.style.display = 'none'; errorEl.style.display = 'block'; return; }
+  try {
+    const res = await fetch('/api/intake?token=' + encodeURIComponent(token));
+    loadingEl.style.display = 'none';
+    if (res.status === 404) { errorEl.style.display = 'block'; return; }
+    if (!res.ok) { errorEl.style.display = 'block'; return; }
+    const data = await res.json();
+    if (data.fields?.['Status'] === 'Submitted') { alreadyEl.style.display = 'block'; return; }
+    const fields = data.fields || {};
+    const companyName = fields['Name'] || '';
+    if (companyName) {
+      document.querySelectorAll('[data-i18n="subtitle"]').forEach(el => {
+        const base = el.textContent.replace(/\.$/, '');
+        el.innerHTML = base + (currentLang === 'es'
+          ? ` Preparamos esto especialmente para <strong style="color:var(--text)">${companyName}</strong>.`
+          : ` We prepared this specifically for <strong style="color:var(--text)">${companyName}</strong>.`);
+      });
+      document.querySelector('.header h1').innerHTML =
+        currentLang === 'es'
+          ? `Pre-diagnóstico — <span style="color:var(--green)">${companyName}</span>`
+          : `Pre-diagnostic — <span style="color:var(--green)">${companyName}</span>`;
+      document.title = `Oike · ${companyName}`;
+    }
+    formEl.querySelectorAll('[name]').forEach(el => { const val = fields[el.name]; if (val) el.value = val; });
+    formEl.style.display = 'block';
+  } catch(e) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+  }
+}
+
+formEl.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const required = formEl.querySelectorAll('[required]');
+  for (const el of required) {
+    if (!el.value.trim()) { el.focus(); showMsg(t('validationErr'), 'error'); return; }
+  }
+  submitBtn.disabled = true;
+  submitBtn.textContent = t('sendingBtn');
+  statusMsg.style.display = 'none';
+  const body = {};
+  formEl.querySelectorAll('[name]').forEach(el => { if (el.type !== 'file' && el.value.trim()) body[el.name] = el.value.trim(); });
+  if (selectedFiles.length) body.attachments = await filesToBase64(selectedFiles);
+  try {
+    const res = await fetch('/api/intake?token=' + encodeURIComponent(token), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (res.status === 409) { formEl.style.display = 'none'; alreadyEl.style.display = 'block'; return; }
+    if (!res.ok) throw new Error('server error');
+    formEl.style.display = 'none';
+    successEl.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch(e) {
+    showMsg(t('sendErr'), 'error');
+    submitBtn.disabled = false;
+    submitBtn.textContent = t('submitBtn');
+  }
+});
+
+init();
+</script>
+</body>
+</html>

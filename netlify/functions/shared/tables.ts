@@ -1,5 +1,3 @@
-// Single source of truth for all Airtable table and base IDs
-
 export const USERS_BASE_ID  = 'app3plkFpOx28hhmH';
 export const USERS_TABLE_ID = 'tblBMyzKhFKmPFX25';
 
@@ -20,4 +18,5 @@ export const STANDARD_TABLES: Record<string, string> = {
   campaigns:      'tblHFXH59guU4QIVU',
   contentLab:     'tblUaBbUYHnLLKW01',
   landings:       'tblf3djqCQ5KZJgGT',
+  diagnosticIntake: 'tblLLk9AXrnybSqs0',
 };

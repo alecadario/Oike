@@ -1,4 +1,4 @@
-/* global React */
+import React from 'react'
 const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 import {
@@ -15,12 +15,20 @@ import {
   deriveStakeholderStatus, updateStakeholderStatus, STAKEHOLDER_STATUS_PRIORITY,
   STAKEHOLDER_STATUS_PROTECTED, activateAccountIfNeeded,
   formatCurrency, formatDate, strSimilarity, FileNotesRenderer,
-} from '../utils.js';
+} from '../utils.jsx';
 import StakeholderHistoryModal from './StakeholderHistoryModal.jsx';
+import AIMessageModal from './AIMessageModal.jsx';
+import { getMatchingICPs } from '../utils/icpMatch.js';
+import AccountsList from './AccountsList.jsx';
+import AccountIntelTab from './AccountIntelTab.jsx';
+import AccountContactsTab from './AccountContactsTab.jsx';
+import AccountProposalsTab from './AccountProposalsTab.jsx';
+import AccountStrategyTab from './AccountStrategyTab.jsx';
+import AccountIntakeTab from './AccountIntakeTab.jsx';
 
 
-function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, navigateToAccountTab, clearNavigateTab, goToAccount, goToProposal }) {
-  const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [], campaigns = [], landings = [] } = data;
+function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, onDeleteRecord, navigateToAccountId, clearNavigate, navigateToAccountTab, clearNavigateTab, goToAccount, goToProposal, goToMessageLab }) {
+  const { accounts, stakeholders, opportunities, actionPlan, outreach, solutions, events, users = [], campaigns = [], landings = [], icp = [] } = data;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const isAdmin = CURRENT_USER?.role === 'admin';
@@ -28,7 +36,19 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
   const selectAccount = useCallback((id) => {
     setSelectedAccountId(id || '');
     navSetUrl('accounts', id || null);
-  }, []);
+    // Load AI Notes from Airtable for this account (hydrates localStorage cache)
+    if (id) {
+      const acct = (data.accounts || []).find(a => a.id === id);
+      const aiNotes = acct?.fields?.['AI Notes'];
+      if (aiNotes) {
+        try {
+          const parsed = JSON.parse(aiNotes);
+          if (parsed.execSummary) setExecSummaryData(prev => ({ ...prev, [id]: parsed.execSummary }));
+          if (parsed.meddpicc) setMeddpiccData(prev => ({ ...prev, [id]: parsed.meddpicc }));
+        } catch {}
+      }
+    }
+  }, [data.accounts]);
 
   // Handle navigation from other pages (and URL restore on refresh)
   useEffect(() => {
@@ -57,6 +77,14 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
       try { localStorage.setItem(EXEC_SUMMARY_LS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+    // Persist to Airtable in background
+    if (selectedAccountId && onUpdateRecord) {
+      const a = api || new AirtableAPI();
+      const current = account ? (JSON.parse(account.fields?.['AI Notes'] || '{}')) : {};
+      const updated = { ...current, execSummary: { text, updatedAt } };
+      a.updateRecord(TABLE_IDS.accounts, selectedAccountId, { 'AI Notes': JSON.stringify(updated) }).catch(() => {});
+      onUpdateRecord('accounts', selectedAccountId, { 'AI Notes': JSON.stringify(updated) });
+    }
   };
   // ── MEDDPICC ──
   const MEDDPICC_LS_KEY = 'oike_meddpicc';
@@ -87,12 +115,23 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
       try { localStorage.setItem(MEDDPICC_LS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+    // Persist to Airtable in background
+    if (selectedAccountId && onUpdateRecord) {
+      const a = api || new AirtableAPI();
+      const current = account ? (JSON.parse(account.fields?.['AI Notes'] || '{}')) : {};
+      const updated = { ...current, meddpicc: { fields, updatedAt } };
+      a.updateRecord(TABLE_IDS.accounts, selectedAccountId, { 'AI Notes': JSON.stringify(updated) }).catch(() => {});
+      onUpdateRecord('accounts', selectedAccountId, { 'AI Notes': JSON.stringify(updated) });
+    }
   };
 
   const [historyStakeholder, setHistoryStakeholder] = useState(null);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [editingStkNotes, setEditingStkNotes] = useState(null); // stakeholder id
+  const [stkNotesValue, setStkNotesValue] = useState('');
+  const [savingStkNotes, setSavingStkNotes] = useState(false);
   const [contactRecs, setContactRecs] = useState('');
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [stakeholderSearch, setStakeholderSearch] = useState('');
@@ -100,6 +139,64 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
   const [filterIndustry, setFilterIndustry] = useState('');
   const [filterCountry, setFilterCountry] = useState('');
   const [filterCPId, setFilterCPId] = useState('');
+  const [selectedAccountIds, setSelectedAccountIds] = useState(new Set());
+  const [deletingAccounts, setDeletingAccounts] = useState(false);
+  const bulkDeleteAccounts = async () => {
+    if (selectedAccountIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedAccountIds.size} account${selectedAccountIds.size > 1 ? 's' : ''} and all their contacts, outreach and opportunities? This cannot be undone.`)) return;
+    setDeletingAccounts(true);
+    const a = api || new AirtableAPI();
+    const ids = [...selectedAccountIds];
+    for (const id of ids) {
+      try {
+        const acct = accounts.find(ac => ac.id === id);
+        if (acct) {
+          const stkIds = linkedIds(acct, 'Stakeholders');
+          for (const sid of stkIds) {
+            await a.deleteRecord(TABLE_IDS.stakeholders, sid).catch(() => {});
+            if (onDeleteRecord) onDeleteRecord('stakeholders', sid);
+          }
+          const relOutreach = (data.outreach || []).filter(o => linkedIds(o, 'Account').includes(id));
+          for (const o of relOutreach) {
+            await a.deleteRecord(TABLE_IDS.outreach, o.id).catch(() => {});
+            if (onDeleteRecord) onDeleteRecord('outreach', o.id);
+          }
+          const relOpps = (data.opportunities || []).filter(o => linkedIds(o, 'Account').includes(id));
+          for (const o of relOpps) {
+            await a.deleteRecord(TABLE_IDS.opportunities, o.id).catch(() => {});
+            if (onDeleteRecord) onDeleteRecord('opportunities', o.id);
+          }
+        }
+        await a.deleteRecord(TABLE_IDS.accounts, id);
+        if (onDeleteRecord) onDeleteRecord('accounts', id);
+      } catch (e) { console.error('Failed to delete account', id, e); }
+    }
+    setSelectedAccountIds(new Set());
+    setDeletingAccounts(false);
+  };
+
+  const [selectedContactIds, setSelectedContactIds] = useState(new Set());
+  const [deletingContacts, setDeletingContacts] = useState(false);
+  const bulkDeleteContacts = async () => {
+    if (selectedContactIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedContactIds.size} contact${selectedContactIds.size > 1 ? 's' : ''} and all their outreach history? This cannot be undone.`)) return;
+    setDeletingContacts(true);
+    const a = api || new AirtableAPI();
+    for (const id of [...selectedContactIds]) {
+      try {
+        const relOutreach = (data.outreach || []).filter(o => linkedIds(o, 'Stakeholder').includes(id));
+        for (const o of relOutreach) {
+          await a.deleteRecord(TABLE_IDS.outreach, o.id).catch(() => {});
+          if (onDeleteRecord) onDeleteRecord('outreach', o.id);
+        }
+        await a.deleteRecord(TABLE_IDS.stakeholders, id);
+        if (onDeleteRecord) onDeleteRecord('stakeholders', id);
+      } catch (e) { console.error('Failed to delete contact', id, e); }
+    }
+    setSelectedContactIds(new Set());
+    setDeletingContacts(false);
+  };
+
   const [editingOpp, setEditingOpp] = useState(null);   // null | { opp: record | null, isNew: bool }
   const [oppForm, setOppForm] = useState({});
   const [oppFormSolIds, setOppFormSolIds] = useState([]);
@@ -139,6 +236,9 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
   const [showSolPicker, setShowSolPicker] = useState(false);
   const [newSolName, setNewSolName] = useState('');
   const [creatingSol, setCreatingSol] = useState(false);
+  const [showIcpAutoMatch, setShowIcpAutoMatch] = useState(false);
+  const [icpAutoMatchSelected, setIcpAutoMatchSelected] = useState({});
+  const [savingAutoMatch, setSavingAutoMatch] = useState(false);
   const [selectedOppId, setSelectedOppId] = useState('');
   const [oppNotes, setOppNotes] = useState('');
   const [editingOppNotes, setEditingOppNotes] = useState(false);
@@ -167,7 +267,7 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
   const [bulkPainLoading, setBulkPainLoading] = useState(false);
   const [bulkPainProgress, setBulkPainProgress] = useState('');
   const [editingAccount, setEditingAccount] = useState(null);
-  const [accDetailTab, setAccDetailTab] = useState('intel');
+  const [accDetailTab, setAccDetailTab] = useState('strategy');
   const [viewingProposal, setViewingProposal] = useState(null);
   const [viewingLanding, setViewingLanding] = useState(null);
   const RADAR_LS_KEY = 'oike_radar_data';
@@ -187,6 +287,21 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
   const [loadingRadar, setLoadingRadar] = useState(false);
   const [savingRadar, setSavingRadar] = useState(false);
   const now = new Date();
+
+  // NBA cache per account
+  const nbaCache = useRef({});
+  const [nbaText, setNbaText] = useState('');
+  const [nbaLoading, setNbaLoading] = useState(false);
+
+  // Offering recommendation
+  const offeringRecCache = useRef({});
+  const [offeringRec, setOfferingRec] = useState(null); // { solName, solId, why, fit }
+  const [offeringRecLoading, setOfferingRecLoading] = useState(false);
+
+  // Strategy state
+  const [strategyData, setStrategyData] = useState({ objective: '', targetDate: '', angle: '', stakeholderRoles: {}, milestones: [] });
+  const [savingStrategy, setSavingStrategy] = useState(false);
+  const [newMilestone, setNewMilestone] = useState({ text: '', date: '', status: 'Pending' });
 
   const saveAccountEdit = async (updatedFields) => {
     if (!editingAccount || !api) return;
@@ -286,6 +401,20 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
     setSavingNotes(false);
   };
 
+  const saveStkNotes = async (stk) => {
+    if (!api || !stk) return;
+    setSavingStkNotes(true);
+    try {
+      await api.updateRecord(TABLE_IDS.stakeholders, stk.id, { 'Intel Notes': stkNotesValue });
+      if (onUpdateRecord) onUpdateRecord('stakeholders', stk.id, { 'Intel Notes': stkNotesValue });
+      setEditingStkNotes(null);
+    } catch (e) {
+      console.error(e);
+      window.__oikeToast('Failed to save contact notes', 'error');
+    }
+    setSavingStkNotes(false);
+  };
+
   // ── AI-GENERATED NEWS state (must be before newsItems useMemo) ──
   const NEWS_AI_LS_KEY = 'oike_news_ai';
   const [newsAIData, setNewsAIData] = useState(() => {
@@ -296,8 +425,7 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
   const newsAIUpdatedAt = newsAIEntry?.updatedAt || null;
 
   const newsItems = useMemo(() => {
-    const newsAIEntry_ = selectedAccountId ? (newsAIData[selectedAccountId] || null) : null;
-    const sourceText = newsAIEntry_?.text || recentNews;
+    const sourceText = recentNews;
     if (!sourceText || typeof sourceText !== 'string') return [];
     const raw = sourceText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 3);
     // Parse into structured news items: { title, body, source }
@@ -338,7 +466,7 @@ function CPBriefings({ data, api, onLogActivity, onAddRecord, onUpdateRecord, on
       return true;
     });
     return unique.slice(0, 5);
-  }, [recentNews, newsAIData, selectedAccountId]);
+  }, [recentNews]);
   // Keep newsLines for backward compat with talking points prompt
   const newsLines = newsItems.map(n => `${n.title}${n.body ? ': ' + n.body : ''}`);
 
@@ -406,6 +534,43 @@ Generate 4-5 items. No intro, no outro, just the formatted items.`;
       return (b.daysSince ?? 999) - (a.daysSince ?? 999);
     });
   }, [account, accStakeholders, outreach]);
+
+  // ── Health Score + Momentum ──
+  const healthScore = useMemo(() => {
+    if (!account) return 0;
+    let score = 0;
+    const hasOpenOpp = opps.some(o => OPP_STAGES && OPP_STAGES.includes(F(o, 'Stage')));
+    if (hasOpenOpp) score += 20;
+    const recent14 = accOutreach.some(o => { const d = new Date(o.fields?.['Date']); return (now - d) / (1000*60*60*24) <= 14; });
+    if (recent14) score += 15;
+    const hasReply = accOutreach.some(o => F(o,'Status')==='Replied' || F(o,'Direction')==='Inbound' || F(o,'Reply')==='Yes');
+    const replyIn30 = accOutreach.some(o => {
+      const d = new Date(o.fields?.['Date']);
+      return (now - d) / (1000*60*60*24) <= 30 && (F(o,'Status')==='Replied' || F(o,'Direction')==='Inbound' || F(o,'Reply')==='Yes');
+    });
+    if (replyIn30) score += 15;
+    if (accStakeholders.length >= 3) score += 10;
+    if (intelNotes || radarData) score += 10;
+    const meetingIn60 = accOutreach.some(o => { const d = new Date(o.fields?.['Date']); return (now - d) / (1000*60*60*24) <= 60 && (F(o,'Channel')==='Meeting' || F(o,'Status')==='Meeting Booked'); });
+    if (meetingIn60) score += 10;
+    if (F(account,'Website') || accStakeholders.some(s => F(s,'LinkedIn'))) score += 10;
+    const status = F(account,'Inside Sales Status') || '';
+    if (['Active','In Progress','Active Outreach'].includes(status)) score += 10;
+    return Math.min(score, 100);
+  }, [account, accOutreach, accStakeholders, opps, intelNotes, radarData]);
+
+  const momentum = useMemo(() => {
+    if (!account || accOutreach.length === 0) return { emoji: '❄️', label: 'COLD' };
+    const sorted = [...accOutreach].sort((a,b) => new Date(b.fields?.['Date']||0) - new Date(a.fields?.['Date']||0));
+    const latestDate = new Date(sorted[0]?.fields?.['Date'] || 0);
+    const daysSince = (now - latestDate) / (1000*60*60*24);
+    const hasReplyRecent7 = sorted.some(o => { const d = new Date(o.fields?.['Date']); return (now-d)/(1000*60*60*24) <= 7 && (F(o,'Status')==='Replied' || F(o,'Direction')==='Inbound' || F(o,'Reply')==='Yes'); });
+    if (hasReplyRecent7) return { emoji: '🔥', label: 'HOT' };
+    if (daysSince <= 10) return { emoji: '📈', label: 'ACTIVE' };
+    if (daysSince <= 30) return { emoji: '➡️', label: 'STEADY' };
+    if (daysSince <= 60) return { emoji: '🧊', label: 'COOLING' };
+    return { emoji: '❄️', label: 'COLD' };
+  }, [account, accOutreach]);
 
   // Bulk generate pain points for all stakeholders
   const bulkGeneratePainPoints = async () => {
@@ -805,6 +970,8 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
     if (exists) { window.__oikeToast('Account already exists!', 'warning'); return; }
     const fields = { 'Account Name': newAccName.trim() };
     if (newAccWebsite.trim()) fields['Website'] = newAccWebsite.trim();
+    if (CURRENT_USER?.role === 'bdr' && CURRENT_USER?.name) fields['BDR Owner'] = CURRENT_USER.name;
+    if (CURRENT_USER?.role === 'cp' && CURRENT_USER?.name) fields['CP Assigned'] = CURRENT_USER.name;
     // Optimistic: show instantly
     if (onAddRecord) onAddRecord('accounts', fields);
     setNewAccName(''); setNewAccWebsite(''); setShowNewAccount(false);
@@ -813,6 +980,47 @@ Be specific, direct, and actionable. No generic advice. Use names when referring
     a.createRecord(TABLE_IDS.accounts, fields)
       .then(() => { if (onLogActivity) onLogActivity(); })
       .catch(e => { console.error(e); window.__oikeToast('Failed to create account', 'error'); if (onLogActivity) onLogActivity(); });
+  };
+
+  // ── Diagnostic Intake ──
+  const [intakeRecord, setIntakeRecord] = useState(null);
+  const [intakeLoading, setIntakeLoading] = useState(false);
+  const [generatingIntake, setGeneratingIntake] = useState(false);
+
+  useEffect(() => {
+    setIntakeRecord(null);
+  }, [selectedAccountId]);
+
+  const loadIntakeRecord = async () => {
+    if (!account) return;
+    setIntakeLoading(true);
+    try {
+      const a = api || new AirtableAPI();
+      const rows = await a.fetchTable(TABLE_IDS.diagnosticIntake);
+      const match = rows.find(r => {
+        const linked = r.fields?.['Account'];
+        return Array.isArray(linked) ? linked.includes(account.id) : linked === account.id;
+      });
+      setIntakeRecord(match || null);
+    } catch(e) { console.error('intake load:', e); }
+    setIntakeLoading(false);
+  };
+
+  const generateIntakeLink = async () => {
+    if (!account) return;
+    setGeneratingIntake(true);
+    try {
+      const token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+      const a = api || new AirtableAPI();
+      const rec = await a.createRecord(TABLE_IDS.diagnosticIntake, {
+        'Name': F(account, 'Account Name') || 'Intake',
+        'Account': [account.id],
+        'Token': token,
+        'Status': 'Pending',
+      });
+      setIntakeRecord(rec);
+    } catch(e) { console.error('intake create:', e); window.__oikeToast('Error generando el link', 'error'); }
+    setGeneratingIntake(false);
   };
 
   // Manual Stakeholder Creation
@@ -1018,6 +1226,100 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
     setCreatingSol(false);
   };
 
+  // ICP auto-match: solutions recommended by matching ICPs, not yet linked
+  const icpMatchedSolutions = useMemo(() => {
+    if (!account || !icp?.length || !allSolutions?.length) return [];
+    const matchingIcps = icp.filter(icpRec => {
+      const F2 = (rec, f) => { const v = rec?.fields?.[f]; return v != null ? String(v) : ''; };
+      const accIndustry = F(account, 'Industry').toLowerCase();
+      const accCountry = F(account, 'Country').toLowerCase();
+      const icpIndustry = F2(icpRec, 'Industry').toLowerCase();
+      const icpCountry = F2(icpRec, 'Country').toLowerCase();
+      const industryMatch = icpIndustry && accIndustry &&
+        icpIndustry.split(/[/,]+/).map(s => s.trim()).some(w => w && accIndustry.includes(w));
+      if (!industryMatch) return false;
+      if (icpCountry) {
+        const countryMatch = icpCountry.split(/[/,]+/).map(s => s.trim()).some(w => w && accCountry.includes(w));
+        if (!countryMatch) return false;
+      }
+      return true;
+    });
+    const recommendedSolIds = new Set(matchingIcps.flatMap(icpRec => linkedIds(icpRec, 'Solutions')));
+    return allSolutions.filter(s => recommendedSolIds.has(s.id) && !currentSolIds.includes(s.id))
+      .map(s => ({ sol: s, icpNames: matchingIcps.filter(icpRec => linkedIds(icpRec, 'Solutions').includes(s.id)).map(icpRec => F(icpRec, 'Name')) }));
+  }, [account, icp, allSolutions, currentSolIds]);
+
+  const openIcpAutoMatch = () => {
+    const init = {};
+    icpMatchedSolutions.forEach(({ sol }) => { init[sol.id] = true; });
+    setIcpAutoMatchSelected(init);
+    setShowIcpAutoMatch(true);
+  };
+
+  const confirmIcpAutoMatch = async () => {
+    const toAdd = icpMatchedSolutions.filter(({ sol }) => icpAutoMatchSelected[sol.id]).map(({ sol }) => sol.id);
+    if (!toAdd.length) { setShowIcpAutoMatch(false); return; }
+    setSavingAutoMatch(true);
+    try {
+      const a = api || new AirtableAPI();
+      await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Solutions': [...currentSolIds, ...toAdd] });
+      if (onLogActivity) onLogActivity();
+      setShowIcpAutoMatch(false);
+      window.__oikeToast(`${toAdd.length} solution${toAdd.length > 1 ? 's' : ''} added`, 'success');
+    } catch (e) { console.error(e); window.__oikeToast('Failed to add solutions', 'error'); }
+    setSavingAutoMatch(false);
+  };
+
+  // ─── OFFERING RECOMMENDATION ───
+  const generateOfferingRec = async () => {
+    if (!account || !allSolutions.length) return;
+    const cacheKey = account.id;
+    if (offeringRecCache.current[cacheKey]) { setOfferingRec(offeringRecCache.current[cacheKey]); return; }
+    setOfferingRecLoading(true);
+    try {
+      const cp = COMPANY_PROFILE || {};
+      const accIntelRaw = F(account, 'Intel Notes') || '';
+      const accIntelClean = accIntelRaw.replace(/📎\s*FILE:[\s\S]*?(?=\n📎\s*FILE:|$)/g, '').trim();
+      const accNews = F(account, 'Recent News') || '';
+      const solList = allSolutions.map(s => `- ID:${s.id} | ${F(s, 'Name')}: ${(F(s, 'Service | Solution Detail') || F(s, 'Stakeholder Key Message') || '').slice(0, 200)}`).join('\n');
+      const prompt = `You are a B2B sales strategist for ${cp.companyName || 'our company'}.
+
+ACCOUNT: ${F(account, 'Account Name')} | Industry: ${F(account, 'Industry')} | Country: ${F(account, 'Country')}
+ACCOUNT INTEL: ${accIntelClean.slice(0, 600) || 'None'}
+RECENT NEWS: ${accNews.slice(0, 300) || 'None'}
+
+OUR SOLUTIONS:
+${solList}
+
+Based ONLY on the account intel above, pick the SINGLE BEST solution for this account right now. Respond with JSON only:
+{ "solId": "<the exact ID from the list>", "solName": "<solution name>", "why": "<2-3 sentences explaining why this is the best fit based on the intel>", "fit": "high|medium|low" }`;
+      const raw = await callOpenAI({ prompt, max_tokens: 400 });
+      console.log('[offeringRec] raw:', raw);
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('No JSON in response');
+      const json = JSON.parse(match[0]);
+      // resolve solId by name if AI returned a wrong/partial id
+      if (json.solName && (!json.solId || !allSolutions.find(s => s.id === json.solId))) {
+        const found = allSolutions.find(s => F(s, 'Name').toLowerCase() === (json.solName || '').toLowerCase());
+        if (found) json.solId = found.id;
+      }
+      offeringRecCache.current[cacheKey] = json;
+      setOfferingRec(json);
+    } catch (e) { console.error('[offeringRec] error:', e); window.__oikeToast('Failed to generate recommendation: ' + (e.message || 'unknown'), 'error'); }
+    setOfferingRecLoading(false);
+  };
+
+  // auto-trigger when account changes and intel exists
+  useEffect(() => {
+    if (!account) return;
+    const hasIntel = !!(F(account, 'Intel Notes') || F(account, 'Recent News') || radarStore[account.id]?.data);
+    if (!hasIntel) { setOfferingRec(null); return; }
+    const cached = offeringRecCache.current[account.id];
+    if (cached) { setOfferingRec(cached); return; }
+    setOfferingRec(null);
+    generateOfferingRec();
+  }, [account?.id]);
+
   // ─── OPPORTUNITY CREATE / EDIT ───
   // OPP_STAGES defined globally above
 
@@ -1168,7 +1470,30 @@ Be concise and actionable. Focus on what's useful for a BDR prospecting this acc
   };
 
   // Reset talking points and recs when account changes
-  useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('intel'); }, [selectedAccountId]);
+  useEffect(() => { setTalkingPoints(''); setContactRecs(''); setStakeholderSearch(''); setAccDetailTab('strategy'); setNbaText(''); setNbaLoading(false); }, [selectedAccountId]);
+
+  // Load strategy from account record when account changes
+  useEffect(() => {
+    if (!account) { setStrategyData({ objective: '', targetDate: '', angle: '', stakeholderRoles: {}, milestones: [] }); return; }
+    try {
+      const raw = F(account, 'Strategy');
+      if (raw) { setStrategyData(JSON.parse(raw)); return; }
+    } catch {}
+    setStrategyData({ objective: '', targetDate: '', angle: '', stakeholderRoles: {}, milestones: [] });
+  }, [selectedAccountId]);
+
+  // NBA useEffect — generate next best action per account
+  useEffect(() => {
+    if (!account) { setNbaText(''); return; }
+    if (nbaCache.current[account.id]) { setNbaText(nbaCache.current[account.id]); return; }
+    setNbaText('');
+    setNbaLoading(true);
+    const prompt = `Account: ${F(account,'Account Name')}. Stage: ${F(account,'Inside Sales Status')}. Last outreach: ${accOutreach.length} touches. Stakeholders: ${accStakeholders.length}. Opps: ${opps.length}. Give ONE specific next best action in 1 sentence.`;
+    callOpenAI({ prompt, temperature: 0.5, max_tokens: 80 })
+      .then(r => { nbaCache.current[account.id] = r; setNbaText(r); })
+      .catch(() => setNbaText(''))
+      .finally(() => setNbaLoading(false));
+  }, [selectedAccountId]);
 
   // ── Sales Intelligence Radar — generate for current account ──
   const generateAccountRadar = async () => {
@@ -1206,6 +1531,23 @@ ${pain ? `  Pain: ${pain}` : ''}${linkedin ? `\n  Signal: ${linkedin}` : ''}`;
       const oppsSummary = opps.slice(0, 5).map(o =>
         `- ${F(o,'Deal/Opp name')||'Untitled'} | Stage: ${F(o,'Stage')||'?'} | ${formatCurrency(o.fields?.['Value']||0)} | Next: ${F(o,'Next step')||'—'}`
       ).join('\n');
+
+      // Real tech stack from Snov.io
+      let realTechStack = [];
+      if (accWebsite) {
+        try {
+          const enrichRes = await fetch('/api/enrich-company', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+            body: JSON.stringify({ website: accWebsite }),
+          });
+          const enrichData = await enrichRes.json().catch(() => ({}));
+          if (enrichData.ok && enrichData.technologies?.length) {
+            realTechStack = enrichData.technologies;
+            console.log('[radar] tech stack from snov:', realTechStack);
+          }
+        } catch (e) { console.warn('[radar] snov enrich failed:', e); }
+      }
 
       // Our company offering — from COMPANY_PROFILE + real solutions from Airtable
       const cp = COMPANY_PROFILE;
@@ -1268,6 +1610,7 @@ Return a JSON object with EXACTLY these keys. Be specific and data-driven. Refer
   "tech_stack": [
 { "tool": "tool or platform name", "category": "CRM/ERP/Cloud/Analytics/etc", "opportunity": "how one of our specific solutions can replace, complement or integrate with this" }
   ],
+${realTechStack.length ? `REAL TECH STACK FROM SNOV.IO (use these, do not invent others): ${realTechStack.join(', ')}` : ''}
   "competitive": "2-3 sentences: who else could they be evaluating? What is our differentiation with our specific solutions vs likely competitors?",
   "hiring_signals": "1-2 sentences: what roles are they hiring that reveal strategic priorities and align with our solutions?",
   "upcoming_events": [
@@ -1281,7 +1624,7 @@ Return a JSON object with EXACTLY these keys. Be specific and data-driven. Refer
 Rules:
 - key_developments: 2-4 items based on real news/intel provided
 - people_moves: only include if there are actual signals, otherwise empty array []
-- tech_stack: 2-5 tools you can infer from industry/description/news. Always connect opportunity to one of our specific solutions
+- tech_stack: use ONLY the real tools from SNOV.IO list above if provided; otherwise infer 2-5 from industry/description. Always connect opportunity to one of our specific solutions
 - upcoming_events: only if you can infer real events (conferences, fiscal year end, announced launches), otherwise []
 - recommended_actions: 3-5 actions, ordered by priority, using real stakeholder names from the data. Always name which solution to lead with
 - Return ONLY valid JSON. No markdown. No commentary.`;
@@ -1289,6 +1632,7 @@ Rules:
       const raw = await callOpenAI({ prompt, temperature: 0.5, max_tokens: 2800 });
       const cleaned = raw.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
       const parsed = JSON.parse(cleaned);
+      parsed._techFromSnov = realTechStack.length > 0;
       setRadarData(parsed);
     } catch (e) {
       console.error('Radar generation failed:', e);
@@ -1345,196 +1689,27 @@ Rules:
   return (
     <div>
       {renderOppModal()}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1>Accounts</h1>
-          <p>Executive account briefings — one-pager per account</p>
-        </div>
-        {!selectedAccountId && CURRENT_USER?.role === 'admin' && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-            <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={() => { setShowNewAccount(!showNewAccount); setShowAccImport(false); }}>
-              {showNewAccount ? '✕ Close' : '➕ New Account'}
-            </button>
-            <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowAccImport(!showAccImport); setShowNewAccount(false); }}>
-              {showAccImport ? '✕ Close Import' : '📥 Import CSV'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Search + Import */}
-      <div className="filters-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input className="input-field" style={{ maxWidth: 300 }} placeholder="Search account..." value={searchTerm}
-          onChange={e => { setSearchTerm(e.target.value); selectAccount(''); }} />
-        <select
-          className="input-field"
-          style={{ maxWidth: 220, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterSolutionId ? 'var(--globant-green)' : 'var(--globant-muted)', borderRadius: 8 }}
-          value={filterSolutionId}
-          onChange={e => { setFilterSolutionId(e.target.value); selectAccount(''); }}
-        >
-          <option value="">All Offering</option>
-          {(data.solutions || []).map(s => (
-            <option key={s.id} value={s.id}>{F(s, 'Name')}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ maxWidth: 200, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterIndustry ? 'var(--globant-info)' : 'var(--globant-muted)', borderRadius: 8 }}
-          value={filterIndustry}
-          onChange={e => { setFilterIndustry(e.target.value); selectAccount(''); }}
-        >
-          <option value="">All Industries</option>
-          {[...new Set(accounts.map(a => F(a, 'Industry')).filter(Boolean))].sort().map(ind => (
-            <option key={ind} value={ind}>{ind}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ maxWidth: 180, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterCountry ? '#f472b6' : 'var(--globant-muted)', borderRadius: 8 }}
-          value={filterCountry}
-          onChange={e => { setFilterCountry(e.target.value); selectAccount(''); }}
-        >
-          <option value="">🌍 All Countries</option>
-          {[...new Set(accounts.map(a => F(a, 'Country')).filter(Boolean))].sort().map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        {(data.users || []).length > 0 && (
-          <select
-            className="input-field"
-            style={{ maxWidth: 180, fontSize: 12, padding: '8px 10px', background: 'var(--globant-card)', border: '1px solid var(--globant-border)', color: filterCPId ? '#a78bfa' : 'var(--globant-muted)', borderRadius: 8 }}
-            value={filterCPId}
-            onChange={e => { setFilterCPId(e.target.value); selectAccount(''); }}
-          >
-            <option value="">👤 All Owners</option>
-            {(data.users || []).filter(u => F(u, 'Name')).sort((a,b) => (F(a,'Name')||'').localeCompare(F(b,'Name')||'')).map(u => (
-              <option key={u.id} value={u.id}>{F(u, 'Name')}</option>
-            ))}
-          </select>
-        )}
-        {(filterSolutionId || filterIndustry || filterCountry || filterCPId) && (
-          <span
-            style={{ fontSize: 11, color: 'var(--globant-green)', fontWeight: 600, cursor: 'pointer', padding: '4px 8px', background: 'rgba(91,191,181,0.1)', borderRadius: 5 }}
-            onClick={() => { setFilterSolutionId(''); setFilterIndustry(''); setFilterCountry(''); setFilterCPId(''); }}
-            title="Clear all filters"
-          >
-            {filteredAccounts.length} result{filteredAccounts.length !== 1 ? 's' : ''} · ✕ clear
-          </span>
-        )}
-      </div>
-
-      {/* Manual Account Creation */}
-      {showNewAccount && !selectedAccountId && (
-        <div className="card" style={{ borderLeft: '3px solid var(--globant-green)' }}>
-          <div className="card-header"><h3>➕ Create New Account</h3></div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div style={{ flex: 2, minWidth: 200 }}>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>ACCOUNT NAME *<InfoTip text="The official company name. This will appear across all sections of the app." /></label>
-              <input className="input-field" style={{ width: '100%', fontSize: 12 }}
-                placeholder="e.g. Saudi Aramco" value={newAccName} onChange={e => setNewAccName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createAccount()} />
-            </div>
-            <div style={{ flex: 2, minWidth: 200 }}>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--globant-muted)', marginBottom: 4, fontWeight: 600 }}>WEBSITE<InfoTip text="The company's website. Used by AI to look up news, context, and generate personalized outreach." /></label>
-              <input className="input-field" style={{ width: '100%', fontSize: 12 }}
-                placeholder="e.g. https://aramco.com" value={newAccWebsite} onChange={e => setNewAccWebsite(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createAccount()} />
-            </div>
-            <button className="action-btn btn-primary" style={{ fontSize: 12, padding: '8px 20px' }}
-              onClick={createAccount} disabled={!newAccName.trim() || creatingAcc}>
-              {creatingAcc ? '⏳ Creating...' : '🚀 Create Account'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* CSV Account Import */}
-      {showAccImport && !selectedAccountId && (
-        <div className="card" style={{ borderLeft: '3px solid var(--globant-info)' }}>
-          <div className="card-header"><h3>📥 Import Accounts from CSV</h3></div>
-          <p style={{ fontSize: 12, color: 'var(--globant-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-            Upload a CSV with columns: <strong>Account Name</strong> (or Name/Company) and <strong>Website</strong> (optional). Duplicates are detected automatically.
-          </p>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-            <input type="file" accept=".csv" onChange={handleAccCsv} style={{ fontSize: 12 }} />
-            <button className="action-btn btn-ghost" style={{ fontSize: 11 }}
-              onClick={() => {
-                const csv = 'Account Name,Website\nExample Corp,https://example.com\nAcme Inc,https://acme.io';
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = 'accounts_template.csv'; a.click();
-              }}>📋 Download Template</button>
-          </div>
-          {accCsvRows.length > 0 && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--globant-text)' }}>
-                Preview: <span style={{ color: 'var(--globant-green)' }}>{accCsvRows.filter(r => r.selected && !r.isDuplicate).length} new</span> · <span style={{ color: '#ef4444' }}>{accCsvRows.filter(r => r.isDuplicate).length} exact duplicates</span>{accCsvRows.filter(r => r.isFuzzy).length > 0 && <> · <span style={{ color: '#f59e0b' }}>{accCsvRows.filter(r => r.isFuzzy).length} possible duplicates</span></>} · {accCsvRows.length} total
-              </div>
-              <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
-                <table className="data-table">
-                  <thead><tr><th style={{ width: 30 }}></th><th>Name</th><th>Website</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {accCsvRows.map((r, i) => (
-                      <tr key={i} style={{ opacity: r.isDuplicate ? 0.5 : 1, background: r.isFuzzy ? 'rgba(251,191,36,0.04)' : 'transparent' }}>
-                        <td><input type="checkbox" checked={r.selected && !r.isDuplicate} disabled={r.isDuplicate}
-                          onChange={e => { const u = [...accCsvRows]; u[i].selected = e.target.checked; setAccCsvRows(u); }} /></td>
-                        <td style={{ fontSize: 12 }}>{r.name}</td>
-                        <td style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{r.website || '—'}</td>
-                        <td>
-                          {r.isDuplicate
-                            ? <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontSize: 9 }}>🚫 {r.duplicateReason}</span>
-                            : r.isFuzzy
-                            ? <span className="badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#f59e0b', fontSize: 9 }} title={r.fuzzyReason}>⚠️ {r.fuzzyReason}</span>
-                            : <span className="badge badge-green" style={{ fontSize: 9 }}>✓ New</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <button className="action-btn btn-primary" style={{ fontSize: 12 }}
-                onClick={importAccounts} disabled={accImporting || accCsvRows.filter(r => r.selected && !r.isDuplicate).length === 0}>
-                {accImporting ? '⏳ Importing...' : `🚀 Import ${accCsvRows.filter(r => r.selected && !r.isDuplicate).length} Accounts`}
-              </button>
-              {accImportResult && (
-                <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--globant-green)' }}>
-                  ✅ {accImportResult.created} created{accImportResult.failed ? `, ${accImportResult.failed} failed` : ''}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Account selector list */}
       {!selectedAccountId && (
-        <div className="card">
-          <div className="card-header"><h3>Select an Account</h3></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead><tr><th>Account</th><th style={{ textAlign: 'center' }}>Stakeholders</th><th style={{ textAlign: 'center' }}>Outreach</th><th style={{ textAlign: 'center' }}>Opps</th><th>Status</th><th></th></tr></thead>
-              <tbody>
-                {filteredAccounts.map(a => {
-                  const stCount = linkedIds(a, 'Stakeholders').length;
-                  const oCount = outreach.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
-                  const oppCount = opportunities.filter(o => linkedIds(o, 'Account').includes(a.id)).length;
-                  return (
-                    <tr key={a.id} onClick={() => { selectAccount(a.id); setSearchTerm(''); }} style={{ cursor: 'pointer' }}>
-                      <td style={{ fontWeight: 600 }}>{F(a, 'Account Name')}</td>
-                      <td style={{ textAlign: 'center' }}>{stCount}</td>
-                      <td style={{ textAlign: 'center' }}>{oCount > 0 ? <span style={{ color: 'var(--globant-green)', fontWeight: 700 }}>{oCount}</span> : '—'}</td>
-                      <td style={{ textAlign: 'center' }}>{oppCount > 0 ? <span className="badge badge-blue">{oppCount}</span> : '—'}</td>
-                      <td>{F(a, 'Inside Sales Status') ? <span className="badge badge-accent">{F(a, 'Inside Sales Status')}</span> : '—'}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 7px' }} onClick={e => { e.stopPropagation(); setEditingAccount(a); }}>✏️</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <AccountsList
+          searchTerm={searchTerm} setSearchTerm={setSearchTerm}
+          filterSolutionId={filterSolutionId} setFilterSolutionId={setFilterSolutionId}
+          filterIndustry={filterIndustry} setFilterIndustry={setFilterIndustry}
+          filterCountry={filterCountry} setFilterCountry={setFilterCountry}
+          filterCPId={filterCPId} setFilterCPId={setFilterCPId}
+          filteredAccounts={filteredAccounts} accounts={accounts}
+          selectedAccountIds={selectedAccountIds} setSelectedAccountIds={setSelectedAccountIds}
+          deletingAccounts={deletingAccounts} bulkDeleteAccounts={bulkDeleteAccounts}
+          selectAccount={selectAccount}
+          showNewAccount={showNewAccount} setShowNewAccount={setShowNewAccount}
+          showAccImport={showAccImport} setShowAccImport={setShowAccImport}
+          newAccName={newAccName} setNewAccName={setNewAccName}
+          newAccWebsite={newAccWebsite} setNewAccWebsite={setNewAccWebsite}
+          creatingAcc={creatingAcc} createAccount={createAccount}
+          handleAccCsv={handleAccCsv} accCsvRows={accCsvRows} setAccCsvRows={setAccCsvRows}
+          accImporting={accImporting} importAccounts={importAccounts} accImportResult={accImportResult}
+          setEditingAccount={setEditingAccount}
+          data={data} outreach={outreach} opportunities={opportunities}
+        />
       )}
 
       {/* Account Briefing */}
@@ -1563,13 +1738,14 @@ Rules:
                     {F(account, 'Inside Sales Status') && <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(91,191,181,0.14)', color: 'var(--globant-green)', border: '1px solid rgba(91,191,181,0.22)', fontWeight: 600 }}>{F(account, 'Inside Sales Status')}</span>}
                     {(() => { const d = account._enriched?.diagnosis; const cfg = d ? DIAGNOSIS_CONFIG[d] : null; return cfg ? <span style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}40`, fontWeight: 600 }}>{cfg.label}</span> : null; })()}
                     {solNames.map((sn, i) => <span key={i} style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.18)' }}>🛠️ {sn}</span>)}
+                    {getMatchingICPs(account, icp).map((icpName, i) => <span key={'icp'+i} style={{ fontSize: 11, padding: '4px 11px', borderRadius: 20, background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '1px solid rgba(52,211,153,0.2)', fontWeight: 600 }}>✅ ICP: {icpName}</span>)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
                   {[
-                    { val: accStakeholders.length, label: 'Contacts', color: 'var(--globant-green)', tab: 'stakeholders' },
+                    { val: accStakeholders.length, label: 'Contacts', color: 'var(--globant-green)', tab: 'contacts' },
                     { val: accOutreach.length, label: 'Touches', color: '#60a5fa', tab: null },
-                    { val: opps.length, label: 'Opps', color: '#fbbf24', tab: 'pipeline' },
+                    { val: opps.length, label: 'Opps', color: '#fbbf24', tab: 'proposals' },
                     { val: stakeholderEngagement.filter(e => e.hasMeeting).length, label: 'Meetings', color: '#a78bfa', tab: null },
                   ].map(({ val, label, color, tab: targetTab }) => (
                     <div key={label} onClick={() => targetTab && setAccDetailTab(targetTab)}
@@ -1583,9 +1759,44 @@ Rules:
             </div>
           </div>
 
+          {/* ── DEAL PULSE ── */}
+          {(() => {
+            const lastEngDay = stakeholderEngagement.reduce((min, e) => e.daysSince !== null ? Math.min(min, e.daysSince) : min, Infinity);
+            const hasLastDay = lastEngDay !== Infinity;
+            const temp = radarData?.recommended_actions?.[0]?.temperature;
+            const tempCfg = temp === 'HOT' ? { icon: '🔥', color: '#f87171', label: 'HOT' }
+                         : temp === 'WARM' ? { icon: '🌡️', color: '#fb923c', label: 'WARM' }
+                         : temp === 'COLD' ? { icon: '❄️', color: '#94a3b8', label: 'COLD' }
+                         : hasLastDay && lastEngDay > 14 ? { icon: '❄️', color: '#94a3b8', label: 'COLD' }
+                         : hasLastDay && lastEngDay > 7 ? { icon: '🌡️', color: '#fb923c', label: 'WARM' }
+                         : hasLastDay ? { icon: '🔥', color: '#f87171', label: 'HOT' }
+                         : { icon: '❓', color: 'var(--globant-muted)', label: 'NO DATA' };
+            const nextAction = radarData?.recommended_actions?.[0]?.action || null;
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: tempCfg.color }}>{tempCfg.icon} {tempCfg.label}</span>
+                <span style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', display: 'inline-block' }} />
+                <span style={{ fontSize: 12, color: hasLastDay ? (lastEngDay > 14 ? '#ef4444' : lastEngDay > 7 ? '#fbbf24' : '#60a5fa') : 'var(--globant-muted)' }}>
+                  {hasLastDay ? `Last contact ${lastEngDay}d ago` : 'No contact yet'}
+                </span>
+                {nextAction && (
+                  <>
+                    <span style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', display: 'inline-block' }} />
+                    <span style={{ fontSize: 12, color: 'var(--globant-text)', flex: 1, minWidth: 0 }}>
+                      <span style={{ color: 'var(--globant-muted)', marginRight: 6 }}>Next move:</span>{nextAction}
+                    </span>
+                  </>
+                )}
+                <button className="action-btn btn-primary" style={{ fontSize: 11, marginLeft: 'auto', flexShrink: 0 }} onClick={() => setAccDetailTab('strategy')}>
+                  🗺️ Strategy
+                </button>
+              </div>
+            );
+          })()}
+
           {/* ── TAB NAVIGATION ── */}
           <div style={{ display: 'flex', gap: 4, padding: '4px', background: 'var(--globant-darker)', borderRadius: 12, marginTop: 12, marginBottom: 16, border: '1px solid var(--globant-border)' }}>
-            {[['intel', '📊 Intel'], ['stakeholders', '👥 Stakeholders'], ['pipeline', '💼 Pipeline'], ['proposals', '📋 Proposals']].map(([tab, label]) => (
+            {[['strategy', '🗺️ Strategy'], ['intel', '📊 Intel'], ['contacts', '👥 Contacts'], ['proposals', '📋 Proposals'], ['intake', '📋 Intake']].map(([tab, label]) => (
               <button key={tab} onClick={() => setAccDetailTab(tab)}
                 style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
                   background: accDetailTab === tab ? 'linear-gradient(135deg, rgba(91,191,181,0.2) 0%, rgba(91,191,181,0.08) 100%)' : 'transparent',
@@ -1599,649 +1810,53 @@ Rules:
 
           {/* ══════════ INTEL TAB ══════════ */}
           {accDetailTab === 'intel' && (
-            <div>
-              {/* ── ACCOUNT BRIEF (Sales Intelligence Radar) — top, always visible ── */}
-              <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid #a78bfa' }}>
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                  <div>
-                    <h3>🔮 Account Brief</h3>
-                    {radarUpdatedAt && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>Updated {new Date(radarUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
-                  </div>
-                  <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
-                    onClick={generateAccountRadar} disabled={loadingRadar}>
-                    {loadingRadar ? '⏳ Generating...' : radarData ? '🔄 Refresh' : '✨ Generate Brief'}
-                  </button>
-                </div>
-
-                {!radarData && !loadingRadar && (
-                  <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0 4px' }}>
-                    Generate a full account brief — key signals, tech stack, competitive landscape, people moves, and recommended actions with HOT🔥/WARM🌡️/COLD❄️ priorities.
-                  </p>
-                )}
-                {loadingRadar && (
-                  <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>
-                    ⏳ Scanning signals and building your brief…
-                  </div>
-                )}
-                {radarData && (() => {
-                  const rd = radarData;
-                  const sectionTitle = (icon, label, color = '#5BBFB5') => (
-                    <div style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{icon}</span><span>{label}</span>
-                    </div>
-                  );
-                  const box = (children, style = {}) => (
-                    <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.06)', ...style }}>
-                      {children}
-                    </div>
-                  );
-                  const tempBadge = (temp) => {
-                    const cfg = temp === 'HOT' ? { icon: '🔥', bg: 'rgba(239,68,68,0.15)', color: '#f87171' }
-                             : temp === 'WARM' ? { icon: '🌡️', bg: 'rgba(251,146,60,0.15)', color: '#fb923c' }
-                             : { icon: '❄️', bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' };
-                    return (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: cfg.bg, color: cfg.color }}>
-                        {cfg.icon} {temp}
-                      </span>
-                    );
-                  };
-                  return (
-                    <div>
-                      {/* TL;DR banner */}
-                      <div style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(91,191,181,0.12) 100%)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 10, padding: '14px 18px', marginBottom: 14 }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: '#a78bfa', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>TL;DR</div>
-                        <p style={{ margin: 0, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6 }}>{rd.tldr}</p>
-                        <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          {rd.est_budget && <span style={{ fontSize: 11, background: 'rgba(74,222,128,0.12)', color: '#4ade80', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>💰 {rd.est_budget}</span>}
-                          {rd.portfolio_label && <span style={{ fontSize: 11, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>🏷️ {rd.portfolio_label}</span>}
-                        </div>
-                      </div>
-
-                      {/* Recommended Actions — FIRST, most actionable */}
-                      {(rd.recommended_actions || []).length > 0 && (
-                        <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.1) 0%, rgba(91,191,181,0.05) 100%)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '16px 18px', marginBottom: 14 }}>
-                          {sectionTitle('⚡', 'Recommended Actions', '#5BBFB5')}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {(rd.recommended_actions || []).map((a, i) => (
-                              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '10px 12px' }}>
-                                <div style={{ fontSize: 12, fontWeight: 800, color: '#5BBFB5', minWidth: 16, paddingTop: 1 }}>{i + 1}</div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{a.stakeholder}</span>
-                                    {tempBadge(a.temperature)}
-                                    {a.channel && <span style={{ fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: 6 }}>{a.channel}</span>}
-                                  </div>
-                                  <div style={{ fontSize: 12, color: 'var(--globant-text)', marginBottom: 3 }}>{a.action}</div>
-                                  {a.rationale && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{a.rationale}</div>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Key Developments + People Moves */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                        {box(<>
-                          {sectionTitle('📰', 'Key Developments', '#fbbf24')}
-                          {(rd.key_developments || []).map((d, i) => (
-                            <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: i < rd.key_developments.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 3 }}>{d.headline}</div>
-                              <div style={{ fontSize: 11, color: '#5BBFB5', marginBottom: 2 }}>→ {d.signal}</div>
-                              {d.source && <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Source: {d.source}</div>}
-                            </div>
-                          ))}
-                          {(!rd.key_developments || rd.key_developments.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No key developments found.</div>}
-                        </>)}
-                        {box(<>
-                          {sectionTitle('👥', 'People Moves', '#fb923c')}
-                          {(rd.people_moves || []).length > 0 ? (rd.people_moves || []).map((m, i) => (
-                            <div key={i} style={{ marginBottom: 8 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{m.name}</div>
-                              <div style={{ fontSize: 11, color: '#fb923c', marginBottom: 2 }}>{m.move}</div>
-                              <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{m.relevance}</div>
-                            </div>
-                          )) : <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No significant people moves detected.</div>}
-                          <div style={{ marginTop: 12 }}>
-                            {sectionTitle('📣', 'Social Sentiment', '#60a5fa')}
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.social_sentiment || '—'}</p>
-                          </div>
-                        </>)}
-                      </div>
-
-                      {/* Financial Signals + Tech Stack */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                        {box(<>
-                          {sectionTitle('💰', 'Financial Signals', '#4ade80')}
-                          <p style={{ margin: 0, fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.financial_signals || '—'}</p>
-                          <div style={{ marginTop: 12 }}>
-                            {sectionTitle('💼', 'Hiring Signals', '#a78bfa')}
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.hiring_signals || '—'}</p>
-                          </div>
-                        </>)}
-                        {box(<>
-                          {sectionTitle('⚙️', 'Tech Stack', '#94a3b8')}
-                          {(rd.tech_stack || []).map((t, i) => (
-                            <div key={i} style={{ marginBottom: 8 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-text)' }}>{t.tool}</div>
-                              <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 2 }}>{t.category}</div>
-                              {t.opportunity && <div style={{ fontSize: 10, color: '#5BBFB5' }}>⚡ {t.opportunity}</div>}
-                            </div>
-                          ))}
-                          {(!rd.tech_stack || rd.tech_stack.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No tech stack signals found.</div>}
-                          <div style={{ marginTop: 12 }}>
-                            {sectionTitle('🏆', 'Competitive', '#f472b6')}
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.competitive || '—'}</p>
-                          </div>
-                        </>)}
-                      </div>
-
-                      {/* Upcoming Events */}
-                      {(rd.upcoming_events || []).length > 0 && box(<>
-                        {sectionTitle('📅', 'Upcoming Events', '#38bdf8')}
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          {rd.upcoming_events.map((ev, i) => (
-                            <div key={i} style={{ flex: '1 1 220px', background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 8, padding: '10px 12px' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{ev.event}</div>
-                              {ev.date && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 4 }}>📅 {ev.date}</div>}
-                              {ev.angle && <div style={{ fontSize: 11, color: '#38bdf8' }}>→ {ev.angle}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      </>, { marginBottom: 0 })}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Recent News — 2-column grid */}
-              {(() => {
-                const lastUpdStr = newsAIUpdatedAt
-                  ? new Date(newsAIUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                  : account?.fields?.['Last Updated'] ? new Date(account.fields['Last Updated']).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
-                return (
-                  <div className="card">
-                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                      <div>
-                        <h3>📰 Recent News</h3>
-                        {lastUpdStr && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginTop: 2 }}>{newsAIUpdatedAt ? '🤖 AI · ' : '🕐 '}Updated: {lastUpdStr}</div>}
-                      </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-                        onClick={generateNewsAI} disabled={loadingNewsAI}>
-                        {loadingNewsAI ? '⏳ Searching...' : newsAIUpdatedAt ? '🔄 Refresh' : '✨ Generate with AI'}
-                      </button>
-                    </div>
-                    {newsItems.length === 0 && !loadingNewsAI && (
-                      <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '4px 0' }}>No news yet — click Generate to pull recent intel about this account.</p>
-                    )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
-                      {newsItems.map((item, i) => {
-                        const lc = (item.title + ' ' + item.body).toLowerCase();
-                        const tag = lc.includes('ai') || lc.includes('artificial') ? { label: 'AI', color: '#bfd730' }
-                                  : lc.includes('digital') ? { label: 'Digital', color: '#60a5fa' }
-                                  : lc.includes('partner') || lc.includes('deal') || lc.includes('agreement') ? { label: 'Partnership', color: '#a78bfa' }
-                                  : lc.includes('financ') || lc.includes('revenue') || lc.includes('invest') || lc.includes('dividend') || lc.includes('earning') || lc.includes('billion') ? { label: 'Finance', color: '#4ade80' }
-                                  : lc.includes('hire') || lc.includes('appoint') || lc.includes('ceo') || lc.includes('cto') || lc.includes('leader') ? { label: 'Leadership', color: '#fb923c' }
-                                  : lc.includes('customer') || lc.includes('cx') || lc.includes('experience') ? { label: 'CX', color: '#f472b6' }
-                                  : lc.includes('expand') || lc.includes('launch') || lc.includes('open') || lc.includes('new office') ? { label: 'Expansion', color: '#38bdf8' }
-                                  : lc.includes('incident') || lc.includes('fire') || lc.includes('shutdown') || lc.includes('crisis') ? { label: 'Incident', color: '#ef4444' }
-                                  : { label: 'News', color: '#94a3b8' };
-                        const fullText = `${item.title}${item.body ? ' — ' + item.body : ''}`;
-                        return (
-                          <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px', borderLeft: `3px solid ${tag.color}` }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(91,191,181,0.05)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: item.body ? 5 : 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.4 }}>{item.title}</div>
-                              <span style={{ fontSize: 9, fontWeight: 600, padding: '3px 8px', borderRadius: 5, background: tag.color + '22', color: tag.color, whiteSpace: 'nowrap', flexShrink: 0 }}>{tag.label}</span>
-                            </div>
-                            {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5, marginBottom: 7 }}>{item.body}</div>}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              {item.source && <a href={item.source} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--globant-green)', textDecoration: 'none' }}>🔗 Source</a>}
-                              <button onClick={() => navigator.clipboard.writeText(fullText)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--globant-muted)', cursor: 'pointer' }}>📋 Copy</button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* ── MEDDPICC — collapsible ── */}
-              <div className="card" style={{ borderLeft: '3px solid #f472b6', marginBottom: 0 }}>
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setMeddpiccExpanded(v => !v)}>
-                    <h3 style={{ margin: 0 }}>🎯 MEDDPICC</h3>
-                    {meddpiccUpdatedAt && !meddpiccExpanded && <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Updated {new Date(meddpiccUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>}
-                    <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{meddpiccExpanded ? '▲' : '▼'}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 5 }}>
-                    {Object.keys(meddpiccValues).length > 0 && !editingMeddpicc && meddpiccExpanded && (
-                      <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setMeddpiccDraft({...meddpiccValues}); setEditingMeddpicc(true); }}>✏️</button>
-                    )}
-                    {editingMeddpicc && (
-                      <>
-                        <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingMeddpicc(false)}>Cancel</button>
-                        <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={() => { saveMeddpicc(meddpiccDraft); setEditingMeddpicc(false); }}>💾</button>
-                      </>
-                    )}
-                    <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(244,114,182,0.15)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.3)' }}
-                      onClick={e => { e.stopPropagation(); generateMeddpicc(); if (!meddpiccExpanded) setMeddpiccExpanded(true); }} disabled={loadingMeddpicc}>
-                      {loadingMeddpicc ? '⏳' : Object.keys(meddpiccValues).length > 0 ? '🔄' : '✨ Generate'}
-                    </button>
-                  </div>
-                </div>
-                {meddpiccExpanded && (
-                  <>
-                    {Object.keys(meddpiccValues).length === 0 && !loadingMeddpicc && <p style={{ color: 'var(--globant-muted)', fontSize: 12, padding: '6px 0' }}>Generate MEDDPICC qualification using account context — news, stakeholders, opportunities, and intel notes.</p>}
-                    {Object.keys(meddpiccValues).length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                        {MEDDPICC_FIELDS.map(f => (
-                          <div key={f.key} style={{ borderLeft: '2px solid rgba(244,114,182,0.25)', paddingLeft: 8 }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: '#f472b6', marginBottom: 2 }}>{f.label}</div>
-                            {editingMeddpicc ? (
-                              <textarea style={{ width: '100%', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', padding: '5px 7px', resize: 'vertical', minHeight: 50, lineHeight: 1.5, boxSizing: 'border-box' }}
-                                value={meddpiccDraft[f.key] || ''} onChange={e => setMeddpiccDraft(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.hint} />
-                            ) : (
-                              <div style={{ fontSize: 12, color: 'var(--globant-text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{meddpiccValues[f.key] || <span style={{ color: 'var(--globant-muted)', fontStyle: 'italic' }}>Not defined</span>}</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Team Assignment — admin only */}
-              {isAdmin && (() => {
-                const bdrs = users.filter(u => {
-                  const r = F(u, 'Role');
-                  const role = typeof r === 'object' ? r?.name : r;
-                  return (role || '').toLowerCase() === 'bdr';
-                });
-                const cps = users.filter(u => {
-                  const r = F(u, 'Role');
-                  const role = typeof r === 'object' ? r?.name : r;
-                  return (role || '').toLowerCase() === 'cp';
-                });
-                const currentBdrIds = linkedIds(account, 'BDR');
-                const currentCpIds = linkedIds(account, 'CP');
-                const currentBdr = currentBdrIds[0] || '';
-                const currentCp = currentCpIds[0] || '';
-
-                const assignUser = async (field, userId) => {
-                  if (!api) return;
-                  try {
-                    const val = userId ? [userId] : [];
-                    await api.updateRecord(TABLE_IDS.accounts, account.id, { [field]: val });
-                    if (onUpdateRecord) onUpdateRecord('accounts', account.id, { [field]: val });
-                    if (onLogActivity) onLogActivity();
-                  } catch (e) { window.__oikeToast('Failed to assign: ' + e.message, 'error'); }
-                };
-
-                const sStyle = { width: '100%', padding: '7px 10px', background: 'var(--globant-input)', border: '1px solid var(--globant-border)', borderRadius: 6, color: 'var(--globant-text)', fontSize: 12, boxSizing: 'border-box' };
-                const lStyle = { fontSize: 10, fontWeight: 700, color: 'var(--globant-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5, display: 'block' };
-
-                return (
-                  <div className="card" style={{ borderLeft: '3px solid #a78bfa', marginBottom: 16 }}>
-                    <div className="card-header"><h3>👥 Team Assignment</h3></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                      <div>
-                        <label style={lStyle}>BDR Assigned</label>
-                        <select style={sStyle} value={currentBdr} onChange={e => assignUser('BDR', e.target.value)}>
-                          <option value="">— Unassigned —</option>
-                          {bdrs.map(u => <option key={u.id} value={u.id}>{F(u, 'Name') || F(u, 'Email') || u.id}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={lStyle}>Client Partner Assigned</label>
-                        <select style={sStyle} value={currentCp} onChange={e => assignUser('CP', e.target.value)}>
-                          <option value="">— Unassigned —</option>
-                          {cps.map(u => <option key={u.id} value={u.id}>{F(u, 'Name') || F(u, 'Email') || u.id}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Intel Notes */}
-              <div className="card" style={{ borderLeft: '3px solid var(--globant-accent)' }}>
-                <div className="card-header">
-                  <h3>📝 Intel Notes</h3>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {!editingNotes ? (
-                      <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '3px 10px' }}
-                        onClick={() => { setNotesValue(intelNotes); setEditingNotes(true); }}>
-                        {intelNotes ? '✏️ Edit' : '➕ Add Notes'}
-                      </button>
-                    ) : (
-                      <>
-                        <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '3px 10px' }}
-                          onClick={saveIntelNotes} disabled={savingNotes}>
-                          {savingNotes ? '⏳ Saving...' : '💾 Save'}
-                        </button>
-                        <button className="action-btn" style={{ fontSize: 10, padding: '3px 10px' }}
-                          onClick={() => setEditingNotes(false)}>Cancel</button>
-                      </>
-                    )}
-                    <label style={{ cursor: 'pointer' }}>
-                      <span className="action-btn" style={{ fontSize: 10, padding: '3px 10px', background: 'rgba(96,165,250,0.12)', color: 'var(--globant-info)', border: '1px solid rgba(96,165,250,0.3)', display: 'inline-block' }}>
-                        {uploadingFile ? '⏳ Processing...' : '📎 Upload File'}
-                      </span>
-                      <input type="file" accept=".csv,.txt,.json,.md,.html,.tsv,.xml,.pdf" onChange={handleFileUpload} style={{ display: 'none' }} disabled={uploadingFile} />
-                    </label>
-                  </div>
-                </div>
-                {editingNotes ? (
-                  <textarea className="input-field" value={notesValue} onChange={e => setNotesValue(e.target.value)}
-                    placeholder="Add your intel notes here... meeting insights, context, observations, next steps..."
-                    style={{ width: '100%', minHeight: 120, fontSize: 12, lineHeight: 1.6, resize: 'vertical' }} />
-                ) : intelNotes ? (
-                  <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                    <FileNotesRenderer
-                      notes={intelNotes}
-                      accentColor="var(--globant-accent)"
-                      onUpdateNotes={async (updated) => {
-                        const a = api || new AirtableAPI();
-                        await a.updateRecord(TABLE_IDS.accounts, account.id, { 'Intel Notes': updated });
-                        if (onLogActivity) onLogActivity();
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No notes yet — click "Add Notes" to write, or "Upload File" to add intel from documents</div>
-                )}
-              </div>
-
-            </div>
+            <AccountIntelTab
+              radarData={radarData} loadingRadar={loadingRadar}
+              generateAccountRadar={generateAccountRadar} generateMeddpicc={generateMeddpicc}
+              accStakeholders={accStakeholders} stakeholderEngagement={stakeholderEngagement}
+              opps={opps} meddpiccValues={meddpiccValues} MEDDPICC_FIELDS={MEDDPICC_FIELDS} loadingMeddpicc={loadingMeddpicc}
+              newsItems={newsItems}
+              intelNotes={intelNotes} editingNotes={editingNotes} notesValue={notesValue}
+              setNotesValue={setNotesValue} setEditingNotes={setEditingNotes} saveIntelNotes={saveIntelNotes} savingNotes={savingNotes}
+              setCpSelectedStakeholder={setCpSelectedStakeholder} setAccDetailTab={setAccDetailTab}
+              isAdmin={isAdmin} users={users} account={account} api={api} onLogActivity={onLogActivity} onUpdateRecord={onUpdateRecord}
+            />
           )}
-
-          {/* ══════════ SALES INTELLIGENCE RADAR — placeholder, moved to top ══════════ */}
-          {accDetailTab === 'intel' && false && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                <div>
-                  <h3>🔮 Sales Intelligence Radar</h3>
-                  <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>AI-generated account intelligence snapshot</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="action-btn btn-primary" style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
-                    onClick={generateAccountRadar} disabled={loadingRadar}>
-                    {loadingRadar ? '⏳ Generating...' : radarData ? '🔄 Refresh Radar' : '✨ Generate Radar'}
-                  </button>
-                </div>
-              </div>
-
-              {!radarData && !loadingRadar && (
-                <p style={{ fontSize: 12, color: 'var(--globant-muted)', padding: '8px 0' }}>
-                  Generate a full intelligence radar for this account — key developments, financial signals, competitive landscape, people moves, and recommended actions with HOT🔥/WARM🌡️/COLD❄️ stakeholder priorities.
-                </p>
-              )}
-
-              {loadingRadar && (
-                <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--globant-muted)', fontSize: 13 }}>
-                  ⏳ Scanning signals and building your radar…
-                </div>
-              )}
-
-              {radarData && (() => {
-                const rd = radarData;
-                const sectionTitle = (icon, label, color = '#5BBFB5') => (
-                  <div style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>{icon}</span><span>{label}</span>
-                  </div>
-                );
-                const box = (children, style = {}) => (
-                  <div style={{ background: 'var(--globant-darker)', borderRadius: 10, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.06)', ...style }}>
-                    {children}
-                  </div>
-                );
-                const tempBadge = (temp) => {
-                  const cfg = temp === 'HOT' ? { icon: '🔥', bg: 'rgba(239,68,68,0.15)', color: '#f87171' }
-                           : temp === 'WARM' ? { icon: '🌡️', bg: 'rgba(251,146,60,0.15)', color: '#fb923c' }
-                           : { icon: '❄️', bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' };
-                  return (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: cfg.bg, color: cfg.color }}>
-                      {cfg.icon} {temp}
-                    </span>
-                  );
-                };
-                return (
-                  <div>
-                    {/* TL;DR banner */}
-                    <div style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(91,191,181,0.12) 100%)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 10, padding: '14px 18px', marginBottom: 14 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#a78bfa', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>🔮 TL;DR</div>
-                      <p style={{ margin: 0, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.6 }}>{rd.tldr}</p>
-                      <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        {rd.est_budget && (
-                          <span style={{ fontSize: 11, background: 'rgba(74,222,128,0.12)', color: '#4ade80', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>
-                            💰 {rd.est_budget}
-                          </span>
-                        )}
-                        {rd.portfolio_label && (
-                          <span style={{ fontSize: 11, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '3px 10px', borderRadius: 8, fontWeight: 600 }}>
-                            🏷️ {rd.portfolio_label}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Key Developments + People Moves */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                      {box(
-                        <>
-                          {sectionTitle('📰', 'Key Developments', '#fbbf24')}
-                          {(rd.key_developments || []).map((d, i) => (
-                            <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: i < rd.key_developments.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)', marginBottom: 3 }}>{d.headline}</div>
-                              <div style={{ fontSize: 11, color: '#5BBFB5', marginBottom: 2 }}>→ {d.signal}</div>
-                              {d.source && <div style={{ fontSize: 10, color: 'var(--globant-muted)' }}>Source: {d.source}</div>}
-                            </div>
-                          ))}
-                          {(!rd.key_developments || rd.key_developments.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No key developments found.</div>}
-                        </>
-                      )}
-                      {box(
-                        <>
-                          {sectionTitle('👥', 'People Moves', '#fb923c')}
-                          {(rd.people_moves || []).length > 0 ? (rd.people_moves || []).map((m, i) => (
-                            <div key={i} style={{ marginBottom: 8 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{m.name}</div>
-                              <div style={{ fontSize: 11, color: '#fb923c', marginBottom: 2 }}>{m.move}</div>
-                              <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{m.relevance}</div>
-                            </div>
-                          )) : <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No significant people moves detected.</div>}
-                          <div style={{ marginTop: 12 }}>
-                            {sectionTitle('📣', 'Social Sentiment', '#60a5fa')}
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.social_sentiment || '—'}</p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Financial Signals + Tech Stack */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                      {box(
-                        <>
-                          {sectionTitle('💰', 'Financial Signals', '#4ade80')}
-                          <p style={{ margin: 0, fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.financial_signals || '—'}</p>
-                          <div style={{ marginTop: 12 }}>
-                            {sectionTitle('💼', 'Hiring Signals', '#a78bfa')}
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.hiring_signals || '—'}</p>
-                          </div>
-                        </>
-                      )}
-                      {box(
-                        <>
-                          {sectionTitle('⚙️', 'Tech Stack', '#94a3b8')}
-                          {(rd.tech_stack || []).map((t, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-text)' }}>{t.tool}</div>
-                                <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 2 }}>{t.category}</div>
-                                {t.opportunity && <div style={{ fontSize: 10, color: '#5BBFB5' }}>⚡ {t.opportunity}</div>}
-                              </div>
-                            </div>
-                          ))}
-                          {(!rd.tech_stack || rd.tech_stack.length === 0) && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No tech stack signals found.</div>}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Competitive + Upcoming Events */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                      {box(
-                        <>
-                          {sectionTitle('🏆', 'Competitive Landscape', '#f472b6')}
-                          <p style={{ margin: 0, fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.6 }}>{rd.competitive || '—'}</p>
-                        </>
-                      )}
-                      {box(
-                        <>
-                          {sectionTitle('📅', 'Upcoming Events', '#38bdf8')}
-                          {(rd.upcoming_events || []).length > 0 ? (rd.upcoming_events || []).map((ev, i) => (
-                            <div key={i} style={{ marginBottom: 8 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{ev.event}</div>
-                              {ev.date && <div style={{ fontSize: 10, color: 'var(--globant-muted)', marginBottom: 2 }}>📅 {ev.date}</div>}
-                              {ev.angle && <div style={{ fontSize: 11, color: '#38bdf8' }}>→ {ev.angle}</div>}
-                            </div>
-                          )) : <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>No upcoming events identified.</div>}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Recommended Actions */}
-                    {(rd.recommended_actions || []).length > 0 && (
-                      <div style={{ background: 'linear-gradient(135deg, rgba(91,191,181,0.1) 0%, rgba(91,191,181,0.05) 100%)', border: '1px solid rgba(91,191,181,0.2)', borderRadius: 10, padding: '16px 18px' }}>
-                        {sectionTitle('⚡', 'Recommended Actions', '#5BBFB5')}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {(rd.recommended_actions || []).map((a, i) => (
-                            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '10px 12px' }}>
-                              <div style={{ fontSize: 12, fontWeight: 800, color: '#5BBFB5', minWidth: 16, paddingTop: 1 }}>{i + 1}</div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-text)' }}>{a.stakeholder}</span>
-                                  {tempBadge(a.temperature)}
-                                  {a.channel && <span style={{ fontSize: 10, color: 'var(--globant-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: 6 }}>{a.channel}</span>}
-                                </div>
-                                <div style={{ fontSize: 12, color: 'var(--globant-text)', marginBottom: 3 }}>{a.action}</div>
-                                {a.rationale && <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>{a.rationale}</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
           )}
 
           {/* ══════════ STAKEHOLDERS TAB ══════════ */}
-          {accDetailTab === 'stakeholders' && (
-            <div>
-              {/* Avatar cards grid */}
-              <div className="card" style={{ marginBottom: 0 }}>
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                  <h3>👥 Contacts ({stakeholderEngagement.length})</h3>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input className="input-field" style={{ maxWidth: 200, fontSize: 12, padding: '6px 12px' }}
-                      placeholder="Search name or role..."
-                      value={stakeholderSearch} onChange={e => setStakeholderSearch(e.target.value)} />
-                    <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
-                      onClick={bulkGeneratePainPoints} disabled={bulkPainLoading}>
-                      {bulkPainLoading ? `⏳ ${bulkPainProgress}` : '🧠 Bulk Pain'}
-                    </button>
-                    <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
-                      onClick={() => setShowNewStakeholder(!showNewStakeholder)}>
-                      {showNewStakeholder ? '✕ Close' : '➕ Add Contact'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* New Stakeholder Form */}
-                {showNewStakeholder && (
-                  <div style={{ padding: '14px', background: 'var(--globant-darker)', borderRadius: 8, marginBottom: 12, border: '1px solid var(--globant-border)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--globant-green)', marginBottom: 10 }}>New Contact for {name}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>FIRST NAME *</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. Ana" value={newStkName} onChange={e => setNewStkName(e.target.value)} /></div>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LAST NAME</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. García" value={newStkLastName} onChange={e => setNewStkLastName(e.target.value)} /></div>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>ROLE</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="e.g. CTO" value={newStkRole} onChange={e => setNewStkRole(e.target.value)} /></div>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>EMAIL</label><input className="input-field" type="email" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="ana@company.com" value={newStkEmail} onChange={e => setNewStkEmail(e.target.value)} /></div>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>PHONE</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="+34..." value={newStkPhone} onChange={e => setNewStkPhone(e.target.value)} /></div>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>LINKEDIN URL</label><input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} placeholder="https://linkedin.com/in/..." value={newStkLinkedin} onChange={e => setNewStkLinkedin(e.target.value)} /></div>
-                      <div><label style={{ display: 'block', fontSize: 10, color: 'var(--globant-muted)', marginBottom: 3, fontWeight: 600 }}>INFLUENCE</label><select className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px' }} value={newStkInfluence} onChange={e => setNewStkInfluence(e.target.value)}><option value="">Select...</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></div>
-                    </div>
-                    <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                      <button className="action-btn btn-primary" style={{ fontSize: 12 }} onClick={createStakeholder} disabled={!newStkName.trim() || creatingStk}>{creatingStk ? '⏳ Creating...' : '🚀 Create Contact'}</button>
-                      <button className="action-btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowNewStakeholder(false)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Contacts list table */}
-                <div style={{ overflowX: 'auto' }}>
-                    <table className="data-table">
-                      <thead><tr><th>Name</th><th>Role</th><th>Influence</th><th>Last Contact</th><th>Pain Points</th><th>Status</th><th style={{ textAlign: 'center' }}>Actions</th></tr></thead>
-                      <tbody>
-                        {stakeholderEngagement
-                          .filter(({ s, sName }) => {
-                            if (!stakeholderSearch) return true;
-                            const term = stakeholderSearch.toLowerCase();
-                            return sName.toLowerCase().includes(term) || (F(s, 'Role') || '').toLowerCase().includes(term);
-                          })
-                          .map(({ s, sName, hasReplied, hasMeeting, totalTouches, lastTouch, daysSince }) => {
-                            const pain = F(s, 'Pain Points (Generated)') || F(s, 'Pain points') || '';
-                            const painText = typeof pain === 'string' ? pain : String(pain);
-                            const phone = F(s, 'Phone number');
-                            const email = F(s, 'Email');
-                            const linkedin = F(s, 'LinkedIn');
-                            return (
-                              <tr key={s.id}>
-                                <td style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--globant-green)' }} onClick={() => setHistoryStakeholder(s)}>{sName}</td>
-                                <td style={{ fontSize: 12 }}>{F(s, 'Role')}</td>
-                                <td>{F(s, 'Level of Influence') ? <span className="badge badge-accent">{F(s, 'Level of Influence')}</span> : '—'}</td>
-                                <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                                  {lastTouch ? (
-                                    <span style={{ color: daysSince > 14 ? '#ef4444' : daysSince > 7 ? '#fbbf24' : '#60a5fa', fontWeight: 600 }}>
-                                      {new Date(lastTouch.fields?.['Date']).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                      <span style={{ fontSize: 10, opacity: 0.8, marginLeft: 4 }}>({daysSince}d)</span>
-                                    </span>
-                                  ) : <span className="badge" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 10 }}>Never</span>}
-                                </td>
-                                <td style={{ fontSize: 12, maxWidth: 200, lineHeight: 1.4 }}>{painText.length > 100 ? painText.slice(0, 100) + '...' : painText || <span style={{ color: 'var(--globant-muted)' }}>—</span>}</td>
-                                <td>
-                                  {hasMeeting ? <span className="badge badge-blue">Meeting</span> :
-                                   hasReplied ? <span className="badge badge-green">Replied</span> :
-                                   totalTouches > 0 ? <span className="badge badge-yellow">Waiting</span> :
-                                   <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>No contact</span>}
-                                </td>
-                                <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                                  <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                                    {email && <button title="AI Message" style={{ background: 'rgba(91,191,181,0.12)', border: '1px solid rgba(91,191,181,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => setCpSelectedStakeholder(s)}>✉️</button>}
-                                    <button title="Schedule Meeting" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => { setCpMeetingModal({ stakeholder: s }); setCpMeetingNotes(''); setCpMeetingDate(''); setCpMeetingTime(''); }}>📅</button>
-                                    {phone && <button title="Log Call" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => { setCpCallModal(s); setCpCallNotes(''); }}>📞</button>}
-                                    {phone && <button title="WhatsApp" style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13 }} onClick={() => window.open('https://wa.me/' + String(phone).replace(/[^0-9+]/g, ''), '_blank')}>💬</button>}
-                                    {linkedin && <button title="LinkedIn" style={{ background: 'rgba(10,102,194,0.12)', border: '1px solid rgba(10,102,194,0.3)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#0A66C2' }} onClick={() => window.open(linkedin, '_blank')}>in</button>}
-                                    <button title="Edit" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--globant-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: 'var(--globant-muted)' }} onClick={() => setCpEditingContact(s)}>✏️</button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-              </div>
-            </div>
+          {/* ══════════ STAKEHOLDERS TAB ══════════ */}
+          {accDetailTab === 'contacts' && (
+            <AccountContactsTab
+              name={name} stakeholderEngagement={stakeholderEngagement}
+              stakeholderSearch={stakeholderSearch} setStakeholderSearch={setStakeholderSearch}
+              bulkGeneratePainPoints={bulkGeneratePainPoints} bulkPainLoading={bulkPainLoading} bulkPainProgress={bulkPainProgress}
+              showNewStakeholder={showNewStakeholder} setShowNewStakeholder={setShowNewStakeholder}
+              newStkName={newStkName} setNewStkName={setNewStkName}
+              newStkLastName={newStkLastName} setNewStkLastName={setNewStkLastName}
+              newStkRole={newStkRole} setNewStkRole={setNewStkRole}
+              newStkEmail={newStkEmail} setNewStkEmail={setNewStkEmail}
+              newStkPhone={newStkPhone} setNewStkPhone={setNewStkPhone}
+              newStkLinkedin={newStkLinkedin} setNewStkLinkedin={setNewStkLinkedin}
+              newStkInfluence={newStkInfluence} setNewStkInfluence={setNewStkInfluence}
+              createStakeholder={createStakeholder} creatingStk={creatingStk}
+              setHistoryStakeholder={setHistoryStakeholder}
+              editingStkNotes={editingStkNotes} setEditingStkNotes={setEditingStkNotes}
+              stkNotesValue={stkNotesValue} setStkNotesValue={setStkNotesValue}
+              saveStkNotes={saveStkNotes} savingStkNotes={savingStkNotes}
+              setCpSelectedStakeholder={setCpSelectedStakeholder}
+              setCpMeetingModal={setCpMeetingModal} setCpMeetingNotes={setCpMeetingNotes}
+              setCpMeetingDate={setCpMeetingDate} setCpMeetingTime={setCpMeetingTime}
+              setCpCallModal={setCpCallModal} setCpCallNotes={setCpCallNotes}
+              setCpEditingContact={setCpEditingContact}
+              goToMessageLab={goToMessageLab}
+              selectedContactIds={selectedContactIds} setSelectedContactIds={setSelectedContactIds}
+              deletingContacts={deletingContacts} bulkDeleteContacts={bulkDeleteContacts}
+            />
           )}
 
           {/* ══════════ TALKING POINTS TAB (moved from Intel) ══════════ */}
-          {accDetailTab === 'stakeholders' && (
+          {accDetailTab === 'contacts' && (
             <div className="card" style={{ marginTop: 16, borderLeft: '3px solid var(--globant-accent)' }}>
               <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3>🎤 Talking Points</h3>
@@ -2284,231 +1899,27 @@ Rules:
             </div>
           )}
 
+          {/* ══════════ PIPELINE (now merged into proposals) ══════════ */}
           {/* ══════════ PIPELINE TAB ══════════ */}
-          {accDetailTab === 'pipeline' && (
-            <div>
-              {/* Solutions */}
-              <div className="card">
-                <div className="card-header">
-                  <h3>🛠️ Offering & Approach</h3>
-                  <button className="action-btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setShowSolPicker(!showSolPicker)}>
-                    {showSolPicker ? '✕ Close' : '➕ Add Solution'}
-                  </button>
-                </div>
-                {currentSolIds.length > 0 ? (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: showSolPicker ? 12 : 0 }}>
-                    {currentSolIds.map(sid => {
-                      const sol = allSolutions.find(s => s.id === sid);
-                      const solName = sol ? F(sol, 'Name') : sid;
-                      return (
-                        <span key={sid} className="badge badge-accent" style={{ fontSize: 12, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {solName}
-                          <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 10 }} onClick={() => removeSolutionFromAccount(sid)} title="Remove">
-                            {removingSol === sid ? '⏳' : '✕'}
-                          </span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : <p style={{ color: 'var(--globant-warning)', fontSize: 12, marginBottom: showSolPicker ? 12 : 0 }}>No solutions mapped yet</p>}
-                {showSolPicker && (
-                  <div style={{ padding: '12px', background: 'var(--globant-darker)', borderRadius: 8 }}>
-                    {availableSolutions.length > 0 && (
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6 }}>SELECT EXISTING</div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {availableSolutions.map(s => (
-                            <button key={s.id} className="action-btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => addSolutionToAccount(s.id)}>+ {F(s, 'Name')}</button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', fontWeight: 600, marginBottom: 6 }}>OR CREATE NEW</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input className="input-field" style={{ flex: 1, fontSize: 12, padding: '6px 10px' }} placeholder="New solution name..." value={newSolName} onChange={e => setNewSolName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createNewSolution()} />
-                        <button className="action-btn btn-primary" style={{ fontSize: 11 }} onClick={createNewSolution} disabled={!newSolName.trim() || creatingSol}>{creatingSol ? '⏳' : '✨ Create & Add'}</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {F(account, 'Service / Focus') && (
-                  <div style={{ marginTop: 10 }}>
-                    <span style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Focus: </span>
-                    {(Array.isArray(F(account, 'Service / Focus')) ? F(account, 'Service / Focus') : [F(account, 'Service / Focus')]).map((sf, i) => (
-                      <span key={i} className="badge badge-blue" style={{ marginLeft: 4 }}>{typeof sf === 'object' ? sf.name || sf : sf}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Pipeline / Opportunities */}
-              <div className="card">
-                <div className="card-header">
-                  <h3>🚀 Pipeline ({opps.length})</h3>
-                  <button className="action-btn btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={openNewOpp}>➕ New Opp</button>
-                </div>
-                {opps.length === 0 && <p style={{ color: 'var(--globant-muted)', fontSize: 12, fontStyle: 'italic' }}>No opportunities yet. Click "New Opp" to create one.</p>}
-                {opps.map(o => {
-                  const stage = F(o, 'Stage');
-                  const value = o.fields?.['Value'];
-                  const stageColor = (stage||'').toLowerCase().includes('won') ? 'badge-green' : (stage||'').toLowerCase().includes('lost') || (stage||'').toLowerCase().includes('cancel') ? 'badge-red' : 'badge-blue';
-                  const isOpen = selectedOppId === o.id;
-                  return (
-                    <div key={o.id} style={{ borderBottom: '1px solid var(--globant-border)' }}>
-                      <div style={{ padding: '10px 0', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1 }}
-                          onClick={() => { if (isOpen) { setSelectedOppId(''); } else { setSelectedOppId(o.id); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); setOppStakeholder(F(o, 'Stakeholders') || ''); setOppSolutionIds(linkedIds(o, 'Solutions')); setEditingOppNotes(false); setShowAddOppStk(false); } }}>
-                          <span style={{ color: 'var(--globant-green)', fontSize: 10 }}>{isOpen ? '▼' : '▶'}</span>
-                          <span style={{ fontWeight: 600 }}>{F(o, 'Deal/Opp name')}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <span className={`badge ${stageColor}`}>{stage}</span>
-                          {value ? <span className="badge badge-green">{formatCurrency(value)}</span> : null}
-                          <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px', marginLeft: 4 }} onClick={e => { e.stopPropagation(); openEditOpp(o); }} title="Edit">✏️</button>
-                          <button style={{ fontSize: 10, padding: '2px 8px', marginLeft: 2, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); deleteOpp(o); }} title="Delete">🗑</button>
-                        </div>
-                      </div>
-                      {isOpen && (
-                        <div style={{ padding: '0 0 14px 20px', fontSize: 12 }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12, padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-                            {F(o, 'Opp Owner') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Owner:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Opp Owner')}</span></div>}
-                            {F(o, 'Inside sale Rep') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Inside Sales:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Inside sale Rep')}</span></div>}
-                            {o.fields?.['close date'] && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Close Date:</span> <span style={{ fontWeight: 600 }}>{formatDate(o.fields['close date'])}</span></div>}
-                            {o.fields?.['Close probability (%)'] != null && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Probability:</span> <span style={{ fontWeight: 600 }}>{Math.round(o.fields['Close probability (%)'] * 100)}%</span></div>}
-                            {F(o, 'Opp origin') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Origin:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Opp origin')}</span></div>}
-                            {F(o, 'Tech / Ecosystem') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Tech:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Tech / Ecosystem')}</span></div>}
-                            {F(o, 'Confidence') && <div><span style={{ color: 'var(--globant-muted)', fontSize: 10 }}>Confidence:</span> <span style={{ fontWeight: 600 }}>{F(o, 'Confidence')}</span></div>}
-                          </div>
-                          {/* Stakeholder */}
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>👤 Stakeholder</span>
-                              {!editingOppNotes && <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => setEditingOppNotes(true)}>✏️ Edit</button>}
-                            </div>
-                            {editingOppNotes ? (
-                              <div>
-                                <select className="input-field" style={{ width: '100%', fontSize: 12, marginBottom: 6 }} value={oppStakeholder} onChange={e => { setOppStakeholder(e.target.value); setShowAddOppStk(false); }}>
-                                  <option value="">— Select stakeholder —</option>
-                                  {accStakeholders.map(s => { const sFullName = F(s, 'Name') + (F(s, 'Last name') ? ` ${F(s, 'Last name')}` : ''); const sRole = F(s, 'Role') || ''; return <option key={s.id} value={sFullName}>{sFullName}{sRole ? ` — ${sRole}` : ''}</option>; })}
-                                </select>
-                                <button className="action-btn btn-ghost" style={{ fontSize: 10, padding: '3px 8px', marginBottom: 6 }} onClick={() => setShowAddOppStk(!showAddOppStk)}>{showAddOppStk ? '✕ Cancel' : '➕ New Contact'}</button>
-                                {showAddOppStk && (
-                                  <div style={{ display: 'flex', gap: 6, marginBottom: 6, padding: '8px 10px', background: 'rgba(91,191,181,0.06)', borderRadius: 8 }}>
-                                    <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Full name" value={newOppStkName} onChange={e => setNewOppStkName(e.target.value)} />
-                                    <input className="input-field" style={{ flex: 1, fontSize: 11, padding: '5px 8px' }} placeholder="Role (e.g. CTO)" value={newOppStkRole} onChange={e => setNewOppStkRole(e.target.value)} />
-                                    <button className="action-btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', whiteSpace: 'nowrap' }} disabled={!newOppStkName.trim() || creatingOppStk}
-                                      onClick={async () => { setCreatingOppStk(true); try { const parts = newOppStkName.trim().split(/\s+/); const firstName = parts[0] || ''; const lastName = parts.slice(1).join(' ') || ''; const stkFields = { 'Name': firstName, ...(lastName ? { 'Last name': lastName } : {}), ...(newOppStkRole ? { 'Role': newOppStkRole } : {}), 'Account': account ? [account.id] : [], 'BDR Owner': CURRENT_USER?.role === 'bdr' ? CURRENT_USER?.name || '' : '', 'CP Assigned': CURRENT_USER?.role === 'cp' ? CURRENT_USER?.name || '' : '' }; const dup = findDuplicateStakeholder(stkFields, stakeholders); if (dup && !confirmDuplicateStakeholder(dup)) { setCreatingOppStk(false); return; } await api.createRecord(TABLE_IDS.stakeholders, stkFields); setOppStakeholder(newOppStkName.trim()); setNewOppStkName(''); setNewOppStkRole(''); setShowAddOppStk(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); window.__oikeToast('Failed to create stakeholder', 'error'); } setCreatingOppStk(false); }}>
-                                      {creatingOppStk ? '⏳' : '✨ Create'}
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ) : <div style={{ fontSize: 12, color: oppStakeholder ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppStakeholder ? 'normal' : 'italic' }}>{oppStakeholder || 'No stakeholder assigned'}</div>}
-                          </div>
-                          {/* Solution */}
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>🛠️ Solution</span></div>
-                            {editingOppNotes ? (
-                              <div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                                  {oppSolutionIds.map(sid => { const sol = solutions.find(s => s.id === sid); if (!sol) return null; return <span key={sid} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 }}>{F(sol, 'Name')}<span style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13 }} onClick={() => setOppSolutionIds(prev => prev.filter(id => id !== sid))}>×</span></span>; })}
-                                </div>
-                                <select className="input-field" style={{ width: '100%', fontSize: 12 }} value="" onChange={e => { if (e.target.value && !oppSolutionIds.includes(e.target.value)) setOppSolutionIds(prev => [...prev, e.target.value]); }}>
-                                  <option value="">+ Add solution...</option>
-                                  {solutions.filter(s => !oppSolutionIds.includes(s.id)).map(s => <option key={s.id} value={s.id}>{F(s, 'Name')}</option>)}
-                                </select>
-                              </div>
-                            ) : (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {oppSolutionIds.length > 0 ? oppSolutionIds.map(sid => { const sol = solutions.find(s => s.id === sid); return sol ? <span key={sid} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>{F(sol, 'Name')}</span> : null; }) : <span style={{ fontSize: 12, color: 'var(--globant-muted)', fontStyle: 'italic' }}>No solution assigned</span>}
-                              </div>
-                            )}
-                          </div>
-                          {/* AI tags */}
-                          {(F(o, 'Suggested Angle') || F(o, 'Suggested Solution Theme') || F(o, 'Potential Interest') || F(o, 'Role-Based Pain Point')) && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                              {F(o, 'Suggested Angle') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(91,191,181,0.12)', color: 'var(--globant-green)' }}>🎯 {F(o, 'Suggested Angle')}</span>}
-                              {F(o, 'Suggested Solution Theme') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>🛠️ {F(o, 'Suggested Solution Theme')}</span>}
-                              {F(o, 'Potential Interest') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(96,165,250,0.12)', color: '#60a5fa' }}>💡 {F(o, 'Potential Interest')}</span>}
-                              {F(o, 'Role-Based Pain Point') && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(244,114,182,0.12)', color: '#f472b6' }}>⚡ {F(o, 'Role-Based Pain Point')}</span>}
-                            </div>
-                          )}
-                          {/* Next Step */}
-                          <div style={{ marginBottom: 10 }}>
-                            <div style={{ marginBottom: 4 }}><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)' }}>Next Step</span></div>
-                            {editingOppNotes ? <input className="input-field" style={{ width: '100%', fontSize: 12, padding: '6px 8px', marginBottom: 6 }} value={oppNextStep} onChange={e => setOppNextStep(e.target.value)} placeholder="What's the next step for this opp?" />
-                              : <div style={{ fontSize: 12, color: oppNextStep ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppNextStep ? 'normal' : 'italic' }}>{oppNextStep || 'No next step defined'}</div>}
-                          </div>
-                          {/* Notes */}
-                          <div style={{ marginBottom: 10 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--globant-green)', display: 'block', marginBottom: 4 }}>Notes</span>
-                            {editingOppNotes ? <textarea className="input-field" style={{ width: '100%', minHeight: 80, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }} value={oppNotes} onChange={e => setOppNotes(e.target.value)} placeholder="Add notes about this opportunity..." />
-                              : <div style={{ fontSize: 12, color: oppNotes ? 'var(--globant-text)' : 'var(--globant-muted)', fontStyle: oppNotes ? 'normal' : 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{oppNotes || 'No notes yet. Click Edit to add context.'}</div>}
-                          </div>
-                          {editingOppNotes && (
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button className="action-btn btn-primary" style={{ fontSize: 11 }} disabled={savingOppNotes}
-                                onClick={async () => { setSavingOppNotes(true); try { await api.updateRecord(TABLE_IDS.opportunities, o.id, { 'Reason': oppNotes, 'Next step': oppNextStep, 'Stakeholders': oppStakeholder, 'Solutions': oppSolutionIds }); setEditingOppNotes(false); if (onLogActivity) onLogActivity(); } catch (e) { console.error(e); window.__oikeToast('Failed to save', 'error'); } setSavingOppNotes(false); }}>
-                                {savingOppNotes ? '⏳ Saving...' : '💾 Save'}
-                              </button>
-                              <button className="action-btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setEditingOppNotes(false); setOppNotes(F(o, 'Reason') || ''); setOppNextStep(F(o, 'Next step') || ''); }}>Cancel</button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Upcoming Events */}
-              {accEvents.length > 0 && (
-                <div className="card">
-                  <div className="card-header"><h3>📅 Upcoming Events</h3></div>
-                  {accEvents.map(ev => (
-                    <div key={ev.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--globant-border)', fontSize: 12 }}>
-                      <span style={{ fontWeight: 600 }}>{F(ev, 'Event Name')}</span>
-                      <span className="badge badge-blue" style={{ marginLeft: 8 }}>{formatDate(ev.fields?.['Starting'])}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Company Events Intel (AI) */}
-              {upcomingEventsText && upcomingEventsText.length > 5 && (() => {
-                const evLines = upcomingEventsText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 5);
-                const cleanMd = (s) => s.replace(/^\.\s*/, '').replace(/\*\*/g, '').replace(/^[-•*\d.]+\s*/, '').trim();
-                const isLink = (s) => /^\[.*\]\(http/i.test(s) || /^https?:\/\//i.test(s);
-                const items = []; let cur = null;
-                for (const line of evLines) {
-                  const c = cleanMd(line);
-                  if (!c || c.length < 4) continue;
-                  if (isLink(c)) { if (cur) { const m = line.match(/\((https?:\/\/[^)]+)\)/); if (m) cur.url = m[1]; } continue; }
-                  if (c.length < 120 && /\*\*/.test(line)) { if (cur) items.push(cur); cur = { title: c, body: '', url: '' }; }
-                  else if (cur && !cur.body) { cur.body = c; }
-                  else if (!cur) { cur = { title: c, body: '', url: '' }; }
-                }
-                if (cur) items.push(cur);
-                const seen = new Set();
-                const unique = items.filter(it => { const k = it.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
-                if (unique.length === 0) return null;
-                return (
-                  <div className="card" style={{ borderLeft: '3px solid #38bdf8' }}>
-                    <div className="card-header"><h3>🎪 Company Events Intel</h3></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
-                      {unique.map((item, i) => (
-                        <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '10px 12px' }}>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--globant-text)', lineHeight: 1.4, marginBottom: item.body ? 4 : 0 }}>{item.title}</div>
-                          {item.body && <div style={{ fontSize: 12, color: 'var(--globant-muted)', lineHeight: 1.5 }}>{item.body}</div>}
-                          {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--globant-green)', textDecoration: 'none', marginTop: 4, display: 'inline-block' }}>🔗 Event link</a>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+          {accDetailTab === 'proposals' && (
+            <AccountProposalsTab
+              opps={opps} account={account} accStakeholders={accStakeholders}
+              solutions={solutions} accEvents={accEvents}
+              selectedOppId={selectedOppId} setSelectedOppId={setSelectedOppId}
+              oppNotes={oppNotes} setOppNotes={setOppNotes}
+              oppNextStep={oppNextStep} setOppNextStep={setOppNextStep}
+              oppStakeholder={oppStakeholder} setOppStakeholder={setOppStakeholder}
+              oppSolutionIds={oppSolutionIds} setOppSolutionIds={setOppSolutionIds}
+              editingOppNotes={editingOppNotes} setEditingOppNotes={setEditingOppNotes}
+              savingOppNotes={savingOppNotes} setSavingOppNotes={setSavingOppNotes}
+              showAddOppStk={showAddOppStk} setShowAddOppStk={setShowAddOppStk}
+              newOppStkName={newOppStkName} setNewOppStkName={setNewOppStkName}
+              newOppStkRole={newOppStkRole} setNewOppStkRole={setNewOppStkRole}
+              creatingOppStk={creatingOppStk} setCreatingOppStk={setCreatingOppStk}
+              upcomingEventsText={upcomingEventsText}
+              openNewOpp={openNewOpp} openEditOpp={openEditOpp} deleteOpp={deleteOpp}
+              api={api} onLogActivity={onLogActivity} stakeholders={stakeholders}
+            />
           )}
 
           {/* ══ PROPOSALS TAB ══ */}
@@ -2610,6 +2021,137 @@ Rules:
               </div>
             );
           })()}
+
+          {/* ══════════ STRATEGY TAB ══════════ */}
+          {/* ══════════ STRATEGY TAB ══════════ */}
+          {accDetailTab === 'strategy' && (
+            <AccountStrategyTab
+              account={account} accStakeholders={accStakeholders}
+              allSolutions={allSolutions} solutions={solutions} currentSolIds={currentSolIds}
+              healthScore={healthScore} momentum={momentum} nbaLoading={nbaLoading} nbaText={nbaText}
+              intelNotes={intelNotes} recentNews={recentNews} radarData={radarData}
+              offeringRec={offeringRec} offeringRecLoading={offeringRecLoading}
+              offeringRecCache={offeringRecCache} generateOfferingRec={generateOfferingRec} setOfferingRec={setOfferingRec}
+              showSolPicker={showSolPicker} setShowSolPicker={setShowSolPicker}
+              availableSolutions={availableSolutions}
+              addSolutionToAccount={addSolutionToAccount} removeSolutionFromAccount={removeSolutionFromAccount} removingSol={removingSol}
+              newSolName={newSolName} setNewSolName={setNewSolName} creatingSol={creatingSol} createNewSolution={createNewSolution}
+              strategyData={strategyData} setStrategyData={setStrategyData}
+              newMilestone={newMilestone} setNewMilestone={setNewMilestone}
+              savingStrategy={savingStrategy} setSavingStrategy={setSavingStrategy}
+              setAccDetailTab={setAccDetailTab}
+              api={api} onUpdateRecord={onUpdateRecord}
+            />
+          )}
+
+          {/* ══════════ PERFORMANCE TAB ══════════ */}
+          {accDetailTab === 'strategy' && (() => {
+            // Funnel
+            const sent = accOutreach.length;
+            const replied = accOutreach.filter(o => F(o,'Status')==='Replied' || F(o,'Direction')==='Inbound' || F(o,'Reply')==='Yes').length;
+            const meetings = accOutreach.filter(o => F(o,'Channel')==='Meeting' || F(o,'Status')==='Meeting Booked' || F(o,'Status')==='Meeting Scheduled').length;
+            const proposalCount = (data.proposals||[]).filter(p => linkedIds(p,'Account').includes(account.id)).length;
+
+            // Velocity
+            const sortedOutreach = [...accOutreach].filter(o => o.fields?.['Date']).sort((a,b) => new Date(a.fields['Date']) - new Date(b.fields['Date']));
+            let velocity = null;
+            if (sortedOutreach.length > 1) {
+              const gaps = [];
+              for (let i = 1; i < sortedOutreach.length; i++) {
+                const gap = (new Date(sortedOutreach[i].fields['Date']) - new Date(sortedOutreach[i-1].fields['Date'])) / (1000*60*60*24);
+                if (gap >= 0) gaps.push(gap);
+              }
+              if (gaps.length) velocity = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
+            }
+
+            // Sparkline — last 8 weeks
+            const getISOWeek = d => { const dd = new Date(d); dd.setHours(0,0,0,0); dd.setDate(dd.getDate()+4-(dd.getDay()||7)); const yearStart = new Date(dd.getFullYear(),0,1); return Math.ceil(((dd-yearStart)/86400000+1)/7); };
+            const weekBuckets = {};
+            accOutreach.forEach(o => { if (!o.fields?.['Date']) return; const d = new Date(o.fields['Date']); const wk = `${d.getFullYear()}-W${String(getISOWeek(d)).padStart(2,'0')}`; weekBuckets[wk] = (weekBuckets[wk]||0)+1; });
+            const recentWeeks = [];
+            for (let i = 7; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i*7); const wk = `${d.getFullYear()}-W${String(getISOWeek(d)).padStart(2,'0')}`; recentWeeks.push({ wk, count: weekBuckets[wk]||0 }); }
+            const maxCount = Math.max(...recentWeeks.map(w=>w.count), 1);
+            const svgW = 200, svgH = 40, padX = 6, padY = 4;
+            const pts = recentWeeks.map((w,i) => { const x = padX + (i/(recentWeeks.length-1))*(svgW-2*padX); const y = svgH - padY - (w.count/maxCount)*(svgH-2*padY); return `${x},${y}`; });
+            const sparklinePath = pts.length > 1 ? `M ${pts.join(' L ')}` : '';
+
+            // Benchmark
+            const allOut = data.outreach || [];
+            const allReplied = allOut.filter(o => F(o,'Status')==='Replied' || F(o,'Direction')==='Inbound' || F(o,'Reply')==='Yes').length;
+            const allReplyRate = allOut.length ? ((allReplied/allOut.length)*100).toFixed(1) : 0;
+            const accReplyRate = sent ? ((replied/sent)*100).toFixed(1) : 0;
+
+            return (
+              <>
+                {/* Funnel */}
+                <div className="card">
+                  <div className="card-header"><h3>🔽 Outreach Funnel</h3></div>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                    {[['Sent', sent, '#5bbfb5'], ['Replied', replied, '#34d399'], ['Meetings', meetings, '#fbbf24'], ['Proposals', proposalCount, '#a78bfa']].map(([label, val, color]) => (
+                      <div key={label} style={{ flex: 1, minWidth: 80, padding: '12px 14px', borderRadius: 9, background: `${color}14`, border: `1px solid ${color}44`, textAlign: 'center' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color }}>{val}</div>
+                        <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Velocity + Sparkline */}
+                <div className="card">
+                  <div className="card-header"><h3>📈 Activity Trend (Last 8 Weeks)</h3></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      {sparklinePath ? (
+                        <svg width="100%" viewBox={`0 0 ${svgW} ${svgH}`} style={{ display: 'block' }}>
+                          <path d={sparklinePath} fill="none" stroke="#5bbfb5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          {pts.map((pt, i) => { const [x,y] = pt.split(','); return <circle key={i} cx={x} cy={y} r="2.5" fill="#5bbfb5" />; })}
+                        </svg>
+                      ) : <p style={{ fontSize: 12, color: 'var(--globant-muted)' }}>No outreach data.</p>}
+                    </div>
+                    {velocity !== null && (
+                      <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: '#5bbfb5' }}>{velocity}d</div>
+                        <div style={{ fontSize: 11, color: 'var(--globant-muted)' }}>Avg. between touches</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Benchmark */}
+                <div className="card">
+                  <div className="card-header"><h3>📊 Reply Rate Benchmark</h3></div>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                    <div style={{ flex: 1, padding: '12px 14px', borderRadius: 9, background: 'rgba(91,191,181,0.1)', border: '1px solid rgba(91,191,181,0.3)', textAlign: 'center' }}>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: '#5bbfb5' }}>{accReplyRate}%</div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>This Account</div>
+                    </div>
+                    <div style={{ flex: 1, padding: '12px 14px', borderRadius: 9, background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: '#94a3b8' }}>{allReplyRate}%</div>
+                      <div style={{ fontSize: 11, color: 'var(--globant-muted)', marginTop: 2 }}>All Accounts Avg</div>
+                    </div>
+                  </div>
+                  {parseFloat(accReplyRate) > parseFloat(allReplyRate) ? (
+                    <p style={{ fontSize: 12, color: '#34d399', marginTop: 8 }}>✅ Above average — this account is more engaged than peers.</p>
+                  ) : sent > 0 ? (
+                    <p style={{ fontSize: 12, color: '#fbbf24', marginTop: 8 }}>⚠️ Below average — consider changing approach or channel.</p>
+                  ) : null}
+                </div>
+              </>
+            );
+          })()}
+
+          {/* ══════════ INTAKE TAB ══════════ */}
+          {accDetailTab === 'intake' && (
+            <AccountIntakeTab
+              account={account}
+              intakeRecord={intakeRecord}
+              intakeLoading={intakeLoading}
+              generatingIntake={generatingIntake}
+              loadIntakeRecord={loadIntakeRecord}
+              generateIntakeLink={generateIntakeLink}
+            />
+          )}
+
         </div>
       )}
 
